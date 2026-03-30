@@ -1,0 +1,35 @@
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      Lot Traceability 批次追溯
+      <button type="button" class="btn-sheet" onclick="openSheetLink('lot_relation')" title="批次關聯（lot_relation）">Sheet</button>
+    </span>
+    <span data-help="traceMain"></span>
+  </div>
+
+  <div class="card-body">
+    <div class="search-toolbar" style="margin-bottom:16px;">
+      <input type="text" id="trace_lot_id" placeholder="輸入 Lot ID（例如 LOT-...）">
+      <button class="btn-primary" onclick="runTrace()">查詢</button>
+      <button class="btn-secondary" onclick="resetTrace()">重設</button>
+      <button class="btn-secondary" onclick="openLogs('lot', document.getElementById('trace_lot_id')?.value || '', 'inventory')">Log</button>
+    </div>
+
+    <div class="form-grid-4">
+      <div class="form-group full-width">
+        <label>批次摘要</label>
+        <pre id="traceSummary" class="logs-pre" style="max-height:220px;"></pre>
+      </div>
+
+      <div class="form-group full-width">
+        <label>向上追（來源）</label>
+        <pre id="traceUp" class="logs-pre" style="max-height:260px;"></pre>
+      </div>
+
+      <div class="form-group full-width">
+        <label>向下追（流向）</label>
+        <pre id="traceDown" class="logs-pre" style="max-height:260px;"></pre>
+      </div>
+    </div>
+  </div>
+</div>

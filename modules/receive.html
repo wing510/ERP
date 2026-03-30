@@ -1,0 +1,90 @@
+<!-- ===== Goods Receipt 收貨入庫 ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      Goods Receipt 收貨入庫
+      <button type="button" class="btn-sheet" onclick="openSheetLink('goods_receipt')" title="收貨主檔（goods_receipt）">PO Sheet</button>
+      <button type="button" class="btn-sheet btn-sheet-alt" onclick="openSheetLink('import_receipt')" title="進口收貨（import_receipt）">Import Sheet</button>
+    </span>
+    <span data-help="receiveHeader"></span>
+  </div>
+
+  <div class="card-body">
+    <div class="form-grid-4">
+      <div class="form-group">
+        <label>來源類型 *</label>
+        <select id="rcv_source_type">
+          <option value="PO">PO（採購單）</option>
+          <option value="IMPORT">IMPORT（進口報單）</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label id="rcv_source_label">選擇 PO *</label>
+        <select id="rcv_source_id"></select>
+        <span id="rcv_source_hint" style="font-size:11px;color:#64748b;display:block;margin-top:4px;">進口收貨請先選「進口報單」</span>
+      </div>
+      <div class="form-group">
+        <label>收貨單ID</label>
+        <input type="text" id="rcv_receipt_id" readonly placeholder="自動產生">
+      </div>
+      <div class="form-group">
+        <label>收貨日期 *</label>
+        <input type="datetime-local" id="rcv_receipt_date">
+      </div>
+      <div class="form-group">
+        <label>倉別</label>
+        <input type="text" id="rcv_warehouse" placeholder="例如：MAIN">
+      </div>
+      <div class="form-group full-width">
+        <label>備註</label>
+        <input type="text" id="rcv_remark">
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn-primary" id="rcv_post_btn" type="button">產生批次</button>
+      <button class="btn-secondary" id="rcv_reset_btn" type="button">清除</button>
+      <button class="btn-secondary" id="rcv_log_btn" type="button">Log</button>
+      <span style="display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:8px;">
+        <select id="rcv_void_receipt_id" style="min-width:220px;">
+          <option value="">請先選擇 PO／報單</option>
+        </select>
+        <button class="btn-secondary" id="rcv_void_btn" type="button" title="作廢已建立的收貨單（會沖銷 IN、Lot 標示 VOID，並回寫 PO/進口已收）">作廢收貨單</button>
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 收貨明細：品項、產品、剩餘可收(自動)、本次收貨數量、單位 ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      收貨明細
+      <button type="button" class="btn-sheet" onclick="openSheetLink('goods_receipt_item')" title="收貨明細（goods_receipt_item）">PO Sheet</button>
+      <button type="button" class="btn-sheet btn-sheet-alt" onclick="openSheetLink('import_receipt_item')" title="進口收貨明細（import_receipt_item）">Import Sheet</button>
+    </span>
+    <span style="font-size:12px;color:#64748b;">剩餘可收由系統自動帶入，請填「本次收貨數量」</span>
+    <span data-help="receiveLines"></span>
+  </div>
+  <div class="card-body">
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>品項</th>
+            <th>產品（規格）</th>
+            <th>數量</th>
+            <th>已收</th>
+            <th>剩餘</th>
+            <th>本次收貨數量</th>
+            <th>製造日</th>
+            <th>有效期</th>
+            <th>單位</th>
+          </tr>
+        </thead>
+        <tbody id="rcvLinesBody"></tbody>
+      </table>
+    </div>
+    <p style="font-size:12px;color:#64748b;margin-top:8px;">請先選擇來源類型與 PO / 報單，明細會自動帶出；在「本次收貨數量」欄輸入數量後按「產生批次」。</p>
+  </div>
+</div>

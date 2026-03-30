@@ -1,0 +1,166 @@
+<!-- ===== 銷售單 ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      銷售單（Sales Order）
+      <button type="button" class="btn-sheet" onclick="openSheetLink('sales_order')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+      <span id="soStatusHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">銷售狀態：新單（未載入）— 填主檔與明細後按明細下方「建立」</span>
+    </span>
+    <span data-help="salesHeader"></span>
+  </div>
+
+  <div class="card-body">
+    <div class="form-grid-4">
+      <div class="form-group">
+        <label>銷售單ID *</label>
+        <input type="text" id="so_id">
+      </div>
+
+      <div class="form-group">
+        <label>客戶 *</label>
+        <select id="so_customer_id"></select>
+      </div>
+
+      <div class="form-group">
+        <label>下單日期 *</label>
+        <input type="date" id="so_order_date">
+      </div>
+
+      <div class="form-group">
+        <label>狀態</label>
+        <select id="so_status" onchange="onSOStatusChange_()">
+          <option value="OPEN">OPEN（開單中）</option>
+          <option value="PARTIAL">PARTIAL（部分出貨）</option>
+          <option value="SHIPPED">SHIPPED（已出貨）</option>
+          <option value="CANCELLED">CANCELLED（已取消）</option>
+        </select>
+      </div>
+
+      <div class="form-group full-width">
+        <label>備註</label>
+        <input type="text" id="so_remark">
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn-secondary" id="so_update_btn" onclick="updateSalesOrder()">更新</button>
+      <button class="btn-secondary" onclick="resetSOForm()">清除</button>
+      <button class="btn-secondary" onclick="openLogs('sales_order', document.getElementById('so_id')?.value || '', 'sales')">Log</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 銷售明細 ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      銷售明細
+      <button type="button" class="btn-sheet" onclick="openSheetLink('sales_order_item')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+    </span>
+    <span data-help="salesItems"></span>
+  </div>
+  <div class="card-body">
+    <div class="form-grid-4">
+      <div class="form-group">
+        <label>產品（規格）*</label>
+        <select id="so_item_product_id" onchange="onSelectSOProduct()"></select>
+      </div>
+
+      <div class="form-group">
+        <label>訂購數量 *</label>
+        <input type="number" id="so_item_order_qty" min="0" step="0.01" oninput="calcSOAmount()">
+      </div>
+
+      <div class="form-group">
+        <label>單位</label>
+        <input type="text" id="so_item_unit" readonly>
+      </div>
+
+      <div class="form-group">
+        <label>單價</label>
+        <input type="number" id="so_item_unit_price" min="0" step="0.01" oninput="calcSOAmount()">
+      </div>
+
+      <div class="form-group">
+        <label>金額</label>
+        <input type="text" id="so_item_amount" value="0.00" readonly>
+      </div>
+
+      <div class="form-group full-width">
+        <label>備註</label>
+        <input type="text" id="so_item_remark">
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn-primary" id="so_add_item_btn" onclick="addSOItemDraft()">新增品項</button>
+      <button type="button" class="btn-secondary" onclick="updateSelectedSOItemRemark()">更新本筆備註</button>
+    </div>
+
+    <br>
+
+    <div class="table-wrapper" style="height:220px;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>產品（規格）</th>
+            <th>訂購數量</th>
+            <th>已出貨</th>
+            <th>單位</th>
+            <th>單價</th>
+            <th>金額</th>
+            <th>狀態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="soItemsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="button-group" id="soItemsCommitGroup" style="margin-top:12px;">
+      <button class="btn-primary" id="so_create_btn" onclick="createSalesOrder()">建立</button>
+      <button class="btn-secondary" id="so_items_save_btn" onclick="updateSalesOrder()">更新</button>
+      <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 銷售單列表 ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      銷售單列表
+      <button type="button" class="btn-sheet" onclick="openSheetLink('sales_order')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+    </span>
+    <span data-help="salesList"></span>
+  </div>
+  <div class="card-body">
+    <div class="search-toolbar" style="margin-bottom:12px;">
+      <input type="text" id="so_search_keyword" placeholder="關鍵字（銷售單／客戶）" style="min-width:240px;" title="比對銷售單ID、客戶ID">
+      <select id="so_search_status">
+        <option value="">全部狀態</option>
+        <option value="OPEN">OPEN（開單中）</option>
+        <option value="PARTIAL">PARTIAL（部分出貨）</option>
+        <option value="SHIPPED">SHIPPED（已出貨）</option>
+        <option value="CANCELLED">CANCELLED（已取消）</option>
+      </select>
+      <button type="button" class="btn-secondary" onclick="resetSalesSearch()">重設</button>
+    </div>
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>銷售單ID</th>
+            <th>客戶</th>
+            <th>狀態</th>
+            <th>建立時間</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="soTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+

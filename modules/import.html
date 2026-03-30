@@ -1,0 +1,185 @@
+<!-- ===== 報單主檔 ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      進口報單資料編輯
+      <button type="button" class="btn-sheet" onclick="openSheetLink('import_document')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+      <span id="importFlowHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">報單流程：新單 — 填主檔與明細後按明細下方「建立」寫入</span>
+      <span id="importReceiptState" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">收貨狀態：未檢查</span>
+    </span>
+    <span data-help="importHeader"></span>
+  </div>
+
+  <div class="card-body">
+    <!-- 主檔（指定排序）：報單ID、報單號、進口日、放行日、供應商、查驗案號、狀態、文件連結、備註 -->
+    <div class="form-grid-4">
+      <div class="form-group">
+        <label>報單ID *</label>
+        <input type="text" id="import_doc_id" placeholder="例如：IMP-20260303-...">
+      </div>
+      <div class="form-group">
+        <label>報單號 *</label>
+        <input type="text" id="import_no" placeholder="例如：CX 15223E00QY">
+      </div>
+      <div class="form-group">
+        <label>進口日 *</label>
+        <input type="date" id="import_import_date">
+      </div>
+      <div class="form-group">
+        <label>放行日 *</label>
+        <input type="date" id="import_release_date">
+      </div>
+      <div class="form-group">
+        <label>供應商 *</label>
+        <select id="import_supplier_id"></select>
+      </div>
+      <div class="form-group">
+        <label>查驗案號</label>
+        <input type="text" id="import_inspection_no" placeholder="輸入查驗申請書號碼">
+      </div>
+      <div class="form-group">
+        <label>狀態</label>
+        <select id="import_status" onchange="updateImportFlowHint_()">
+          <option value="OPEN">OPEN（開單中）</option>
+          <option value="CLOSED">CLOSED（已結案）</option>
+          <option value="CANCELLED">CANCELLED（已取消）</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>文件連結</label>
+        <input type="text" id="import_document_link" placeholder="URL 或檔案連結">
+      </div>
+      <div class="form-group full-width">
+        <label>備註</label>
+        <input type="text" id="import_remark" placeholder="例如：報關注意事項">
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn-secondary" id="import_update_btn" onclick="updateImportDocument()">更新</button>
+      <button class="btn-secondary" onclick="resetImportForm(true)">清除</button>
+      <button class="btn-secondary" onclick="openLogs('import_document', document.getElementById('import_doc_id')?.value || '', 'inbound')">Log</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 報單品項（明細） ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      報單品項（明細）
+      <button type="button" class="btn-sheet" onclick="openSheetLink('import_item')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+    </span>
+    <span data-help="importItems"></span>
+  </div>
+  <div class="card-body">
+    <!-- 填入欄位順序：產品、稅則號列、批號、原產地、數量、單位、備註（項次新增時自動產生） -->
+    <div class="form-grid-4">
+      <div class="form-group">
+        <label>產品（規格）*</label>
+        <select id="import_item_product_id" onchange="onSelectImportItemProduct()"></select>
+      </div>
+      <div class="form-group">
+        <label>稅則號列（HS Code）</label>
+        <input type="text" id="import_item_hs_code" placeholder="例如：0910.30.00.00-3">
+      </div>
+      <div class="form-group">
+        <label>批號（Inv No）*</label>
+        <input type="text" id="import_item_lot_id" placeholder="依文件發票號填寫">
+      </div>
+      <div class="form-group">
+        <label>原產地</label>
+        <input type="text" id="import_item_origin_country" placeholder="例如：INDONESIA">
+      </div>
+      <div class="form-group">
+        <label>數量 *</label>
+        <input type="number" id="import_item_declared_qty" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>單位</label>
+        <input type="text" id="import_item_declared_unit" readonly>
+      </div>
+      <div class="form-group full-width">
+        <label>備註</label>
+        <input type="text" id="import_item_remark">
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn-primary" id="import_add_item_btn" onclick="addImportItemDraft()">新增品項</button>
+      <button type="button" class="btn-secondary" onclick="updateSelectedImportItemRemark()">更新本筆備註</button>
+    </div>
+
+    <br>
+
+    <div class="table-wrapper" style="height:220px;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>項次</th>
+            <th>產品（規格）</th>
+            <th>稅則號列（HS Code）</th>
+            <th>批號（Inv No）</th>
+            <th>原產地</th>
+            <th>數量</th>
+            <th>單位</th>
+            <th>狀態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="importItemsBody"></tbody>
+      </table>
+    </div>
+
+    <div class="button-group" id="importItemsCommitGroup" style="margin-top:12px;">
+      <button class="btn-primary" id="import_create_btn" onclick="createImportDocument()">建立</button>
+      <button class="btn-secondary" id="import_items_save_btn" onclick="saveImportDocument()">更新</button>
+      <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 報單列表 ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      進口報單列表
+      <button type="button" class="btn-sheet" onclick="openSheetLink('import_document')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+    </span>
+    <span data-help="importList"></span>
+  </div>
+  <div class="card-body">
+    <div class="search-toolbar">
+      <input type="text" id="search_import_keyword" placeholder="關鍵字（報單ID／報單號／供應商／查驗案號）" style="min-width:280px;" title="比對報單ID、報單號、供應商ID、查驗案號等">
+      <select id="search_import_status">
+        <option value="">全部狀態</option>
+        <option value="OPEN">OPEN（開單中）</option>
+        <option value="CLOSED">CLOSED（已結案）</option>
+        <option value="CANCELLED">CANCELLED（已取消）</option>
+      </select>
+      <button class="btn-secondary" onclick="resetImportSearch()">重設</button>
+    </div>
+
+    <br>
+
+    <!-- 主檔列表（指定排序）：報單ID、報單號、進口日、放行日、供應商、查驗案號、狀態、文件連結 -->
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th onclick="sortImportDocuments('import_doc_id')">報單ID</th>
+            <th onclick="sortImportDocuments('import_no')">報單號</th>
+            <th onclick="sortImportDocuments('import_date')">進口日</th>
+            <th onclick="sortImportDocuments('release_date')">放行日</th>
+            <th onclick="sortImportDocuments('supplier_id')">供應商</th>
+            <th>查驗案號</th>
+            <th onclick="sortImportDocuments('status')">狀態</th>
+            <th>文件連結</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="importTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>

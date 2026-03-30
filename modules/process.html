@@ -1,0 +1,57 @@
+<h2>Process Orders 委外加工單</h2>
+
+<div>
+  <label>加工廠 Supplier ID：</label>
+  <input type="text" id="processSupplier" placeholder="Supplier ID" />
+</div>
+
+<h3>選擇投入原料 Lot</h3>
+
+<table border="1" width="100%">
+  <thead>
+    <tr>
+      <th>Lot ID</th>
+      <th>Product</th>
+      <th>Available</th>
+      <th>投入數量</th>
+    </tr>
+  </thead>
+  <tbody id="processInputLots"></tbody>
+</table>
+
+<br/>
+
+<div>
+  <label>損耗數量：</label>
+  <input type="number" id="processLoss" value="0" />
+</div>
+
+<div>
+  <label>產出產品 Product ID：</label>
+  <input type="text" id="processOutputProduct" placeholder="FG Product ID" />
+</div>
+
+<div>
+  <label>產出數量：</label>
+  <input type="number" id="processOutputQty" />
+</div>
+
+<br/>
+<button onclick="createProcessOrder()">建立加工單</button>
+
+<hr/>
+
+<h3>已建立加工單</h3>
+
+<table border="1" width="100%">
+  <thead>
+    <tr>
+      <th>Process ID</th>
+      <th>Supplier</th>
+      <th>Input Lots</th>
+      <th>Output Lot</th>
+      <th>Loss</th>
+    </tr>
+  </thead>
+  <tbody id="processTableBody"></tbody>
+</table>

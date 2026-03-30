@@ -1,0 +1,81 @@
+<!-- ===== Users 使用者 ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      Users 使用者
+      <button type="button" class="btn-sheet" onclick="openSheetLink('user')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+    </span>
+    <span data-help="usersMain"></span>
+  </div>
+
+  <div class="card-body">
+    <div class="form-grid-4">
+      <div class="form-group">
+        <label>User ID *</label>
+        <input type="text" id="u_id">
+      </div>
+
+      <div class="form-group">
+        <label>姓名 *</label>
+        <input type="text" id="u_name">
+      </div>
+
+      <div class="form-group">
+        <label>角色 *</label>
+        <select id="u_role">
+          <option value="ADMIN">ADMIN（管理員）</option>
+          <option value="QA">QA（品保）</option>
+          <option value="OP">OP（作業）</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>狀態</label>
+        <select id="u_status">
+          <option value="ACTIVE">ACTIVE（使用中）</option>
+          <option value="INACTIVE">INACTIVE（停用）</option>
+        </select>
+      </div>
+
+      <div class="form-group full-width">
+        <label>備註</label>
+        <input type="text" id="u_remark">
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn-primary" onclick="createUser()">建立</button>
+      <button class="btn-secondary" onclick="updateUser()">更新</button>
+      <button class="btn-secondary" onclick="resetUserForm()">清除</button>
+      <button class="btn-secondary" onclick="openLogs('user', document.getElementById('u_id')?.value || '', 'master')">Log</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      使用者列表
+      <button type="button" class="btn-sheet" onclick="openSheetLink('user')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+    </span>
+    <span data-help="usersList"></span>
+  </div>
+  <div class="card-body">
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>User ID</th>
+            <th>姓名</th>
+            <th>角色</th>
+            <th>狀態</th>
+            <th>更新時間</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="uTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+

@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>ERP v2.2 - GMP Enterprise</title>
+
+<style>
+body{
+  margin:0;
+  font-family:"Segoe UI", Roboto, sans-serif;
+  display:flex;
+  height:100vh;
+  background:#f4f6f9;
+}
+
+/* ===== Sidebar ===== */
+.sidebar{
+  width:260px;
+  background:#1f2d3d;
+  color:white;
+  padding:20px;
+  overflow-y:auto;
+}
+
+.sidebar a{
+  display:block;
+  color:#cfd8e3;
+  text-decoration:none;
+  padding:6px 0;
+  font-size:14px;
+}
+
+.sidebar a:hover{color:white;}
+
+.section-title{
+  margin-top:18px;
+  font-size:12px;
+  color:#7fa6d1;
+  text-transform:uppercase;
+}
+
+/* ===== Main ===== */
+.main{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+
+.topbar{
+  background:white;
+  padding:15px 25px;
+  border-bottom:1px solid #e0e0e0;
+  display:flex;
+  justify-content:space-between;
+}
+
+#content{
+  padding:30px;
+  overflow-y:auto;
+}
+
+/* ===== Card ===== */
+.card{
+  background:white;
+  border-radius:8px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.06);
+  margin-bottom:24px;
+}
+
+.card-header{
+  padding:16px 22px;
+  border-bottom:1px solid #eee;
+  font-weight:600;
+  background:#fafbfc;
+}
+
+.card-body{
+  padding:20px;
+}
+
+/* ===== 表單：大螢幕 4 欄、中 2 欄、小 1 欄 ===== */
+.form-grid-4{
+  display:grid;
+  grid-template-columns:repeat(4,1fr);
+  gap:20px;
+}
+
+.form-group{
+  display:flex;
+  flex-direction:column;
+}
+
+.form-group.full-width{
+  grid-column:span 4;
+}
+
+@media (max-width:1200px){
+  .form-grid-4{ grid-template-columns:repeat(2,1fr); }
+  .form-group.full-width{ grid-column:span 2; }
+}
+
+@media (max-width:640px){
+  .form-grid-4{ grid-template-columns:1fr; }
+  .form-group.full-width{ grid-column:span 1; }
+}
+
+label{
+  font-size:13px;
+  margin-bottom:6px;
+}
+
+input,select{
+  height:36px;
+  padding:0 10px;
+  border:1px solid #ddd;
+  border-radius:6px;
+}
+
+.button-group{
+  margin-top:20px;
+  width:100%;
+  box-sizing:border-box;
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:10px;
+}
+/* 庫存異動：三顆主按鈕維持同一列（避免 flex-wrap 拆行） */
+.button-group.mv-button-group{
+  flex-wrap:nowrap;
+  gap:8px;
+}
+.button-group.mv-button-group .btn-primary{
+  margin-right:0;
+}
+@media (max-width:520px){
+  .button-group.mv-button-group{
+    flex-wrap:wrap;
+  }
+}
+
+/* 庫存異動：Lot／數量與按鈕同一列（按鈕在扣庫數量右側） */
+.mv-editor-row{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-end;
+  gap:12px 16px;
+}
+.mv-editor-fields{
+  display:grid;
+  grid-template-columns:minmax(200px,1fr) minmax(140px,220px);
+  gap:20px;
+  flex:1 1 320px;
+  min-width:0;
+}
+.mv-editor-row .button-group{
+  margin-top:0;
+  flex:0 0 auto;
+}
+@media (max-width:900px){
+  .mv-editor-row{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .mv-editor-fields{
+    grid-template-columns:1fr 1fr;
+  }
+  .mv-editor-row .button-group{
+    margin-top:4px;
+  }
+}
+@media (max-width:640px){
+  .mv-editor-fields{
+    grid-template-columns:1fr;
+  }
+}
+.save-hint-inline{
+  margin-left:auto;
+  padding:6px 12px;
+  background:#0ea5e9;
+  color:white;
+  border-radius:6px;
+  font-size:14px;
+}
+
+button{
+  height:36px;
+  padding:0 16px;
+  border:none;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+.btn-primary{
+  background:#2563eb;
+  color:white;
+  margin-right:10px;
+}
+
+.btn-secondary{
+  background:#e5e7eb;
+}
+
+/* Disabled 按鈕：視覺上明確不可操作 */
+button:disabled,
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-edit:disabled{
+  opacity:0.5;
+  cursor:not-allowed;
+  filter:grayscale(20%);
+}
+
+/* ===== 搜尋一行（允許換行，小螢幕不擠） ===== */
+.search-toolbar{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.search-toolbar input,
+.search-toolbar select{
+  min-width:140px;
+  max-width:100%;
+}
+
+/* ===== 表格（橫向可捲、重要欄位可固定） ===== */
+.table-wrapper{
+  height:420px;
+  overflow-x:auto;
+  overflow-y:auto;
+  border:1px solid #eee;
+  border-radius:6px;
+  -webkit-overflow-scrolling:touch;
+}
+/* Lots / 庫存異動：主列表區加高 */
+.table-wrapper.table-wrapper-tall{
+  height:560px;
+}
+/* 首欄橫向固定；z-index 需低於表頭，避免直向捲動時被資料列蓋住 */
+.data-table th:first-child,
+.data-table td:first-child{
+  position:sticky;
+  left:0;
+  white-space:nowrap;
+}
+.data-table tbody td:first-child{
+  background:inherit;
+  z-index:1;
+}
+.data-table tbody tr:hover td:first-child{ background:inherit; }
+/* 新增品項下方的明細表：較小高度，用於採購/報單/銷售明細 */
+.table-wrapper-items{
+  max-height:200px;
+  height:auto;
+}
+
+.data-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+
+.data-table th{
+  background:#f1f5f9;
+  padding:12px;
+  text-align:left;
+  cursor:pointer;
+  position:sticky;
+  top:0;
+  z-index:2;
+}
+/* 左上角表頭：同時 sticky top+left，需最高層才不會在捲動時被蓋住（Logs 紀錄編號等） */
+.data-table thead th:first-child{
+  z-index:3;
+}
+
+.data-table td{
+  padding:12px;
+  border-top:1px solid #eee;
+}
+
+/* ===== Logs 表格：避免舊/新值擠壓標題 ===== */
+.logs-table{
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1100px;
+}
+.logs-table .logs-col-id{ width: 140px; min-width: 120px; }
+.logs-table .logs-col-table{ width: 260px; min-width: 220px; }
+.logs-table .logs-col-ref{ width: 220px; min-width: 180px; }
+.logs-table .logs-col-action{ width: 96px; min-width: 88px; }
+.logs-table .logs-col-user{ width: 100px; min-width: 88px; }
+.logs-table .logs-col-time{ width: 150px; min-width: 130px; }
+.logs-table .logs-col-view{ width: 72px; min-width: 64px; }
+.logs-table td:nth-child(2),
+.logs-table td:nth-child(3){
+  word-break: break-all;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.logs-details summary{
+  cursor:pointer;
+  color:#0369a1;
+  font-size:12px;
+  line-height:1.4;
+  word-break: break-all;
+}
+
+.logs-pre{
+  white-space: pre-wrap;
+  font-size: 11px;
+  margin: 8px 0 0 0;
+  max-height: 160px;
+  overflow: auto;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+/* ===== Logs View 藍色連結 ===== */
+.logs-view-link{
+  color:#2563eb;
+  text-decoration:underline;
+  cursor:pointer;
+}
+
+.logs-view-link:hover{
+  opacity:0.8;
+}
+
+/* ===== 狀態標籤 ===== */
+.badge{
+  padding:4px 8px;
+  border-radius:12px;
+  font-size:12px;
+  font-weight:600;
+}
+
+.badge-active{
+  background:#dcfce7;
+  color:#166534;
+}
+
+.badge-inactive{
+  background:#f1f5f9;
+  color:#475569;
+}
+
+/* ===== 表格 hover ===== */
+.data-table tbody tr:hover{
+  background:#f8fafc;
+}
+
+/* ===== 排序箭頭 ===== */
+th span{
+  font-size:12px;
+  color:#64748b;
+}
+
+/* ===== Edit 按鈕 ===== */
+.btn-edit{
+  background:#e0f2fe;
+  color:#0369a1;
+  border:none;
+  padding:6px 10px;
+  border-radius:6px;
+  cursor:pointer;
+}
+.btn-edit:hover{
+  background:#bae6fd;
+}
+
+/* ===== Toast ===== */
+.toast{
+  position:fixed;
+  top:20px;
+  right:20px;
+  padding:12px 18px;
+  border-radius:6px;
+  font-size:14px;
+  opacity:0;
+  transition:all .3s ease;
+  z-index:9999;
+}
+.toast.show{
+  opacity:1;
+}
+.toast.success{
+  background:#dcfce7;
+  color:#166534;
+}
+.toast.error{
+  background:#fee2e2;
+  color:#991b1b;
+}
+
+/* ===== Card Header Flex ===== */
+.card-header-flex{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+/* ===== Sheet 捷徑（開啟對應試算表分頁）===== */
+.btn-sheet{
+  margin-left:8px;
+  font-size:12px;
+  padding:2px 10px;
+  height:26px;
+  line-height:1.2;
+  border-radius:4px;
+  border:1px solid #0f9d58;
+  background:#e8f5e9;
+  color:#1b5e20;
+  cursor:pointer;
+  font-weight:600;
+  vertical-align:middle;
+}
+.btn-sheet:hover{ background:#c8e6c9; }
+.btn-sheet-alt{
+  border-color:#1565c0;
+  background:#e3f2fd;
+  color:#0d47a1;
+}
+.btn-sheet-alt:hover{ background:#bbdefb; }
+
+/* ===== Info Icon ===== */
+.info-icon{
+  cursor:pointer;
+  font-size:14px;
+  background:#e0f2fe;
+  color:#0369a1;
+  width:22px;
+  height:22px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:50%;
+}
+.info-icon:hover{
+  background:#bae6fd;
+}
+
+/* ===== Inline Help (藍底展開式) ===== */
+
+.help-inline{
+  display:none;
+  background:#f0f9ff;
+  border-left:4px solid #0ea5e9;
+  padding:14px 18px;
+  font-size:13px;
+  line-height:1.6;
+}
+
+.help-inline.show{
+  display:block;
+}
+
+/* ===== 加 Loading 圈圈 ===== */
+
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(255,255,255,0.7);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loading-overlay.active {
+  display: flex;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid #ccc;
+  border-top: 5px solid #2a6cff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 選單切換時在內容區頂部顯示，列表載完即消失 */
+.module-loading-hint {
+  padding: 12px 16px;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 14px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+/* ===== 響應式：小桌面 / 筆電未全螢幕 ===== */
+@media (max-width:1366px){
+  .sidebar{ width:220px; padding:14px; }
+  #content{ padding:20px; }
+  .search-toolbar input,.search-toolbar select{ min-width:120px; }
+}
+
+@media (max-width:1024px){
+  .sidebar{ width:200px; padding:12px; }
+  .sidebar a,.section-title{ font-size:13px; }
+  #content{ padding:16px; }
+  .table-wrapper{ height:360px; }
+  .table-wrapper.table-wrapper-tall{ height:480px; }
+}
+
+@media (max-width:768px){
+  body{ flex-direction:column; }
+  .sidebar{
+    width:100%;
+    max-height:200px;
+    overflow-y:auto;
+    padding:12px;
+    display:flex;
+    flex-wrap:wrap;
+    align-content:flex-start;
+    gap:0 16px;
+  }
+  .sidebar h2{ width:100%; margin:0 0 8px 0; font-size:1.1rem; }
+  .section-title{ width:100%; margin:8px 0 4px 0; }
+  .main{ min-height:0; }
+  #content{ padding:12px; }
+  .card-body{ padding:14px; }
+  .table-wrapper{ height:320px; }
+  .table-wrapper.table-wrapper-tall{ height:400px; }
+  .topbar{ flex-wrap:wrap; padding:10px 12px; }
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="sidebar">
+  <h2>ERP v2.2<br/>GMP Enterprise</h2>
+
+  <a onclick="navigate('dashboard')" title="總覽與建議操作順序">Dashboard 儀表板</a>
+
+  <div class="section-title">MASTER DATA 主檔</div>
+  <a onclick="navigate('products')" title="建立產品主檔，採購/報單/出貨會用到">Products 產品</a>
+  <a onclick="navigate('suppliers')" title="建立供應商，採購單與報單會用到">Suppliers 供應商</a>
+  <a onclick="navigate('customers')" title="建立客戶，銷售單與出貨會用到">Customers 客戶</a>
+  <a onclick="navigate('users')" title="使用者帳號，影響操作紀錄的建立人">Users 使用者</a>
+
+  <div class="section-title">Inbound 進貨</div>
+  <a onclick="navigate('purchase')" title="建立採購單，再至收貨入庫收貨">Purchase Orders 採購單</a>
+  <a onclick="navigate('import')" title="進口報單資料，再至收貨入庫收貨">Import Documents 進口報單</a>
+  <a onclick="navigate('receive')" title="依採購單或報單收貨，產生批次">Goods Receipt 收貨入庫</a>
+  
+  <div class="section-title">INVENTORY 庫存</div>
+  <a onclick="navigate('lots')" title="批次管理，QA 放行後才可出貨/扣庫">Lots 批次管理</a>
+  <a onclick="navigate('movements')" title="手動扣庫（Manual OUT）">Inventory Movements 庫存異動</a>
+  <!-- 隱藏：<a onclick="navigate('split')">Split 拆批</a> / <a onclick="navigate('merge')">Merge 合批</a> -->
+
+  <div class="section-title">PROCESS 加工</div>
+  <a onclick="navigate('outsource')" title="委外加工單，投料扣庫、回收產生新批次">Outsource Work Orders 委外加工單</a>
+  <!-- Factory Receipt 加工回收整合於委外加工單內 -->
+
+  <div class="section-title">SALES 銷售</div>
+  <a onclick="navigate('sales')" title="建立銷售單，實際扣庫在出貨">Sales Orders 銷售單</a>
+  <a onclick="navigate('shipping')" title="出貨過帳，扣庫並連結銷售單">Shipment 出貨管理</a>
+
+  <div class="section-title">TRACEABILITY 追溯</div>
+  <a onclick="navigate('trace')" title="查 Lot 來源與流向">Lot Traceability 批次追溯</a>
+
+  <div class="section-title">AUDIT 稽核</div>
+  <a onclick="navigate('logs')" title="所有異動紀錄">Logs 操作紀錄（Audit Trail）</a>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div>Enterprise Resource Planning System</div>
+    <div style="display:flex;gap:12px;align-items:center;">
+      <div>Version 2.2</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div style="font-size:13px;color:#64748b;">User</div>
+        <select id="currentUserSelect" style="height:32px;">
+          <option value="admin">admin</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div id="content"></div>
+  <div id="toast" class="toast"></div>
+</div>
+
+<div id="loadingOverlay" class="loading-overlay">
+  <div class="spinner"></div>
+</div>
+
+<script src="js/core/schema.js"></script>
+<script src="js/core/utils.js"></script>
+<script src="js/core/sheet-links.js"></script>
+<script src="js/core/service.js"></script>
+<script src="js/help.js"></script>
+<script src="js/router.js"></script>
+<script src="js/_legacy/dashboard.js"></script>
+<script src="js/products.js"></script>
+<script src="js/suppliers.js"></script>
+<script src="js/customers.js"></script>
+<script src="js/purchase.js"></script>
+<script src="js/receive.js"></script>
+<script src="js/lots.js"></script>
+<script src="js/movements.js"></script>
+<script src="js/import.js"></script>
+<script src="js/logs.js"></script>
+<script src="js/outsource.js"></script>
+<script src="js/sales.js"></script>
+<script src="js/shipping.js"></script>
+<script src="js/trace.js"></script>
+<script src="js/split.js"></script>
+<script src="js/merge.js"></script>
+<script src="js/users.js"></script>
+
+<script>
+  // Topbar user selector: load from sheet if possible
+  (async function(){
+    const sel = document.getElementById("currentUserSelect");
+    if(!sel) return;
+    const saved = (function(){ try{return localStorage.getItem("erp_current_user");}catch(_e){return "";} })();
+    try{
+      const users = await getAll("user");
+      if(Array.isArray(users) && users.length){
+        sel.innerHTML = users
+          .filter(u => (u.status || "ACTIVE") === "ACTIVE")
+          .map(u => `<option value="${u.user_id}">${u.user_id} (${u.role || ""})</option>`)
+          .join("");
+      }
+    }catch(_e){
+      // ignore; fallback to default option
+    }
+    sel.value = saved || sel.value || "admin";
+    if(typeof setCurrentUser === "function") setCurrentUser(sel.value);
+    sel.addEventListener("change", ()=>{
+      if(typeof setCurrentUser === "function") setCurrentUser(sel.value);
+      showToast("已切換使用者：" + sel.value);
+    });
+  })();
+</script>
+
+
+</body>
+</html>

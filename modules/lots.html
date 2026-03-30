@@ -1,0 +1,137 @@
+<div class="card">
+
+  <div class="card-header card-header-flex">
+    <div>
+      Lots 批次管理
+      <button type="button" class="btn-sheet" onclick="openSheetLink('lot')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+    </div>
+    <span data-help="lotsMain"></span>
+  </div>
+
+  <div class="card-body">
+
+    <!-- 🔍 搜尋區 -->
+    <div class="search-toolbar" style="margin-bottom:20px;">
+
+      <input type="text" id="search_lots_keyword" placeholder="關鍵字（Lot／產品／規格／報單／PO／收貨單…）" title="關鍵字：Lot ID、產品代碼／名稱／規格、報單ID／報單號、採購單、收貨單、備註等" style="min-width:280px;">
+
+      <select id="search_inventory_status">
+        <option value="">全部庫存狀態</option>
+        <option value="ACTIVE">🟢 ACTIVE（可使用）</option>
+        <option value="CLOSED">🟠 CLOSED（無庫存）</option>
+        <option value="VOID">🔴 VOID（已過期）</option>
+      </select>
+
+      <select id="search_inspection_status">
+        <option value="">全部品檢狀態</option>
+        <option value="PENDING">PENDING（待 QA）</option>
+        <option value="APPROVED">APPROVED（合格放行）</option>
+        <option value="REJECTED">REJECTED（QA 退回）</option>
+      </select>
+      <button class="btn-secondary" onclick="resetLotsSearch()">重設</button>
+
+    </div>
+
+    <!-- 📋 表格 -->
+    <div class="table-wrapper table-wrapper-tall">
+
+      <table class="data-table">
+
+        <thead>
+          <tr>
+            <th>Lot ID</th>
+            <th>產品(規格)</th>
+            <th>類型</th>
+            <th>總數量</th>
+            <th>可用量</th>
+            <th>製造日</th>
+            <th>有效期</th>
+            <th>庫存狀態</th>
+            <th>品檢狀態</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+
+        <tbody id="lotsTableBody"></tbody>
+
+      </table>
+
+    </div>
+
+  </div>
+
+</div>
+
+<!-- QA 操作確認視窗 -->
+<div id="lotsQaConfirmModal" class="lots-qa-modal" style="display:none;" role="dialog" aria-modal="true">
+  <div class="lots-qa-modal-overlay" onclick="closeLotsQaConfirm()"></div>
+  <div class="lots-qa-modal-dialog">
+    <h3 id="qaConfirmTitle" class="lots-qa-modal-title"></h3>
+    <div id="qaConfirmBatchInfo" class="lots-qa-modal-batch"></div>
+    <div id="qaConfirmImpact" class="lots-qa-modal-impact"></div>
+    <div class="lots-qa-modal-actions">
+      <button type="button" id="qaConfirmPrimary" class="btn-primary">確認</button>
+      <button type="button" id="qaConfirmCancel" class="btn-secondary" onclick="closeLotsQaConfirm()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lot 日期補登視窗 -->
+<div id="lotsDateModal" class="lots-qa-modal" style="display:none;" role="dialog" aria-modal="true">
+  <div class="lots-qa-modal-overlay" onclick="closeLotDateModal()"></div>
+  <div class="lots-qa-modal-dialog">
+    <h3 class="lots-qa-modal-title">補登批次日期</h3>
+    <div id="lotDateBatchInfo" class="lots-qa-modal-batch"></div>
+    <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:18px;">
+      <div class="form-group" style="margin:0;">
+        <label for="lotDateManufacture">製造日</label>
+        <input type="date" id="lotDateManufacture">
+      </div>
+      <div class="form-group" style="margin:0;">
+        <label for="lotDateExpiry">有效期</label>
+        <input type="date" id="lotDateExpiry">
+      </div>
+      <div style="font-size:12px;color:#64748b;">規則：有效期不可早於製造日。</div>
+    </div>
+    <div class="lots-qa-modal-actions">
+      <button type="button" id="lotDateSaveBtn" class="btn-primary" onclick="saveLotDatesFromModal()">儲存</button>
+      <button type="button" class="btn-secondary" onclick="closeLotDateModal()">取消</button>
+    </div>
+  </div>
+</div>
+<style>
+.lots-qa-modal { position:fixed; inset:0; z-index:9000; display:flex; align-items:center; justify-content:center; padding:16px; }
+.lots-qa-modal-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.4); }
+.lots-qa-modal-dialog { position:relative; background:#fff; border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,0.2); max-width:420px; width:100%; padding:24px; }
+.lots-qa-modal-title { margin:0 0 16px; font-size:18px; color:#1e293b; }
+.lots-qa-modal-batch { margin-bottom:12px; padding:12px; background:#f1f5f9; border-radius:6px; font-size:14px; line-height:1.6; color:#475569; }
+.lots-qa-modal-impact { margin-bottom:20px; font-size:14px; color:#0f766e; line-height:1.6; }
+.lots-qa-modal-actions { display:flex; gap:10px; justify-content:flex-end; }
+
+.lots-status-light{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  font-weight:600;
+}
+.lots-status-light::before{
+  content:"";
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#94a3b8;
+  box-shadow:0 0 0 2px rgba(148,163,184,0.2);
+}
+.lots-status-light-active::before{
+  background:#22c55e;
+  box-shadow:0 0 0 2px rgba(34,197,94,0.2);
+}
+.lots-status-light-closed::before{
+  background:#f59e0b;
+  box-shadow:0 0 0 2px rgba(245,158,11,0.2);
+}
+.lots-status-light-void::before{
+  background:#ef4444;
+  box-shadow:0 0 0 2px rgba(239,68,68,0.2);
+}
+</style>

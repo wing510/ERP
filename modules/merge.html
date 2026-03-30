@@ -1,0 +1,134 @@
+<!-- ===== Merge 合批 ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      Merge 合批
+      <button type="button" class="btn-sheet" onclick="openSheetLink('lot_relation')" title="批次關聯（lot_relation）">Sheet</button>
+    </span>
+    <span data-help="mergeMain"></span>
+  </div>
+
+  <div class="card-body">
+    <div class="form-grid-4">
+      <div class="form-group">
+        <label>新 Lot ID *</label>
+        <input type="text" id="merge_new_lot_id">
+      </div>
+      <div class="form-group">
+        <label>合批產品（自動）</label>
+        <input type="text" id="merge_product" readonly>
+      </div>
+      <div class="form-group">
+        <label>單位（自動）</label>
+        <input type="text" id="merge_unit" readonly>
+      </div>
+      <div class="form-group">
+        <label>合批總量</label>
+        <input type="text" id="merge_total" readonly>
+      </div>
+      <div class="form-group full-width">
+        <label>備註</label>
+        <input type="text" id="merge_remark">
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn-secondary" onclick="resetMerge()">清除</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>來源 Lots（僅限 QA已放行）</span>
+    <span data-help="mergeMain"></span>
+  </div>
+  <div class="card-body">
+    <div class="form-grid-4">
+      <div class="form-group">
+        <label>來源 Lot *</label>
+        <select id="merge_source_lot" onchange="onSelectMergeSource()"></select>
+      </div>
+      <div class="form-group">
+        <label>可用量</label>
+        <input type="text" id="merge_available" readonly>
+      </div>
+      <div class="form-group">
+        <label>取用數量 *</label>
+        <input type="number" id="merge_take_qty" min="0" step="0.01">
+      </div>
+      <div class="form-group">
+        <label>單位</label>
+        <input type="text" id="merge_take_unit" readonly>
+      </div>
+      <div class="form-group full-width">
+        <label>備註</label>
+        <input type="text" id="merge_take_remark">
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn-primary" onclick="addMergeDraft()">新增來源</button>
+    </div>
+
+    <br>
+
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>來源 Lot</th>
+            <th>產品</th>
+            <th>數量</th>
+            <th>單位</th>
+            <th>備註</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="mergeBody"></tbody>
+      </table>
+    </div>
+
+    <div class="button-group" id="mergePostButtonGroup" style="margin-top:10px;">
+      <button class="btn-primary" onclick="postMerge()">確認合批（過帳）</button>
+      <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
+    </div>
+  </div>
+</div>
+
+<h2>Merge 合批製造</h2>
+
+<div style="background:white; padding:20px; border-radius:6px; margin-bottom:20px;">
+
+    <h3>選擇來源批次</h3>
+
+    <div id="mergeLotsContainer" style="margin-bottom:15px;"></div>
+
+    <button onclick="createMerge()"
+            style="padding:8px 20px; background:#2d7ef7; color:white; border:none;">
+        執行合批
+    </button>
+
+</div>
+
+<div style="background:white; padding:20px; border-radius:6px;">
+
+    <h3>合批紀錄</h3>
+
+    <table style="width:100%; border-collapse:collapse;">
+
+        <thead>
+            <tr style="text-align:left; border-bottom:1px solid #ddd;">
+                <th>來源批次</th>
+                <th>新批次</th>
+                <th>總量</th>
+                <th>時間</th>
+            </tr>
+        </thead>
+
+        <tbody id="mergeTableBody"></tbody>
+
+    </table>
+
+</div>
