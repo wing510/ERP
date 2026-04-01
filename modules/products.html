@@ -50,6 +50,7 @@
           <option value="L">L（公升）</option>
           <option value="KG">KG（公斤）</option>
           <option value="PCS">PCS（件）</option>
+          <option value="PC">PC（顆）</option>
           <option value="BOX">BOX（盒）</option>
           <option value="BOTTLE">BOTTLE（瓶）</option>
         </select>
@@ -74,6 +75,7 @@
                   <option value="L">L（公升）</option>
                   <option value="KG">KG（公斤）</option>
                   <option value="PCS">PCS（件）</option>
+                  <option value="PC">PC（顆）</option>
                   <option value="BOX">BOX（盒）</option>
                   <option value="BOTTLE">BOTTLE（瓶）</option>
                   <option value="BAG">BAG（袋）</option>
@@ -108,8 +110,8 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-primary" onclick="createProduct()">建立</button>
-      <button class="btn-secondary" onclick="updateProduct()">更新</button>
+      <button class="btn-primary" onclick="createProduct(this)">建立</button>
+      <button class="btn-secondary" onclick="updateProduct(this)">更新</button>
       <button class="btn-secondary" onclick="clearForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('product', document.getElementById('p_id')?.value || '', 'master')">Log</button>
     </div>

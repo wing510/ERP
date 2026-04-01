@@ -16,10 +16,11 @@ async function suppliersInit(){
     ["search_supplier_status", "change"]
   ], () => searchSuppliers());
   await renderSuppliers();
+  clearSupplierForm();
 }
 
 /* ===== 建立 ===== */
-async function createSupplier(){
+async function createSupplier(triggerEl){
 
   const supplier_id = s_id.value.trim().toUpperCase();
   s_id.value = supplier_id;
@@ -34,7 +35,7 @@ async function createSupplier(){
   if(!SUPPLIER_RULES.idRegex.test(supplier_id))
     return showToast("ID 只能使用 A-Z 0-9 _ -","error");
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   const list = await getAll("supplier");
   if(list.some(s=>s.supplier_id===supplier_id))
@@ -66,12 +67,12 @@ async function createSupplier(){
 }
 
 /* ===== 更新 ===== */
-async function updateSupplier(){
+async function updateSupplier(triggerEl){
 
   if(!supplierEditing)
     return showToast("請先選擇供應商","error");
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   const supplier_id = s_id.value.trim();
   const supplier = await getOne("supplier","supplier_id",supplier_id);
@@ -133,6 +134,7 @@ function clearSupplierForm(){
   ).forEach(el=>el.value="");
 
   s_status.value="ACTIVE";
+  s_id.value = generateShortId("S");
 }
 
 /* ===== 載入 ===== */

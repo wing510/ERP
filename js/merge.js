@@ -158,7 +158,7 @@ function updateMergeTotal(){
   document.getElementById("merge_total").value = total ? total.toFixed(2) : "";
 }
 
-async function postMerge(){
+async function postMerge(triggerEl){
   const newLotId = (document.getElementById("merge_new_lot_id")?.value || "").trim().toUpperCase();
   document.getElementById("merge_new_lot_id").value = newLotId;
   const remark = (document.getElementById("merge_remark")?.value || "").trim();
@@ -182,12 +182,16 @@ async function postMerge(){
   const refId = generateId("MERGE");
   const total = mergeDraft.reduce((sum, x) => sum + Number(x.qty||0), 0);
 
-  showSaveHint(document.getElementById("mergePostButtonGroup"));
+  showSaveHint(triggerEl || document.getElementById("mergePostButtonGroup"));
   try {
+  const firstSrcLot = (mergeLots || []).find(l => l.lot_id === (mergeDraft?.[0]?.lot_id || "")) || null;
+  const whId = String(firstSrcLot?.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN";
+
   // create new lot (QA status default: APPROVED only if all sources approved; currently sources are APPROVED)
   await createRecord("lot", {
     lot_id: newLotId,
     product_id: mergePickedProduct,
+    warehouse_id: whId,
     source_type: "MERGE",
     source_id: refId,
     qty: String(total),
@@ -202,7 +206,8 @@ async function postMerge(){
     created_at: nowIso16(),
     updated_by: "",
     updated_at: "",
-    remark: remark || `Merge lots -> ${refId}`
+    remark: remark || "",
+    system_remark: `Merge lots -> ${refId}`
   });
 
   // IN to new
@@ -211,35 +216,40 @@ async function postMerge(){
     movement_type: "IN",
     lot_id: newLotId,
     product_id: mergePickedProduct,
+    warehouse_id: whId,
     qty: String(Math.abs(total)),
     unit: mergePickedUnit,
     ref_type: "MERGE",
     ref_id: refId,
-    remark: `Merge IN: ${refId}`,
+    remark: "",
     created_by: getCurrentUser(),
     created_at: nowIso16(),
     updated_by: "",
     updated_at: "",
+    system_remark: `Merge IN: ${refId}`,
   });
 
   // OUT from sources + relations
   for(let idx=0; idx<mergeDraft.length; idx++){
     const it = mergeDraft[idx];
+    const srcLot = (mergeLots || []).find(l => l.lot_id === it.lot_id) || null;
 
     await createRecord("inventory_movement", {
       movement_id: generateId("MV"),
       movement_type: "OUT",
       lot_id: it.lot_id,
       product_id: it.product_id,
+      warehouse_id: String(srcLot?.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
       qty: String(-Math.abs(it.qty)),
       unit: it.unit,
       ref_type: "MERGE",
       ref_id: refId,
-      remark: `Merge OUT: ${refId}`,
+      remark: "",
       created_by: getCurrentUser(),
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
+      system_remark: `Merge OUT: ${refId}`,
     });
 
     await createRecord("lot_relation", {

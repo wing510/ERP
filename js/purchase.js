@@ -6,6 +6,7 @@
 let poEditing = false;
 let poItemsDraft = [];
 let poProducts = [];
+let poSuppliers = [];
 let purchaseSort = { field:"", asc:true };
 let poReadOnly = false;
 let poSelectedDbItemId_ = "";
@@ -128,17 +129,27 @@ async function initPurchaseDropdowns(){
   const suppliers = (suppliersRaw || []).filter(s => s.status === "ACTIVE");
   const products = (productsRaw || []).filter(p => p.status === "ACTIVE");
   poProducts = products;
+  poSuppliers = suppliers;
 
   if(supplierSelect){
     supplierSelect.innerHTML =
       `<option value="">請選擇供應商</option>` +
-      suppliers.map(s=>`<option value="${s.supplier_id}">${s.supplier_id} - ${s.supplier_name}</option>`).join("");
+      suppliers.map(s=>{
+        const name = String(s.supplier_name || "").trim();
+        const label = name || s.supplier_id;
+        return `<option value="${s.supplier_id}">${label}</option>`;
+      }).join("");
   }
 
   if(productSelect){
     productSelect.innerHTML =
       `<option value="">請選擇產品</option>` +
-      products.map(p=>`<option value="${p.product_id}" data-unit="${p.unit}" data-spec="${(p.spec || "").replace(/"/g, "&quot;")}">${p.product_id} - ${p.product_name}${p.spec ? " / " + p.spec : ""}</option>`).join("");
+      products.map(p=>{
+        const name = String(p.product_name || "").trim();
+        const spec = String(p.spec || "").trim();
+        const label = name ? (spec ? `${name} / ${spec}` : name) : (p.product_id || "");
+        return `<option value="${p.product_id}" data-unit="${p.unit}" data-spec="${(p.spec || "").replace(/"/g, "&quot;")}">${label}</option>`;
+      }).join("");
   }
 }
 
@@ -182,7 +193,7 @@ function selectPOItemDbRow_(poItemId){
   showToast("已帶入明細（僅改備註請按「更新本筆備註」）");
 }
 
-async function updateSelectedPOItemRemark(){
+async function updateSelectedPOItemRemark(triggerEl){
   if(!poEditing) return showToast("請先載入一張採購單", "error");
   if(poReadOnly) return showToast("此採購單已有收貨紀錄，整張採購單不可修改。", "error");
   const pid = String(poSelectedDbItemId_ || "").trim();
@@ -191,7 +202,7 @@ async function updateSelectedPOItemRemark(){
   }
   const remark = (document.getElementById("po_item_remark")?.value || "").trim();
 
-  showSaveHint(document.getElementById("poItemsCommitGroup"));
+  showSaveHint(triggerEl || document.getElementById("poItemsCommitGroup"));
   try{
     await updateRecord("purchase_order_item", "po_item_id", pid, {
       remark,
@@ -325,7 +336,7 @@ function resetPOForm(){
   updatePOFlowHint_();
 }
 
-async function createPurchaseOrder(){
+async function createPurchaseOrder(triggerEl){
   if(poReadOnly) return showToast("此採購單已有收貨紀錄，整張採購單不可修改。", "error");
   const poIdEl = document.getElementById("po_id");
   const po_id = (poIdEl?.value || "").trim().toUpperCase();
@@ -346,7 +357,7 @@ async function createPurchaseOrder(){
   if(!["OPEN","PARTIAL","CLOSED"].includes(status)) return showToast("狀態不合法","error");
   if(poItemsDraft.length === 0) return showToast("請至少新增 1 筆品項","error");
 
-  showSaveHint(document.getElementById("poItemsCommitGroup"));
+  showSaveHint(triggerEl || document.getElementById("poItemsCommitGroup"));
   try {
   // 檢查 PO 是否已存在
   const existing = await getOne("purchase_order", "po_id", po_id).catch(()=>null);
@@ -443,7 +454,7 @@ async function loadPurchaseOrder(poId){
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
 }
 
-async function updatePurchaseOrder(){
+async function updatePurchaseOrder(triggerEl){
   if(poReadOnly) return showToast("此採購單已有收貨紀錄，整張採購單不可修改。", "error");
   if(!poEditing) return showToast("請先載入一張採購單再更新","error");
 
@@ -467,7 +478,7 @@ async function updatePurchaseOrder(){
     return showToast("此採購單已結案 (CLOSED)，不可再修改。", "error");
   }
 
-  showSaveHint(document.getElementById("poItemsCommitGroup"));
+  showSaveHint(triggerEl || document.getElementById("poItemsCommitGroup"));
   try {
   const newData = {
     supplier_id,
@@ -536,7 +547,13 @@ async function renderPurchaseOrders(list=null){
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:24px;">尚無採購單。請先至「產品」「供應商」建立主檔，再在此建立採購單。</td></tr>';
     return;
   }
+  const supMap = {};
+  (poSuppliers || []).forEach(s => { if(s && s.supplier_id) supMap[s.supplier_id] = s; });
+
   list.forEach(po => {
+    const sid = po.supplier_id || "";
+    const s = supMap[sid] || null;
+    const supplierNameOnly = (s && s.supplier_name) ? s.supplier_name : sid;
     const btn = `
       <button class="btn-edit" onclick="loadPurchaseOrder('${po.po_id}')">Edit</button>
       <button class="btn-secondary" onclick="gotoReceive('PO','${po.po_id}')">收貨</button>
@@ -548,7 +565,7 @@ async function renderPurchaseOrders(list=null){
     tbody.innerHTML += `
       <tr>
         <td>${po.po_id}</td>
-        <td>${po.supplier_id}</td>
+        <td>${supplierNameOnly}</td>
         <td>${po.order_date || ""}</td>
         <td>${po.expected_arrival_date || ""}</td>
         <td>${termLabel(po.status)}</td>
@@ -570,10 +587,15 @@ async function searchPurchaseOrders(){
   const status = document.getElementById("search_po_status")?.value || "";
 
   const list = await getAll("purchase_order");
+  const supMap = {};
+  (poSuppliers || []).forEach(s => { if(s && s.supplier_id) supMap[s.supplier_id] = s; });
   const result = list.filter(po => {
+    const s = supMap[po.supplier_id] || null;
+    const supName = String(s?.supplier_name || "").toLowerCase();
     const matchKw = !kw ||
       (po.po_id || "").toLowerCase().includes(kw) ||
-      (po.supplier_id || "").toLowerCase().includes(kw);
+      (po.supplier_id || "").toLowerCase().includes(kw) ||
+      (supName && supName.includes(kw));
     return matchKw && (!status || po.status === status);
   });
   renderPurchaseOrders(result);

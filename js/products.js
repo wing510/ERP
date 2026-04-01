@@ -45,6 +45,7 @@ async function productsInit(){
   applyProductMultiUnitMode_();
   ensureProductUnitRatioRows_();
   await renderProducts();
+  clearForm();
 }
 
 function isProductMultiUnitEnabled_(){
@@ -73,6 +74,7 @@ function productUnitOptionsHtml_(){
     <option value="L">L（公升）</option>
     <option value="KG">KG（公斤）</option>
     <option value="PCS">PCS（件）</option>
+    <option value="PC">PC（顆）</option>
     <option value="BOX">BOX（盒）</option>
     <option value="BOTTLE">BOTTLE（瓶）</option>
     <option value="BAG">BAG（袋）</option>
@@ -204,7 +206,7 @@ function setProductUnitRatioRowsFromMap_(map){
 }
 
 /* ===== 建立 ===== */
-async function createProduct(){
+async function createProduct(triggerEl){
 
   const id = p_id.value.trim().toUpperCase();
   p_id.value = id;
@@ -251,7 +253,7 @@ async function createProduct(){
   if(ratioMap === null)
     return showToast("單位轉基準倍率(JSON) 格式錯誤","error");
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   const list = await getAll("product");
 
@@ -283,12 +285,12 @@ async function createProduct(){
 }
 
 /* ===== 更新 ===== */
-async function updateProduct(){
+async function updateProduct(triggerEl){
 
   if(!editingMode)
     return showToast("請先選擇產品","error");
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   const id = p_id.value.trim();
   const product = await getOne("product", "product_id", id);
@@ -372,6 +374,7 @@ function clearForm(){
 
   p_status.value = "ACTIVE";
   p_type.value = "RM";
+  p_id.value = generateShortId("P");
 }
 
 /* ===== 載入產品 ===== */

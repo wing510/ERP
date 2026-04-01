@@ -17,12 +17,26 @@ let importReceiptIdToDocId = {};
 let goodsReceiptIdToPoId = {};
 /** import_doc_id -> import_no（報單號） */
 let importDocIdToImportNo = {};
+let lotsQaTriggerEl_ = null;
+let lotsWarehouses_ = [];
+
+function setLotsHeaderHint_(text, type = ""){
+  const el = document.getElementById("lotsHeaderHint");
+  if(!el) return;
+  el.textContent = text || "";
+  el.style.color =
+    type === "ok" ? "#166534" :
+    type === "warn" ? "#92400e" :
+    type === "error" ? "#991b1b" :
+    "#64748b";
+}
 
 function escapeLotsHtml_(s){
   return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
 async function lotsInit(){
+  setLotsHeaderHint_("狀態：載入中…", "warn");
   await loadLotsAndMovements();
   bindAutoSearchToolbar_([
     ["search_lots_keyword", "input"],
@@ -46,15 +60,17 @@ async function refreshLotsData(){
 }
 
 async function loadLotsAndMovements(){
-  const [lots, products, importReceipts, goodsReceipts, importDocs] = await Promise.all([
+  const [lots, products, warehouses, importReceipts, goodsReceipts, importDocs] = await Promise.all([
     getAll("lot"),
     getAll("product").catch(() => []),
+    getAll("warehouse").catch(() => []),
     getAll("import_receipt").catch(() => []),
     getAll("goods_receipt").catch(() => []),
     getAll("import_document").catch(() => [])
   ]);
   lotsCache = lots || [];
   productsCache = products || [];
+  lotsWarehouses_ = (warehouses || []).filter(w => String(w.status || "ACTIVE").toUpperCase() === "ACTIVE");
   productNameMap = {};
   (products || []).forEach(p => {
     if (p && p.product_id) productNameMap[p.product_id] = p.product_name || p.product_id;
@@ -80,9 +96,17 @@ async function loadLotsAndMovements(){
   });
 
   try{
-    const movements = await getAll("inventory_movement");
-    movementsCache = movements || [];
-    movementLoadFailed = false;
+    const core = await loadInventoryCoreData_({ needWarehouses: false });
+    movementsCache = core.movements || [];
+    movementLoadFailed = !!core.movementLoadFailed;
+    if(movementLoadFailed){
+      if(typeof showToast === "function"){
+        showToast("讀取庫存異動失敗，可用量顯示 --。請重新整理頁面或稍後再試。", "error");
+      }
+      setLotsHeaderHint_("狀態：庫存異動讀取失敗（可用量顯示 --）", "error");
+    }else{
+      setLotsHeaderHint_(lotsCache.length ? `狀態：已載入（${lotsCache.length} 筆批次）` : "狀態：已載入（0 筆）", "ok");
+    }
   }catch(_e){
     movementLoadFailed = true;
     // 讀取異動失敗時顯示「--」，避免誤判為 0
@@ -90,41 +114,29 @@ async function loadLotsAndMovements(){
       showToast("讀取庫存異動失敗，可用量顯示 --。請重新整理頁面或稍後再試。", "error");
     }
     movementsCache = [];
+    setLotsHeaderHint_("狀態：庫存異動讀取失敗（可用量顯示 --）", "error");
   }
 }
 
 function getLotsAvailableByLotId(lotId){
-  const rows = (movementsCache || []).filter(m => m.lot_id === lotId);
-  if(!rows.length){
-    const lot = (lotsCache || []).find(l => l.lot_id === lotId);
-    return Number(lot?.qty || 0);
-  }
-  return rows.reduce((sum, m) => sum + Number(m.qty || 0), 0);
+  return invAvailableByLotId_(lotId, lotsCache, movementsCache);
+}
+
+function lotsWarehouseLabelById_(warehouseId){
+  const id = String(warehouseId || "").trim().toUpperCase();
+  if(!id) return "";
+  const w = (lotsWarehouses_ || []).find(x => String(x.warehouse_id || "").toUpperCase() === id) || null;
+  if(!w) return id;
+  const name = String(w.warehouse_name || "").trim();
+  const cat = String(w.category || "").trim().toUpperCase();
+  const catLabel = (typeof termShortZh_ === "function" ? termShortZh_(cat) : ((typeof termLabel === "function" ? termLabel(cat) : "") || cat));
+  const namePart = name || id;
+  return catLabel ? `${namePart}-${catLabel}` : namePart;
 }
 
 /** 與後端 desiredInventoryStatusForLot_ 一致，避免試算表 inventory_status 未同步仍顯示 ACTIVE */
-function parseLotYMD_(s){
-  const m = String(s || "").trim().match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-  if(!m) return null;
-  const y = Number(m[1]);
-  const mo = Number(m[2]) - 1;
-  const d = Number(m[3]);
-  if(!y || isNaN(mo) || !d) return null;
-  return { y, mo, d };
-}
-
 function isLotExpiredClient_(expiryDateStr){
-  const raw = String(expiryDateStr || "").trim();
-  if(!raw) return false;
-  const ymd = parseLotYMD_(raw);
-  const now = new Date();
-  if(ymd){
-    const expiryEnd = new Date(ymd.y, ymd.mo, ymd.d, 23, 59, 59, 999);
-    return now.getTime() > expiryEnd.getTime();
-  }
-  const d = new Date(raw);
-  if(isNaN(d.getTime())) return false;
-  return now.getTime() > d.getTime();
+  return invIsExpired_(expiryDateStr);
 }
 
 function getLotInventoryStatusDerived_(lot){
@@ -140,6 +152,7 @@ function getLotInventoryStatusDerived_(lot){
 function closeLotsQaConfirm(){
   const el = document.getElementById("lotsQaConfirmModal");
   if(el){ el.style.display = "none"; delete el.dataset.lotId; delete el.dataset.action; }
+  lotsQaTriggerEl_ = null;
 }
 
 function getLotById(lotId){
@@ -171,7 +184,7 @@ function showQaApproveConfirm(lotId){
   batch.innerHTML = "批號：<strong>" + String(lot.lot_id || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</strong><br>產品：" + String(productName || lot.product_id || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "<br>數量：" + (lot.qty != null ? lot.qty : "") + (lot.unit ? " " + lot.unit : "");
   impact.innerHTML = "√ 可以出貨<br>√ 可以進行加工<br>√ 可以銷售";
   primary.textContent = "確認放行";
-  primary.onclick = function(){ closeLotsQaConfirm(); doApproveLot(lotId); };
+  primary.onclick = function(){ closeLotsQaConfirm(); doApproveLot(lotId, lotsQaTriggerEl_ || primary); };
   modal.dataset.lotId = lotId;
   modal.dataset.action = "approve";
   modal.style.display = "flex";
@@ -191,15 +204,15 @@ function showQaRejectConfirm(lotId){
   batch.innerHTML = "批號：<strong>" + String(lot.lot_id || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</strong><br>產品：" + String(productName || lot.product_id || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "<br>數量：" + (lot.qty != null ? lot.qty : "") + (lot.unit ? " " + lot.unit : "");
   impact.textContent = "此批次將不可用於出貨、加工、銷售。";
   primary.textContent = "確認退回";
-  primary.onclick = function(){ closeLotsQaConfirm(); doRejectLot(lotId); };
+  primary.onclick = function(){ closeLotsQaConfirm(); doRejectLot(lotId, lotsQaTriggerEl_ || primary); };
   modal.dataset.lotId = lotId;
   modal.dataset.action = "reject";
   modal.style.display = "flex";
 }
 
-async function doApproveLot(lotId){
+async function doApproveLot(lotId, triggerEl){
   const note = prompt("QA 放行備註（可留空）") ?? "";
-  showSaveHint();
+  showSaveHint(triggerEl || document.getElementById("qaConfirmPrimary"));
   try {
   await updateRecord("lot","lot_id",lotId,{
     status: "APPROVED",
@@ -213,9 +226,9 @@ async function doApproveLot(lotId){
   } finally { hideSaveHint(); }
 }
 
-async function doRejectLot(lotId){
+async function doRejectLot(lotId, triggerEl){
   const note = prompt("QA 退回備註（可留空）") ?? "";
-  showSaveHint();
+  showSaveHint(triggerEl || document.getElementById("qaConfirmPrimary"));
   try {
   await updateRecord("lot","lot_id",lotId,{
     status: "REJECTED",
@@ -229,8 +242,8 @@ async function doRejectLot(lotId){
   } finally { hideSaveHint(); }
 }
 
-function approveLot(lotId){ showQaApproveConfirm(lotId); }
-function rejectLot(lotId){ showQaRejectConfirm(lotId); }
+function approveLot(lotId, triggerEl){ lotsQaTriggerEl_ = triggerEl || null; showQaApproveConfirm(lotId); }
+function rejectLot(lotId, triggerEl){ lotsQaTriggerEl_ = triggerEl || null; showQaRejectConfirm(lotId); }
 
 async function editLotDates(lotId){
   const lot = getLotById(lotId);
@@ -260,7 +273,7 @@ function closeLotDateModal(){
   delete modal.dataset.lotId;
 }
 
-async function saveLotDatesFromModal(){
+async function saveLotDatesFromModal(triggerEl){
   const modal = document.getElementById("lotsDateModal");
   const mfgEl = document.getElementById("lotDateManufacture");
   const expEl = document.getElementById("lotDateExpiry");
@@ -273,7 +286,7 @@ async function saveLotDatesFromModal(){
     return showToast("有效期不可早於製造日", "error");
   }
 
-  showSaveHint();
+  showSaveHint(triggerEl || document.getElementById("lotDateSaveBtn"));
   try{
     await updateRecord("lot", "lot_id", lotId, {
       manufacture_date: mfgVal,
@@ -440,7 +453,7 @@ async function renderLots(){
     const headerText = formatLotGroupHeader_(headerLot);
     container.innerHTML += `
       <tr style="background:#f8fafc;">
-        <td colspan="10" style="font-weight:600;color:#334155;padding:10px 12px;">
+        <td colspan="11" style="font-weight:600;color:#334155;padding:10px 12px;">
           ${escapeLotsHtml_(headerText)}（共 ${count} 批）
         </td>
       </tr>
@@ -464,7 +477,7 @@ async function renderLots(){
       const label = rk === "__EMPTY__" ? "—" : rk;
       container.innerHTML += `
         <tr style="background:#f1f5f9;">
-          <td colspan="10" style="font-weight:600;color:#475569;padding:8px 12px;font-size:13px;">
+          <td colspan="11" style="font-weight:600;color:#475569;padding:8px 12px;font-size:13px;">
             收貨單ID：${escapeLotsHtml_(label)}（共 ${subCnt} 批）
           </td>
         </tr>
@@ -474,16 +487,17 @@ async function renderLots(){
         const available = movementLoadFailed ? "--" : getLotsAvailableByLotId(lot.lot_id);
         const invStatus = getLotInventoryStatusDerived_(lot);
         const qaStatus = lot.status || "PENDING";
+        const whText = lotsWarehouseLabelById_(lot.warehouse_id) || (lot.warehouse_id ? String(lot.warehouse_id) : "");
 
         const safeLotId = (lot.lot_id || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
         const allowQa = String(invStatus || "").toUpperCase() === "ACTIVE";
         const action =
           (qaStatus === "PENDING" && allowQa)
-            ? `<button class="btn-secondary" onclick="approveLot('${safeLotId}')">QA 放行</button>
-               <button class="btn-secondary" onclick="rejectLot('${safeLotId}')">QA 退回</button>
+            ? `<button class="btn-secondary" onclick="approveLot('${safeLotId}', this)">QA 放行</button>
+               <button class="btn-secondary" onclick="rejectLot('${safeLotId}', this)">QA 退回</button>
                <button class="btn-secondary" onclick="editLotDates('${safeLotId}')">補登日期</button>`
-            : `<button class="btn-secondary" onclick="openLogs('lot','${safeLotId}','inventory')">查看 Log</button>
-               <button class="btn-secondary" onclick="window.__pendingTraceLotId='${safeLotId}';if(typeof navigate==='function')navigate('trace')">查看追溯</button>
+            : `<button class="btn-secondary" onclick="openLogs('lot','${safeLotId}','inventory')">Log</button>
+               <button class="btn-secondary" onclick="window.__pendingTraceLotId='${safeLotId}';if(typeof navigate==='function')navigate('trace')">追溯</button>
                <button class="btn-secondary" onclick="editLotDates('${safeLotId}')">補登日期</button>`;
 
         const productDisplay = lotsFormatProductSpec_(lot);
@@ -493,6 +507,7 @@ async function renderLots(){
       <tr>
         <td>${escapeLotsHtml_(lot.lot_id || "")}</td>
         <td title="${pidAttr}">${escapeLotsHtml_(productDisplay)}</td>
+        <td>${escapeLotsHtml_(whText || "—")}</td>
         <td>${escapeLotsHtml_(lot.type || "")}</td>
         <td>${escapeLotsHtml_(lot.qty != null ? String(lot.qty) : "")}</td>
         <td>${escapeLotsHtml_(String(available))}</td>

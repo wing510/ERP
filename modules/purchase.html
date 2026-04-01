@@ -15,7 +15,7 @@
 
       <div class="form-group">
         <label>採購單號 (PO ID) *</label>
-        <input type="text" id="po_id" placeholder="例如：PO001">
+        <input type="text" id="po_id" readonly>
       </div>
 
       <div class="form-group">
@@ -55,7 +55,7 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-secondary" id="po_update_btn" onclick="updatePurchaseOrder()">更新</button>
+      <button class="btn-secondary" id="po_update_btn" onclick="updatePurchaseOrder(this)">更新</button>
       <button class="btn-secondary" onclick="resetPOForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('purchase_order', document.getElementById('po_id')?.value || '', 'inbound')">Log</button>
     </div>
@@ -97,7 +97,7 @@
 
     <div class="button-group">
       <button class="btn-primary" id="po_add_item_btn" onclick="addPOItemDraft()">新增品項</button>
-      <button type="button" class="btn-secondary" onclick="updateSelectedPOItemRemark()">更新本筆備註</button>
+      <button type="button" class="btn-secondary" onclick="updateSelectedPOItemRemark(this)">更新本筆備註</button>
     </div>
 
     <br>
@@ -119,8 +119,8 @@
     </div>
 
     <div class="button-group" id="poItemsCommitGroup" style="margin-top:12px;">
-      <button class="btn-primary" id="po_create_btn" onclick="createPurchaseOrder()">建立</button>
-      <button class="btn-secondary" id="po_items_save_btn" onclick="updatePurchaseOrder()">更新</button>
+      <button class="btn-primary" id="po_create_btn" onclick="createPurchaseOrder(this)">建立</button>
+      <button class="btn-secondary" id="po_items_save_btn" onclick="updatePurchaseOrder(this)">更新</button>
       <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
     </div>
   </div>

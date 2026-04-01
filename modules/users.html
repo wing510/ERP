@@ -26,6 +26,7 @@
           <option value="ADMIN">ADMIN（管理員）</option>
           <option value="QA">QA（品保）</option>
           <option value="OP">OP（作業）</option>
+          <option value="SALES">SALES（業務）</option>
         </select>
       </div>
 
@@ -44,8 +45,8 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-primary" onclick="createUser()">建立</button>
-      <button class="btn-secondary" onclick="updateUser()">更新</button>
+      <button class="btn-primary" onclick="createUser(this)">建立</button>
+      <button class="btn-secondary" onclick="updateUser(this)">更新</button>
       <button class="btn-secondary" onclick="resetUserForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('user', document.getElementById('u_id')?.value || '', 'master')">Log</button>
     </div>

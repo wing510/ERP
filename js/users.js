@@ -23,7 +23,7 @@ function resetUserForm(){
   if(rm) rm.value = "";
 }
 
-async function createUser(){
+async function createUser(triggerEl){
   const user_id = (document.getElementById("u_id")?.value || "").trim();
   const user_name = (document.getElementById("u_name")?.value || "").trim();
   const role = document.getElementById("u_role")?.value || "OP";
@@ -33,7 +33,7 @@ async function createUser(){
   if(!user_id) return showToast("User ID 必填","error");
   if(!user_name) return showToast("姓名必填","error");
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   const exists = await getOne("user","user_id",user_id).catch(()=>null);
   if(exists) return showToast("User ID 已存在","error");
@@ -69,7 +69,7 @@ async function loadUser(userId){
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
 }
 
-async function updateUser(){
+async function updateUser(triggerEl){
   if(!userEditing) return showToast("請先載入使用者再更新","error");
   const user_id = (document.getElementById("u_id")?.value || "").trim();
   const user_name = (document.getElementById("u_name")?.value || "").trim();
@@ -79,7 +79,7 @@ async function updateUser(){
 
   if(!user_name) return showToast("姓名必填","error");
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   await updateRecord("user","user_id",user_id,{
     user_name,

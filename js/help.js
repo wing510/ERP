@@ -312,7 +312,7 @@ const HelpConfig = {
     • 出貨時到 Shipment 建立出貨單扣庫<br>
     <strong>規則：</strong><br>
     • 銷售單（Sales Order, SO）不直接扣庫；實際扣庫發生在 Shipment<br>
-    • 狀態 SHIPPED（已出貨）/ CANCELLED（已取消）的銷售單不可再修改<br>
+    • 狀態 SHIPPED（全數出貨）/ CANCELLED（已取消）的銷售單不可再修改<br>
     <strong>常見提示：</strong><br>
     • 銷售單ID 必填／請選擇客戶／下單日期必填<br>
     • 請至少新增 1 筆品項<br>

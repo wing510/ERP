@@ -78,51 +78,8 @@
     </div>
 
     <div class="button-group" id="splitPostButtonGroup" style="margin-top:10px;">
-      <button class="btn-primary" onclick="postSplit()">確認拆批（過帳）</button>
+      <button class="btn-primary" onclick="postSplit(this)">確認拆批（過帳）</button>
       <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
     </div>
   </div>
-</div>
-
-<h2>Split 拆批製造</h2>
-
-<div style="background:white; padding:20px; border-radius:6px; margin-bottom:20px;">
-
-    <h3>執行拆批</h3>
-
-    <div style="display:flex; gap:15px;">
-
-        <select id="sp_lot" style="flex:1; padding:8px;"></select>
-
-        <input type="number" id="sp_qty"
-               placeholder="拆出數量"
-               style="flex:1; padding:8px;">
-
-        <button onclick="createSplit()"
-                style="padding:8px 20px; background:#2d7ef7; color:white; border:none;">
-            確認拆批
-        </button>
-
-    </div>
-</div>
-
-<div style="background:white; padding:20px; border-radius:6px;">
-
-    <h3>拆批紀錄</h3>
-
-    <table style="width:100%; border-collapse:collapse;">
-
-        <thead>
-            <tr style="text-align:left; border-bottom:1px solid #ddd;">
-                <th>來源批次</th>
-                <th>新批次</th>
-                <th>數量</th>
-                <th>時間</th>
-            </tr>
-        </thead>
-
-        <tbody id="splitTableBody"></tbody>
-
-    </table>
-
 </div>

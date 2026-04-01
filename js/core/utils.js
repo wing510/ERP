@@ -34,6 +34,16 @@ function generateId(prefix){
   return `${prefix}-${ymd}-${hm}-${rnd}`;
 }
 
+/** 較短的主檔 ID：例如 P240331-7K3F（長度更短、仍足夠避免日常撞號） */
+function generateShortId(prefix){
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2,"0");
+  const yy = String(d.getFullYear()).slice(-2);
+  const ymd = `${yy}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+  const rnd = Math.random().toString(36).slice(2,6).toUpperCase(); // 4 碼
+  return `${prefix}${ymd}-${rnd}`;
+}
+
 /* =========================================================
    QA / 批次 / 異動 名詞：雙語或白話（新手友善）
 ========================================================= */
@@ -48,7 +58,7 @@ var TERM_LABELS = {
   OPEN: "OPEN（開單中）",
   PARTIAL: "PARTIAL（部分）",
   CANCELLED: "CANCELLED（已取消）",
-  SHIPPED: "SHIPPED（已出貨）",
+  SHIPPED: "SHIPPED（全數出貨）",
   POSTED: "POSTED（已過帳）",
   PROCESS_OUT: "PROCESS_OUT（加工扣庫）",
   PROCESS_IN: "PROCESS_IN（加工入庫）",
@@ -57,13 +67,31 @@ var TERM_LABELS = {
   OUT: "OUT（扣庫）",
   ADJUST: "ADJUST（調整）",
   PASSED: "PASSED（已通過）",
-  FAILED: "FAILED（未通過）"
+  FAILED: "FAILED（未通過）",
+  INTERNAL_USE: "INTERNAL_USE（內部領用）",
+  SAMPLE: "SAMPLE（樣品）",
+  SCRAP: "SCRAP（報廢）",
+  OTHER: "OTHER（其他）"
+  ,AMBIENT: "AMBIENT（常溫）"
+  ,CHILLED: "CHILLED（冷藏）"
+  ,FROZEN: "FROZEN（冷凍）"
 };
 
 function termLabel(code) {
   if (code == null || code === "") return "";
   var s = String(code).trim().toUpperCase();
   return TERM_LABELS[s] || code;
+}
+
+/**
+ * 取「短中文」標籤（常用於下拉/列表的倉別等）
+ * - 若 termLabel(term) 形如 "AMBIENT（常溫）" → 回傳 "常溫"
+ * - 否則回傳 termLabel(term)（或原字串）
+ */
+function termShortZh_(term){
+  var full = (typeof termLabel === "function" ? termLabel(term) : String(term || "")) || "";
+  var m = String(full).match(/（([^）]+)）/);
+  return m ? m[1] : String(full || "");
 }
 
 /* =========================================================

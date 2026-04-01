@@ -24,6 +24,11 @@
       </div>
 
       <div class="form-group">
+        <label>分類</label>
+        <input type="text" id="c_category" placeholder="例如：經銷／門市／KOL／公關">
+      </div>
+
+      <div class="form-group">
         <label>聯絡人</label>
         <input type="text" id="c_contact">
       </div>
@@ -64,8 +69,8 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-primary" onclick="createCustomer()">建立</button>
-      <button class="btn-secondary" onclick="updateCustomer()">更新</button>
+      <button class="btn-primary" onclick="createCustomer(this)">建立</button>
+      <button class="btn-secondary" onclick="updateCustomer(this)">更新</button>
       <button class="btn-secondary" onclick="clearCustomerForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('customer', document.getElementById('c_id')?.value || '', 'master')">Log</button>
     </div>
@@ -104,6 +109,7 @@
           <tr>
             <th onclick="sortCustomers('customer_id')">ID <span id="sort-customerId"></span></th>
             <th onclick="sortCustomers('customer_name')">名稱 <span id="sort-customerName"></span></th>
+            <th onclick="sortCustomers('category')">分類 <span id="sort-category"></span></th>
             <th onclick="sortCustomers('contact_person')">聯絡人 <span id="sort-contactPerson"></span></th>
             <th onclick="sortCustomers('phone')">電話 <span id="sort-phone"></span></th>
             <th onclick="sortCustomers('status')">狀態 <span id="sort-status"></span></th>

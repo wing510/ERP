@@ -4,6 +4,7 @@
     <div>
       Lots 批次管理
       <button type="button" class="btn-sheet" onclick="openSheetLink('lot')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+      <span id="lotsHeaderHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">狀態：載入中…</span>
     </div>
     <span data-help="lotsMain"></span>
   </div>
@@ -41,6 +42,7 @@
           <tr>
             <th>Lot ID</th>
             <th>產品(規格)</th>
+            <th>倉別</th>
             <th>類型</th>
             <th>總數量</th>
             <th>可用量</th>
@@ -69,7 +71,7 @@
     <h3 id="qaConfirmTitle" class="lots-qa-modal-title"></h3>
     <div id="qaConfirmBatchInfo" class="lots-qa-modal-batch"></div>
     <div id="qaConfirmImpact" class="lots-qa-modal-impact"></div>
-    <div class="lots-qa-modal-actions">
+    <div class="lots-qa-modal-actions button-group">
       <button type="button" id="qaConfirmPrimary" class="btn-primary">確認</button>
       <button type="button" id="qaConfirmCancel" class="btn-secondary" onclick="closeLotsQaConfirm()">取消</button>
     </div>
@@ -94,7 +96,7 @@
       <div style="font-size:12px;color:#64748b;">規則：有效期不可早於製造日。</div>
     </div>
     <div class="lots-qa-modal-actions">
-      <button type="button" id="lotDateSaveBtn" class="btn-primary" onclick="saveLotDatesFromModal()">儲存</button>
+      <button type="button" id="lotDateSaveBtn" class="btn-primary" onclick="saveLotDatesFromModal(this)">儲存</button>
       <button type="button" class="btn-secondary" onclick="closeLotDateModal()">取消</button>
     </div>
   </div>

@@ -118,7 +118,7 @@ function renderSplitDraft(){
   });
 }
 
-async function postSplit(){
+async function postSplit(triggerEl){
   const source = document.getElementById("split_source_lot")?.value || "";
   if(!source) return showToast("請選擇來源 Lot","error");
   if(splitDraft.length === 0) return showToast("請至少新增 1 筆新批次","error");
@@ -132,7 +132,7 @@ async function postSplit(){
 
   const refId = generateId("SPLIT");
 
-  showSaveHint(document.getElementById("splitPostButtonGroup"));
+  showSaveHint(triggerEl || document.getElementById("splitPostButtonGroup"));
   try {
   // source OUT
   await createRecord("inventory_movement", {
@@ -140,15 +140,17 @@ async function postSplit(){
     movement_type: "OUT",
     lot_id: source,
     product_id: srcLot.product_id,
+    warehouse_id: String(srcLot.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
     qty: String(-Math.abs(total)),
     unit: srcLot.unit,
     ref_type: "SPLIT",
     ref_id: refId,
-    remark: `Split OUT: ${refId}`,
+    remark: "",
     created_by: getCurrentUser(),
     created_at: nowIso16(),
     updated_by: "",
     updated_at: "",
+    system_remark: `Split OUT: ${refId}`,
   });
 
   // create new lots + IN + relations
@@ -158,6 +160,7 @@ async function postSplit(){
     await createRecord("lot", {
       lot_id: it.new_lot_id,
       product_id: srcLot.product_id,
+      warehouse_id: String(srcLot.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
       source_type: "SPLIT",
       source_id: refId,
       qty: String(it.qty),
@@ -172,7 +175,8 @@ async function postSplit(){
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
-      remark: it.remark || `Split from ${source}`
+      remark: it.remark || "",
+      system_remark: `Split from ${source}`
     });
 
     await createRecord("inventory_movement", {
@@ -180,15 +184,17 @@ async function postSplit(){
       movement_type: "IN",
       lot_id: it.new_lot_id,
       product_id: srcLot.product_id,
+      warehouse_id: String(srcLot.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
       qty: String(Math.abs(it.qty)),
       unit: it.unit,
       ref_type: "SPLIT",
       ref_id: refId,
-      remark: `Split IN: ${refId}`,
+      remark: "",
       created_by: getCurrentUser(),
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
+      system_remark: `Split IN: ${refId}`,
     });
 
     await createRecord("lot_relation", {

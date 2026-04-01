@@ -12,6 +12,7 @@ let importItemsReadOnly = false;
 let importDocReadOnly = false;
 let importProducts = [];
 let importSelectedDbItemId_ = "";
+let importSuppliers = [];
 
 // `bindUppercaseInput` 已移至 `js/core/utils.js`
 
@@ -331,12 +332,12 @@ function buildImportDocPayload_(){
   return { doc, items };
 }
 
-async function saveImportDocument(){
+async function saveImportDocument(triggerEl){
   if(importDocReadOnly){
     showToast("此報單已有進口收貨紀錄，整張報單不可修改。","error");
     return;
   }
-  showSaveHint(document.getElementById("importItemsCommitGroup"));
+  showSaveHint(triggerEl || document.getElementById("importItemsCommitGroup"));
   try{
     const { doc, items } = buildImportDocPayload_();
 
@@ -418,16 +419,26 @@ function initImportDropdownsWithData_(suppliers, products){
   const supList = (suppliers || []).filter(s => (s.status || "ACTIVE") === "ACTIVE");
   const prodList = (products || []).filter(p => (p.status || "ACTIVE") === "ACTIVE");
   importProducts = prodList;
+  importSuppliers = supList;
 
   if(supplierSelect){
     supplierSelect.innerHTML =
       `<option value="">請選擇供應商</option>` +
-      supList.map(s=>`<option value="${s.supplier_id}">${s.supplier_id} - ${s.supplier_name}</option>`).join("");
+      supList.map(s=>{
+        const name = String(s.supplier_name || "").trim();
+        const label = name || s.supplier_id;
+        return `<option value="${s.supplier_id}">${label}</option>`;
+      }).join("");
   }
   if(productSelect){
     productSelect.innerHTML =
       `<option value="">請選擇產品</option>` +
-      prodList.map(p=>`<option value="${p.product_id}" data-unit="${p.unit || ""}" data-spec="${(p.spec || "").replace(/"/g, "&quot;")}">${p.product_id} - ${p.product_name}${p.spec ? " / " + p.spec : ""}</option>`).join("");
+      prodList.map(p=>{
+        const name = String(p.product_name || "").trim();
+        const spec = String(p.spec || "").trim();
+        const label = name ? (spec ? `${name} / ${spec}` : name) : (p.product_id || "");
+        return `<option value="${p.product_id}" data-unit="${p.unit || ""}" data-spec="${(p.spec || "").replace(/"/g, "&quot;")}">${label}</option>`;
+      }).join("");
   }
 }
 
@@ -472,7 +483,7 @@ function selectImportItemDbRow_(importItemId){
   showToast("已帶入明細（僅改備註請按「更新本筆備註」）");
 }
 
-async function updateSelectedImportItemRemark(){
+async function updateSelectedImportItemRemark(triggerEl){
   if(!importEditing) return showToast("請先載入報單", "error");
   if(importItemsReadOnly){
     return showToast("此報單已有進口收貨紀錄，明細不可修改。", "error");
@@ -483,7 +494,7 @@ async function updateSelectedImportItemRemark(){
   }
   const remark = (document.getElementById("import_item_remark")?.value || "").trim();
 
-  showSaveHint(document.getElementById("importItemsCommitGroup"));
+  showSaveHint(triggerEl || document.getElementById("importItemsCommitGroup"));
   try{
     await updateRecord("import_item", "import_item_id", iid, {
       remark,
@@ -631,14 +642,14 @@ function resetImportForm(clearLocalDraft = false){
   setImportReceiptState_("收貨狀態：未載入報單", "warn");
 }
 
-async function createImportDocument(){
+async function createImportDocument(triggerEl){
   // 保留舊函式名稱，改走一鍵儲存（更直覺）
-  await saveImportDocument();
+  await saveImportDocument(triggerEl);
 }
 
-async function updateImportDocument(){
+async function updateImportDocument(triggerEl){
   // 保留舊函式名稱，改走一鍵儲存（更直覺）
-  await saveImportDocument();
+  await saveImportDocument(triggerEl);
 }
 
 async function loadImportDocument(importDocId){
@@ -786,6 +797,7 @@ async function createImportReceiptAndLots(){
     const lot = {
       lot_id,
       product_id: it.product_id,
+      warehouse_id: String(warehouse || "").trim().toUpperCase() || "MAIN",
       source_type: "IMPORT",
       source_id: import_receipt_id,
       qty: String(it.declared_qty),
@@ -798,7 +810,8 @@ async function createImportReceiptAndLots(){
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
-      remark: `Import: ${import_doc_id}${docNo ? " / " + docNo : ""}`.trim()
+      remark: "",
+      system_remark: `Import: ${import_doc_id}${docNo ? " / " + docNo : ""}`.trim()
     };
 
     await createRecord("lot", lot);
@@ -809,15 +822,17 @@ async function createImportReceiptAndLots(){
       movement_type: "IN",
       lot_id,
       product_id: it.product_id,
+      warehouse_id: String(warehouse || "").trim().toUpperCase() || "MAIN",
       qty: String(Math.abs(Number(it.declared_qty || 0))),
       unit: it.declared_unit,
       ref_type: "IMPORT_RECEIPT",
       ref_id: import_receipt_id,
-      remark: `Import IN: ${import_doc_id}`,
+      remark: "",
       created_by: getCurrentUser(),
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
+      system_remark: `Import IN: ${import_doc_id}`,
     };
     await createRecord("inventory_movement", mv);
 
@@ -855,12 +870,16 @@ async function renderImportDocuments(list=null){
   if(!tbody) return;
 
   const listToShow = Array.isArray(list) ? list : [];
+  const supMap = {};
+  (importSuppliers || []).forEach(s => { if(s && s.supplier_id) supMap[s.supplier_id] = s; });
   tbody.innerHTML = "";
   if (!listToShow.length) {
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:24px;">尚無進口報單。請先至「產品」「供應商」建立主檔，再在上方建立報單。</td></tr>';
     return;
   }
   listToShow.forEach(doc => {
+    const s = supMap[doc.supplier_id] || null;
+    const supplierNameOnly = (s && s.supplier_name) ? s.supplier_name : (doc.supplier_id || "");
     const btn = `
       <button class="btn-edit" onclick="loadImportDocument('${doc.import_doc_id}')">Edit</button>
       <button class="btn-secondary" onclick="gotoReceive('IMPORT','${doc.import_doc_id}')">收貨</button>
@@ -873,7 +892,7 @@ async function renderImportDocuments(list=null){
         <td>${doc.import_no || ""}</td>
         <td>${doc.import_date || ""}</td>
         <td>${doc.release_date || ""}</td>
-        <td>${doc.supplier_id || ""}</td>
+        <td>${supplierNameOnly}</td>
         <td>${doc.inspection_no || ""}</td>
         <td>${termLabel(doc.status)}</td>
         <td>${linkCell}</td>
@@ -894,12 +913,17 @@ async function searchImportDocuments(){
   const status = document.getElementById("search_import_status")?.value || "";
 
   const list = await getAll("import_document");
+  const supMap = {};
+  (importSuppliers || []).forEach(s => { if(s && s.supplier_id) supMap[s.supplier_id] = s; });
   const result = list.filter(d => {
+    const s = supMap[d.supplier_id] || null;
+    const supName = String(s?.supplier_name || "").toLowerCase();
     const matchKw = !kw ||
       (d.import_doc_id || "").toLowerCase().includes(kw) ||
       (d.import_no || "").toLowerCase().includes(kw) ||
       (d.declaration_no || "").toLowerCase().includes(kw) ||
       (d.supplier_id || "").toLowerCase().includes(kw) ||
+      (supName && supName.includes(kw)) ||
       String(d.inspection_no || "").toLowerCase().includes(kw);
     return matchKw && (!status || d.status === status);
   });

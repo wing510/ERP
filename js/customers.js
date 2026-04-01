@@ -20,14 +20,16 @@ async function customersInit(){
     ["search_customer_status", "change"]
   ], () => searchCustomers());
   await renderCustomers();
+  clearCustomerForm();
 }
 
 /* ===== 建立 ===== */
-async function createCustomer(){
+async function createCustomer(triggerEl){
 
   const customer_id = c_id.value.trim().toUpperCase();
   c_id.value = customer_id;
   const customer_name = c_name.value.trim();
+  const category = (document.getElementById("c_category")?.value || "").trim();
 
   if(!customer_id || !customer_name)
     return showToast("ID / 名稱 必填","error");
@@ -38,7 +40,7 @@ async function createCustomer(){
   if(!CUSTOMER_RULES.idRegex.test(customer_id))
     return showToast("ID 只能使用 A-Z 0-9 _ -","error");
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   const list = await getAll("customer");
   if(list.some(c=>c.customer_id===customer_id))
@@ -47,6 +49,7 @@ async function createCustomer(){
   const customer = {
     customer_id,
     customer_name,
+    category,
     contact_person: c_contact.value.trim(),
     phone: c_phone.value.trim(),
     email: c_email.value.trim(),
@@ -70,12 +73,12 @@ async function createCustomer(){
 }
 
 /* ===== 更新 ===== */
-async function updateCustomer(){
+async function updateCustomer(triggerEl){
 
   if(!customerEditing)
     return showToast("請先選擇客戶","error");
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   const customer_id = c_id.value.trim();
   const customer = await getOne("customer","customer_id",customer_id);
@@ -105,6 +108,7 @@ async function updateCustomer(){
 
   const newData = {
     customer_name: c_name.value.trim(),
+    category: (document.getElementById("c_category")?.value || "").trim(),
     contact_person: c_contact.value.trim(),
     phone: c_phone.value.trim(),
     email: c_email.value.trim(),
@@ -131,10 +135,11 @@ function clearCustomerForm(){
   c_id.disabled=false;
 
   document.querySelectorAll(
-    "#c_id,#c_name,#c_contact,#c_phone,#c_email,#c_address,#c_country,#c_remark"
+    "#c_id,#c_name,#c_category,#c_contact,#c_phone,#c_email,#c_address,#c_country,#c_remark"
   ).forEach(el=>el.value="");
 
   c_status.value="ACTIVE";
+  c_id.value = generateShortId("C");
 }
 
 /* ===== 載入 ===== */
@@ -147,6 +152,8 @@ async function loadCustomer(id){
 
   c_id.value = c.customer_id;
   c_name.value = c.customer_name;
+  const cat = document.getElementById("c_category");
+  if(cat) cat.value = c.category || "";
   c_contact.value = c.contact_person;
   c_phone.value = c.phone;
   c_email.value = c.email;
@@ -169,6 +176,7 @@ async function searchCustomers(){
     const matchKw = !kw ||
       c.customer_id.toLowerCase().includes(kw) ||
       c.customer_name.toLowerCase().includes(kw) ||
+      String(c.category || "").toLowerCase().includes(kw) ||
       String(c.contact_person || "").toLowerCase().includes(kw) ||
       String(c.phone || "").toLowerCase().includes(kw) ||
       String(c.email || "").toLowerCase().includes(kw);
@@ -227,7 +235,7 @@ async function renderCustomers(list=null){
 
   tbody.innerHTML="";
   if(!list.length){
-    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#64748b;padding:24px;">尚無客戶。請在上方表單填寫後按「建立」新增第一筆客戶。</td></tr>';
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:#64748b;padding:24px;">尚無客戶。請在上方表單填寫後按「建立」新增第一筆客戶。</td></tr>';
     return;
   }
 
@@ -241,6 +249,7 @@ async function renderCustomers(list=null){
       <tr>
         <td>${c.customer_id}</td>
         <td>${c.customer_name}</td>
+        <td>${c.category||""}</td>
         <td>${c.contact_person||""}</td>
         <td>${c.phone||""}</td>
         <td>${badge}</td>

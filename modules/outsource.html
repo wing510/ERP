@@ -57,9 +57,9 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-primary" onclick="createProcessOrderOnly()">1) 建立加工單</button>
-      <button class="btn-secondary" onclick="updateProcessOrderHeader()">更新備註/預計日期</button>
-      <button class="btn-secondary" onclick="cancelProcessOrder()">取消加工單（回沖）</button>
+      <button class="btn-primary" onclick="createProcessOrderOnly(this)">1) 建立加工單</button>
+      <button class="btn-secondary" onclick="updateProcessOrderHeader(this)">更新備註/預計日期</button>
+      <button class="btn-secondary" onclick="cancelProcessOrder(this)">取消加工單（回沖）</button>
       <button class="btn-secondary" onclick="resetProcessForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('process_order', document.getElementById('proc_id')?.value || '', 'process')">Log</button>
     </div>
@@ -115,7 +115,7 @@
     <div class="button-group">
       <button class="btn-primary" onclick="addProcInputDraft()">新增投料</button>
       <button type="button" id="proc_pick_lot_btn" class="btn-secondary" onclick="openProcLotPicker()">選擇 Lot</button>
-      <button class="btn-secondary" onclick="updateSelectedProcInputRemark()">更新本筆備註</button>
+      <button class="btn-secondary" onclick="updateSelectedProcInputRemark(this)">更新本筆備註</button>
     </div>
 
     <br>
@@ -127,6 +127,7 @@
             <th>#</th>
             <th>Lot</th>
             <th>產品（規格）</th>
+            <th>倉別</th>
             <th>投料數量</th>
             <th>單位</th>
             <th>狀態</th>
@@ -150,7 +151,7 @@
   <div class="proc-lot-modal-dialog">
     <h3 style="margin:0 0 12px;font-size:18px;color:#1e293b;">選擇 Lot（僅 ACTIVE + QA已放行 + 可用量>0）</h3>
     <div class="search-toolbar" style="margin-bottom:10px;">
-      <input type="text" id="proc_lot_picker_keyword" placeholder="搜尋 Lot ID / 產品名稱" style="min-width:280px;">
+      <input type="text" id="proc_lot_picker_keyword" placeholder="搜尋 Lot ID / 產品名稱 / 倉別" style="min-width:280px;">
       <select id="proc_lot_picker_viewmode">
         <option value="flat">flat（一般清單）</option>
         <option value="group_source">group_source（依來源分組）</option>
@@ -163,6 +164,7 @@
           <tr>
             <th>Lot ID</th>
             <th>產品名稱</th>
+            <th>倉別</th>
             <th>可用量</th>
             <th>建立時間</th>
             <th>操作</th>
@@ -210,7 +212,7 @@
 
     <div class="button-group">
       <button class="btn-primary" onclick="addProcOutputDraft()">新增產出</button>
-      <button class="btn-secondary" onclick="updateSelectedProcOutputRemark()">更新本筆備註</button>
+      <button class="btn-secondary" onclick="updateSelectedProcOutputRemark(this)">更新本筆備註</button>
     </div>
 
     <div style="margin-top:10px;color:#475569;font-size:13px;">

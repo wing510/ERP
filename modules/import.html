@@ -15,7 +15,7 @@
     <div class="form-grid-4">
       <div class="form-group">
         <label>報單ID *</label>
-        <input type="text" id="import_doc_id" placeholder="例如：IMP-20260303-...">
+        <input type="text" id="import_doc_id" readonly>
       </div>
       <div class="form-group">
         <label>報單號 *</label>
@@ -56,7 +56,7 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-secondary" id="import_update_btn" onclick="updateImportDocument()">更新</button>
+      <button class="btn-secondary" id="import_update_btn" onclick="updateImportDocument(this)">更新</button>
       <button class="btn-secondary" onclick="resetImportForm(true)">清除</button>
       <button class="btn-secondary" onclick="openLogs('import_document', document.getElementById('import_doc_id')?.value || '', 'inbound')">Log</button>
     </div>
@@ -107,7 +107,7 @@
 
     <div class="button-group">
       <button class="btn-primary" id="import_add_item_btn" onclick="addImportItemDraft()">新增品項</button>
-      <button type="button" class="btn-secondary" onclick="updateSelectedImportItemRemark()">更新本筆備註</button>
+      <button type="button" class="btn-secondary" onclick="updateSelectedImportItemRemark(this)">更新本筆備註</button>
     </div>
 
     <br>
@@ -132,8 +132,8 @@
     </div>
 
     <div class="button-group" id="importItemsCommitGroup" style="margin-top:12px;">
-      <button class="btn-primary" id="import_create_btn" onclick="createImportDocument()">建立</button>
-      <button class="btn-secondary" id="import_items_save_btn" onclick="saveImportDocument()">更新</button>
+      <button class="btn-primary" id="import_create_btn" onclick="createImportDocument(this)">建立</button>
+      <button class="btn-secondary" id="import_items_save_btn" onclick="saveImportDocument(this)">更新</button>
       <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
     </div>
   </div>

@@ -10,6 +10,7 @@ let procLots = [];
 let procMovements = [];
 let procProducts = [];
 let procSuppliers = [];
+let procWarehouses = [];
 let procEditing = false;
 let procImportReceiptIdToDocId = {};
 let procGoodsReceiptIdToPoId = {};
@@ -242,7 +243,7 @@ async function voidProcessInput(processInputId){
       const createdAt = parseIsoNoTzAsLocalKey_(m.created_at);
       if(!(createdAt && issueAt && createdAt > issueAt)) return;
       const sameOrder = String(m.ref_type || "") === "PROCESS_ORDER" && String(m.ref_id || "").toUpperCase() === procId;
-      const isReversal = String(m.remark || "").includes("REVERSAL");
+      const isReversal = String(m.system_remark || m.remark || "").includes("REVERSAL");
       if(!sameOrder && !isReversal){
         blockReasons.push(`投料 Lot ${lotId} 在送加工後已有下游庫存異動：${m.movement_type || "UNKNOWN"}（ref:${m.ref_type || ""}:${m.ref_id || ""}）。`);
       }
@@ -253,9 +254,11 @@ async function voidProcessInput(processInputId){
       return showToast("回沖失敗：投料 Lot 已有下游使用紀錄，請先展開明細。", "error");
     }
 
-    // 回沖此 lot 的 PROCESS_OUT（可能不只一筆，保守全回沖；並用 remark 防重複）
+    // 回沖此 lot 的 PROCESS_OUT（可能不只一筆，保守全回沖；並用 system_remark/remark 防重複）
     for(const m of srcMv){
-      const already = (mvAll || []).some(x => String(x.remark || "").includes(`REVERSAL(PROCESS_OUT) of ${m.movement_id || ""}`));
+      const already = (mvAll || []).some(x =>
+        String(x.system_remark || x.remark || "").includes(`REVERSAL(PROCESS_OUT) of ${m.movement_id || ""}`)
+      );
       if(already) continue;
       const qty = Number(m.qty || 0);
       if(!qty) continue;
@@ -264,15 +267,17 @@ async function voidProcessInput(processInputId){
         movement_type: "ADJUST",
         lot_id: m.lot_id || "",
         product_id: m.product_id || "",
+        warehouse_id: String(m.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
         qty: String(-qty),
         unit: m.unit || "",
         ref_type: "PROCESS_ORDER",
         ref_id: procId,
-        remark: `REVERSAL(PROCESS_OUT) of ${m.movement_id || ""} (${procId})`,
+        remark: "",
         created_by: getCurrentUser(),
         created_at: nowIso16(),
         updated_by: "",
         updated_at: "",
+        system_remark: `REVERSAL(PROCESS_OUT) of ${m.movement_id || ""} (${procId})`,
       });
     }
 
@@ -404,12 +409,13 @@ async function voidProcessOutput(processOutputId){
       unit: out.unit || "",
       ref_type: "PROCESS_ORDER",
       ref_id: procId,
-        remark: `REVERSAL(PROCESS_IN) of ${outId} (${procId})`,
-        created_by: getCurrentUser(),
-        created_at: nowIso16(),
-        updated_by: "",
-        updated_at: "",
-      });
+      remark: "",
+      created_by: getCurrentUser(),
+      created_at: nowIso16(),
+      updated_by: "",
+      updated_at: "",
+      system_remark: `REVERSAL(PROCESS_IN) of ${outId} (${procId})`,
+    });
 
     await updateRecord("process_order_output","process_output_id",outId,{
       status: "CANCELLED",
@@ -492,7 +498,8 @@ async function voidProcessOutput(processOutputId){
 function formatProcLotOptionLabel_(lot, available){
   const lotId = String(lot?.lot_id || "");
   const productId = String(lot?.product_id || "");
-  return `${lotId} (${productId}) 可用:${available}`;
+  const whText = procWarehouseLabelByLot_(lot) || "";
+  return `${lotId} (${productId}) 可用:${available}` + (whText ? ` | ${whText}` : "");
 }
 
 function formatProcSourceText_(lot){
@@ -525,11 +532,12 @@ function renderProcLotPicker_(lots){
     const lotId = String(l.lot_id || "").toLowerCase();
     const pname = String(formatProcProductDisplay_(l.product_id || "") || "").toLowerCase();
     const src = String(formatProcSourceText_(l) || "").toLowerCase();
-    return lotId.includes(kw) || pname.includes(kw) || src.includes(kw);
+    const wh = String(procWarehouseLabelByLot_(l) || "").toLowerCase();
+    return lotId.includes(kw) || pname.includes(kw) || src.includes(kw) || wh.includes(kw);
   });
   tbody.innerHTML = "";
   if(!list.length){
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#64748b;">目前無可選 Lot</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#64748b;">目前無可選 Lot</td></tr>`;
     return;
   }
 
@@ -537,11 +545,13 @@ function renderProcLotPicker_(lots){
     const av = procGetAvailable(l.lot_id);
     const lotId = String(l.lot_id || "");
     const productText = formatProcProductDisplay_(l.product_id || "");
+    const whText = procWarehouseLabelByLot_(l) || (l.warehouse_id ? String(l.warehouse_id) : "");
     const createdAt = String(l.created_at || "");
     tbody.innerHTML += `
       <tr style="cursor:pointer;" onclick="pickProcInputLot('${lotId.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')">
         <td>${lotId}</td>
         <td>${productText}</td>
+        <td>${whText || "—"}</td>
         <td>${av}</td>
         <td>${createdAt}</td>
         <td><button type="button" class="btn-secondary">帶入</button></td>
@@ -558,7 +568,7 @@ function renderProcLotPicker_(lots){
     Object.keys(groups).sort().forEach(k => {
       tbody.innerHTML += `
         <tr style="background:#f8fafc;">
-          <td colspan="5" style="font-weight:600;color:#334155;padding:8px 10px;">來源：${k}（${groups[k].length}）</td>
+          <td colspan="6" style="font-weight:600;color:#334155;padding:8px 10px;">來源：${k}（${groups[k].length}）</td>
         </tr>
       `;
       groups[k].forEach(renderLotRow_);
@@ -674,11 +684,12 @@ async function outsourceInit(){
 }
 
 async function loadProcMasterData(){
-  const [products, suppliersRaw, lots, movements, importReceipts, goodsReceipts, importDocs] = await Promise.all([
+  const [products, suppliersRaw, lots, movements, warehouses, importReceipts, goodsReceipts, importDocs] = await Promise.all([
     getAll("product"),
     getAll("supplier"),
     getAll("lot"),
     getAll("inventory_movement").catch(() => []),
+    getAll("warehouse").catch(() => []),
     getAll("import_receipt").catch(() => []),
     getAll("goods_receipt").catch(() => []),
     getAll("import_document").catch(() => [])
@@ -687,6 +698,7 @@ async function loadProcMasterData(){
   procSuppliers = (suppliersRaw || []).filter(s => s.status === "ACTIVE");
   procLots = lots || [];
   procMovements = movements || [];
+  procWarehouses = (warehouses || []).filter(w => String(w.status || "ACTIVE").toUpperCase() === "ACTIVE");
   procAvailableByLotId = {};
   (procMovements || []).forEach(m => {
     const lotId = String(m?.lot_id || "");
@@ -715,6 +727,22 @@ async function loadProcMasterData(){
   initProcDropdowns();
 }
 
+function procWarehouseLabelById_(warehouseId){
+  const id = String(warehouseId || "").trim().toUpperCase();
+  if(!id) return "";
+  const w = (procWarehouses || []).find(x => String(x.warehouse_id || "").toUpperCase() === id) || null;
+  if(!w) return id;
+  const name = String(w.warehouse_name || "").trim();
+  const cat = String(w.category || "").trim().toUpperCase();
+  const catLabel = (typeof termShortZh_ === "function" ? termShortZh_(cat) : ((typeof termLabel === "function" ? termLabel(cat) : "") || cat));
+  const namePart = name || id;
+  return catLabel ? `${namePart}-${catLabel}` : namePart;
+}
+
+function procWarehouseLabelByLot_(lot){
+  return procWarehouseLabelById_(lot?.warehouse_id || "");
+}
+
 function procGetAvailable(lotId){
   const id = String(lotId || "");
   if(!id) return 0;
@@ -731,7 +759,11 @@ function initProcDropdowns(){
   if(supplierSel){
     supplierSel.innerHTML =
       `<option value="">請選擇加工廠</option>` +
-      procSuppliers.map(s => `<option value="${s.supplier_id}">${s.supplier_id} - ${s.supplier_name}</option>`).join("");
+      procSuppliers.map(s => {
+        const name = String(s.supplier_name || "").trim();
+        const label = name || s.supplier_id;
+        return `<option value="${s.supplier_id}">${label}</option>`;
+      }).join("");
   }
 
   renderProcLotPicker_(getProcEligibleLots_());
@@ -741,7 +773,12 @@ function initProcDropdowns(){
     const activeProducts = (procProducts || []).filter(p => p.status === "ACTIVE");
     outSel.innerHTML =
       `<option value="">請選擇產出產品</option>` +
-      activeProducts.map(p => `<option value="${p.product_id}" data-unit="${p.unit || ""}">${p.product_id} - ${p.product_name}</option>`).join("");
+      activeProducts.map(p => {
+        const name = String(p.product_name || "").trim();
+        const spec = String(p.spec || "").trim();
+        const label = name ? (spec ? `${name} / ${spec}` : name) : (p.product_id || "");
+        return `<option value="${p.product_id}" data-unit="${p.unit || ""}">${label}</option>`;
+      }).join("");
   }
 }
 
@@ -1111,11 +1148,14 @@ function renderProcInputs(){
     const rowOnclick = isDraft
       ? `beginEditProcInputDraft_('${it.draft_id}')`
       : (isDb ? `selectProcInputDbRow_('${String(it.process_input_id || "").replace(/\\/g,"\\\\").replace(/'/g,"\\'")}')` : "");
+    const lot = (procLots || []).find(l => String(l.lot_id || "") === String(it.lot_id || "")) || null;
+    const whText = lot ? (procWarehouseLabelByLot_(lot) || (lot.warehouse_id ? String(lot.warehouse_id) : "")) : "";
     tbody.innerHTML += `
       <tr style="cursor:pointer;" onclick="${rowOnclick}">
         <td>${idx+1}</td>
         <td>${it.lot_id}</td>
         <td>${formatProcProductDisplay_(it.product_id)}</td>
+        <td>${whText || "—"}</td>
         <td>${it.issue_qty}</td>
         <td>${it.unit}</td>
         <td>${statusText}</td>
@@ -1235,7 +1275,7 @@ function clearProcOutputEditor_(){
   procSelectedDbOutputId = "";
 }
 
-async function createProcessOrderOnly(){
+async function createProcessOrderOnly(triggerEl){
   clearProcBlockNotice_();
   if(procEditing){
     return showToast("目前為「已載入加工單」模式。若要建立新加工單，請先按「清除」。","error");
@@ -1245,7 +1285,7 @@ async function createProcessOrderOnly(){
   if(!process_type) return showToast("請選擇加工類型","error");
   if(!supplier_id) return showToast("請選擇加工廠","error");
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
     const existed = await getOne("process_order","process_order_id",process_order_id).catch(()=>null);
     if(existed) return showToast("加工單ID 已存在，請改用載入後操作。","error");
@@ -1366,11 +1406,12 @@ async function issueProcessOrder(){
         unit: it.unit,
         ref_type: "PROCESS_ORDER",
         ref_id: process_order_id,
-        remark: `Process OUT: ${process_order_id} (${inputId})`,
+        remark: "",
         created_by: getCurrentUser(),
         created_at: nowIso16(),
         updated_by: "",
         updated_at: "",
+        system_remark: `Process OUT: ${process_order_id} (${inputId})`,
       });
     }
 
@@ -1498,11 +1539,12 @@ async function retractProcessIssue(){
         unit: m.unit || "",
         ref_type: "PROCESS_ORDER",
         ref_id: procId,
-        remark: `REVERSAL(PROCESS_OUT) of ${m.movement_id || ""} (${procId})`,
+        remark: "",
         created_by: getCurrentUser(),
         created_at: nowIso16(),
         updated_by: "",
         updated_at: "",
+        system_remark: `REVERSAL(PROCESS_OUT) of ${m.movement_id || ""} (${procId})`,
       });
     }
 
@@ -1626,6 +1668,9 @@ async function receiveProcessOutput(){
       const outSeq = outputs.length + i + 1;
       const outLotId = generateId("LOT");
       const outLotType = procProducts.find(p => p.product_id === out.product_id)?.type || "WIP";
+      const in0 = (inputs && inputs[0]) ? inputs[0] : null;
+      const inLot0 = in0 ? (procLots || []).find(l => String(l.lot_id||"") === String(in0.lot_id||"")) : null;
+      const whId = String(inLot0?.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN";
       const outProduct = (procProducts || []).find(p => String(p.product_id || "") === String(out.product_id || ""));
       const outBaseQty = outProduct ? convertToBase(outProduct, num(out.receive_qty), String(out.unit || "")) : null;
       if(outBaseQty == null){
@@ -1636,6 +1681,7 @@ async function receiveProcessOutput(){
       await createRecord("lot", {
         lot_id: outLotId,
         product_id: out.product_id,
+        warehouse_id: whId,
         source_type: "PROCESS",
         source_id: process_order_id,
         qty: String(out.receive_qty),
@@ -1650,22 +1696,25 @@ async function receiveProcessOutput(){
         created_at: nowIso16(),
         updated_by: "",
         updated_at: "",
-        remark: out.remark || `Process OUT lot from ${process_order_id}`
+        remark: out.remark || "",
+        system_remark: `Process OUT lot from ${process_order_id}`
       });
       await createRecord("inventory_movement", {
         movement_id: generateId("MV"),
         movement_type: "PROCESS_IN",
         lot_id: outLotId,
         product_id: out.product_id,
+        warehouse_id: whId,
         qty: String(Math.abs(out.receive_qty)),
         unit: out.unit,
         ref_type: "PROCESS_ORDER",
         ref_id: process_order_id,
-        remark: `Process IN: ${process_order_id}`,
+        remark: "",
         created_by: getCurrentUser(),
         created_at: nowIso16(),
         updated_by: "",
         updated_at: "",
+        system_remark: `Process IN: ${process_order_id}`,
       });
       await createRecord("process_order_output", {
         process_output_id: `POUT-${process_order_id}-${String(outSeq).padStart(3,"0")}`,
@@ -1737,13 +1786,13 @@ async function receiveProcessOutput(){
   }
 }
 
-async function cancelProcessOrder(){
+async function cancelProcessOrder(triggerEl){
   clearProcBlockNotice_();
   const id = (document.getElementById("proc_id")?.value || "").trim().toUpperCase();
   if(!id) return showToast("請先載入加工單","error");
   if(!confirm("確定取消此加工單？系統會建立回沖庫存異動。")) return;
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try{
     const po = await getOne("process_order","process_order_id",id).catch(()=>null);
     if(!po) return showToast("找不到加工單","error");
@@ -1794,7 +1843,7 @@ async function cancelProcessOrder(){
 
     const allMv = await getAll("inventory_movement").catch(()=>[]);
     const srcMv = (allMv || []).filter(m => m.ref_type === "PROCESS_ORDER" && m.ref_id === id);
-    const reversed = srcMv.filter(m => String(m.remark || "").includes("REVERSAL"));
+    const reversed = srcMv.filter(m => String(m.system_remark || m.remark || "").includes("REVERSAL"));
     if(reversed.length > 0){
       return showToast("此加工單已有回沖紀錄，避免重複回沖。", "error");
     }
@@ -1812,11 +1861,12 @@ async function cancelProcessOrder(){
         unit: m.unit || "",
         ref_type: "PROCESS_ORDER",
         ref_id: id,
-        remark: `REVERSAL(${m.movement_type || ""}) of ${m.movement_id || ""} (${id})`,
+        remark: "",
         created_by: getCurrentUser(),
         created_at: nowIso16(),
         updated_by: "",
         updated_at: "",
+        system_remark: `REVERSAL(${m.movement_type || ""}) of ${m.movement_id || ""} (${id})`,
       });
     }
 
@@ -1996,11 +2046,11 @@ async function loadProcessOrder(processOrderId){
   updateLossHint();
 }
 
-async function updateProcessOrderHeader(){
+async function updateProcessOrderHeader(triggerEl){
   const id = (document.getElementById("proc_id")?.value || "").trim().toUpperCase();
   if(!id) return showToast("請先載入加工單","error");
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   const po = await getOne("process_order","process_order_id",id).catch(()=>null);
   if(!po) return showToast("找不到加工單","error");

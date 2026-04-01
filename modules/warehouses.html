@@ -1,0 +1,98 @@
+<!-- ===== Warehouses 倉庫主檔 ===== -->
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      Warehouses 倉庫
+      <button type="button" class="btn-sheet" onclick="openSheetLink('warehouse')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+    </span>
+    <span data-help="warehouseMain"></span>
+  </div>
+
+  <div class="card-body">
+    <div class="form-grid-4">
+      <div class="form-group">
+        <label>倉庫ID *</label>
+        <input type="text" id="wh_id" placeholder="自動產生（可手動修改）">
+      </div>
+
+      <div class="form-group">
+        <label>倉庫名稱 *</label>
+        <input type="text" id="wh_name" placeholder="例如：主倉">
+      </div>
+
+      <div class="form-group">
+        <label>類別</label>
+        <select id="wh_category">
+          <option value="AMBIENT">AMBIENT（常溫）</option>
+          <option value="CHILLED">CHILLED（冷藏）</option>
+          <option value="FROZEN">FROZEN（冷凍）</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>狀態</label>
+        <select id="wh_status">
+          <option value="ACTIVE">ACTIVE（使用中）</option>
+          <option value="INACTIVE">INACTIVE（停用）</option>
+        </select>
+      </div>
+
+      <div class="form-group full-width">
+        <label>倉庫地址</label>
+        <input type="text" id="wh_address">
+      </div>
+
+      <div class="form-group full-width">
+        <label>備註</label>
+        <input type="text" id="wh_remark">
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn-primary" onclick="createWarehouse(this)">建立</button>
+      <button class="btn-secondary" onclick="updateWarehouse(this)">更新</button>
+      <button class="btn-secondary" onclick="clearWarehouseForm()">清除</button>
+      <button class="btn-secondary" onclick="openLogs('warehouse', document.getElementById('wh_id')?.value || '', 'master')">Log</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>
+      倉庫列表
+      <button type="button" class="btn-sheet" onclick="openSheetLink('warehouse')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
+    </span>
+    <span data-help="warehouseList"></span>
+  </div>
+
+  <div class="card-body">
+    <div class="search-toolbar">
+      <input type="text" id="search_wh_keyword" placeholder="關鍵字（ID／名稱）" style="min-width:220px;">
+      <select id="search_wh_status">
+        <option value="">全部狀態</option>
+        <option value="ACTIVE">ACTIVE（使用中）</option>
+        <option value="INACTIVE">INACTIVE（停用）</option>
+      </select>
+      <button class="btn-secondary" onclick="resetWarehouseSearch()">重設</button>
+    </div>
+
+    <br>
+
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>倉庫ID</th>
+            <th>名稱</th>
+            <th>狀態</th>
+            <th>更新時間</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="whTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+

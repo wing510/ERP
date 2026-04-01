@@ -91,44 +91,8 @@
     </div>
 
     <div class="button-group" id="mergePostButtonGroup" style="margin-top:10px;">
-      <button class="btn-primary" onclick="postMerge()">確認合批（過帳）</button>
+      <button class="btn-primary" onclick="postMerge(this)">確認合批（過帳）</button>
       <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
     </div>
   </div>
-</div>
-
-<h2>Merge 合批製造</h2>
-
-<div style="background:white; padding:20px; border-radius:6px; margin-bottom:20px;">
-
-    <h3>選擇來源批次</h3>
-
-    <div id="mergeLotsContainer" style="margin-bottom:15px;"></div>
-
-    <button onclick="createMerge()"
-            style="padding:8px 20px; background:#2d7ef7; color:white; border:none;">
-        執行合批
-    </button>
-
-</div>
-
-<div style="background:white; padding:20px; border-radius:6px;">
-
-    <h3>合批紀錄</h3>
-
-    <table style="width:100%; border-collapse:collapse;">
-
-        <thead>
-            <tr style="text-align:left; border-bottom:1px solid #ddd;">
-                <th>來源批次</th>
-                <th>新批次</th>
-                <th>總量</th>
-                <th>時間</th>
-            </tr>
-        </thead>
-
-        <tbody id="mergeTableBody"></tbody>
-
-    </table>
-
 </div>

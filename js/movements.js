@@ -7,6 +7,9 @@
 let mvLots = [];
 let mvProducts = [];
 let mvMovements = [];
+let mvUsers = [];
+let mvCustomers = [];
+let mvWarehouses = [];
 /** 與 Lots 相同：IR→報單、GR→PO，方便辨識來源 */
 let mvImportReceiptIdToDocId = {};
 let mvGoodsReceiptIdToPoId = {};
@@ -20,22 +23,39 @@ function escapeMvAttr_(s){
   return String(s ?? "").replace(/\\/g,"\\\\").replace(/"/g,"&quot;");
 }
 
+function mvRoleLabel_(role){
+  const r = String(role || "").trim().toUpperCase();
+  if(r === "ADMIN") return "管理員";
+  if(r === "QA") return "品保";
+  if(r === "OP") return "作業";
+  if(r === "SALES") return "業務";
+  return r || "未指定";
+}
+
 async function movementsInit(){
   await refreshMovementData();
   await initMovementLotDropdown();
+  await mvInitWarehouseDropdown_();
+  mvInitIssuedToDropdown_();
   renderMovementTable();
 }
 
 async function refreshMovementData(){
-  const [lots, products, importReceipts, goodsReceipts, importDocs] = await Promise.all([
+  const [lots, products, warehouses, importReceipts, goodsReceipts, importDocs, users, customers] = await Promise.all([
     getAll("lot"),
     getAll("product").catch(() => []),
+    getAll("warehouse").catch(() => []),
     getAll("import_receipt").catch(() => []),
     getAll("goods_receipt").catch(() => []),
-    getAll("import_document").catch(() => [])
+    getAll("import_document").catch(() => []),
+    getAll("user").catch(() => []),
+    getAll("customer").catch(() => [])
   ]);
   mvLots = lots || [];
   mvProducts = products || [];
+  mvWarehouses = (warehouses || []).filter(w => String(w.status || "ACTIVE").toUpperCase() === "ACTIVE");
+  mvUsers = users || [];
+  mvCustomers = customers || [];
 
   mvImportReceiptIdToDocId = {};
   (importReceipts || []).forEach(r => {
@@ -57,14 +77,68 @@ async function refreshMovementData(){
   });
 
   try{
-    const movements = await getAll("inventory_movement");
-    mvMovements = movements || [];
+    const core = await loadInventoryCoreData_({ needWarehouses: false });
+    mvMovements = core.movements || [];
   }catch(_e){
     if(typeof showToast === "function"){
       showToast("讀取庫存異動失敗，暫沿用上次資料。", "error");
     }
     if(!Array.isArray(mvMovements)) mvMovements = [];
   }
+}
+
+function mvWarehouseLabelById_(warehouseId){
+  const id = String(warehouseId || "").trim().toUpperCase();
+  if(!id) return "";
+  const w = (mvWarehouses || []).find(x => String(x.warehouse_id || "").toUpperCase() === id) || null;
+  if(!w) return id;
+  const name = String(w.warehouse_name || "").trim();
+  const cat = String(w.category || "").trim().toUpperCase();
+  const catLabel = (typeof termShortZh_ === "function" ? termShortZh_(cat) : ((typeof termLabel === "function" ? termLabel(cat) : "") || cat));
+  const namePart = name || id;
+  return catLabel ? `${namePart}-${catLabel}` : namePart;
+}
+
+async function mvInitWarehouseDropdown_(){
+  const sel = document.getElementById("mv_transfer_wh");
+  if(!sel) return;
+  const list = (mvWarehouses || []).slice();
+  list.sort((a,b)=>String(a.warehouse_id||"").localeCompare(String(b.warehouse_id||"")));
+  sel.innerHTML =
+    `<option value="">（不轉倉）</option>` +
+    list.map(w=>{
+      const id = String(w.warehouse_id || "").trim().toUpperCase();
+      const label = mvWarehouseLabelById_(id) || id;
+      return `<option value="${escapeMvAttr_(id)}">${escapeMvHtml_(label)}</option>`;
+    }).join("");
+  sel.onchange = function(){ mvUpdateActionMode_(); };
+  mvUpdateActionMode_();
+}
+
+function mvInitIssuedToDropdown_(){
+  const sel = document.getElementById("mv_issued_to");
+  if(!sel) return;
+  const users = (mvUsers || []).filter(u => String(u.status || "").toUpperCase() === "ACTIVE");
+  const customers = (mvCustomers || []).filter(c => String(c.status || "").toUpperCase() === "ACTIVE");
+  users.sort((a,b)=>String(a.user_name||"").localeCompare(String(b.user_name||"")));
+  customers.sort((a,b)=>String(a.customer_name||"").localeCompare(String(b.customer_name||"")));
+
+  const userOpts = users.map(u => {
+    const name = String(u.user_name || "").trim();
+    const role = mvRoleLabel_(u.role);
+    const label = name ? `${role}-${name}` : `U:${u.user_id}`;
+    return `<option value="U:${u.user_id}">${escapeMvHtml_(label)}</option>`;
+  }).join("");
+  const custOpts = customers.map(c => {
+    const name = String(c.customer_name || "").trim();
+    const label = name || c.customer_id;
+    return `<option value="C:${c.customer_id}">${escapeMvHtml_(label)}</option>`;
+  }).join("");
+
+  sel.innerHTML =
+    `<option value="">（未指定）</option>` +
+    (userOpts ? `<optgroup label="內部（Users）">${userOpts}</optgroup>` : "") +
+    (custOpts ? `<optgroup label="對外（Customers）">${custOpts}</optgroup>` : "");
 }
 
 function mvFindLot_(lotId){
@@ -86,14 +160,14 @@ function mvFormatProductSpec_(lot, movement){
   return name;
 }
 
-/** 列表列排序：先 Lot ID，再時間（新→舊），最後 movement_id */
+/** 列表列排序：先時間（新→舊），再 Lot ID，最後 movement_id（避免不同 Lot 交錯造成視覺混亂） */
 function mvCompareMovementRows_(a, b){
-  const la = a.m.lot_id || "";
-  const lb = b.m.lot_id || "";
-  if(la !== lb) return la.localeCompare(lb);
   const tb = (b.m.created_at || "");
   const ta = (a.m.created_at || "");
   if(tb !== ta) return tb.localeCompare(ta);
+  const la = a.m.lot_id || "";
+  const lb = b.m.lot_id || "";
+  if(la !== lb) return la.localeCompare(lb);
   return (b.m.movement_id || "").localeCompare(a.m.movement_id || "");
 }
 
@@ -157,9 +231,7 @@ function mvGroupKeyForMovement_(m){
 }
 
 function getMovementAvailableByLotId(lotId){
-  return mvMovements
-    .filter(m => m.lot_id === lotId)
-    .reduce((sum, m) => sum + Number(m.qty || 0), 0);
+  return invAvailableByLotId_(lotId, mvLots, mvMovements);
 }
 
 /** 僅 APPROVED + 庫存 ACTIVE 可手動扣庫（與下拉預設清單一致） */
@@ -178,12 +250,28 @@ function mvUpdateMvQtyState_(){
   const lotId = sel?.value || "";
   if(!lotId){
     qtyEl.disabled = false;
+    mvUpdateActionMode_();
     return;
   }
   const lot = mvFindLot_(lotId);
   const ok = mvCanManualOut_(lot);
   qtyEl.disabled = !ok;
   if(!ok) qtyEl.value = "";
+  mvUpdateActionMode_();
+}
+
+function mvUpdateActionMode_(){
+  const toWh = String(document.getElementById("mv_transfer_wh")?.value || "").trim();
+  const createBtn = document.getElementById("mv_create_btn");
+  const transferBtn = document.getElementById("mv_transfer_btn");
+  const purposeEl = document.getElementById("mv_purpose");
+  const issuedToEl = document.getElementById("mv_issued_to");
+
+  const isTransfer = !!toWh;
+  if(createBtn) createBtn.disabled = isTransfer;
+  if(transferBtn) transferBtn.disabled = !isTransfer;
+  if(purposeEl) purposeEl.disabled = isTransfer;
+  if(issuedToEl) issuedToEl.disabled = isTransfer;
 }
 
 /** 點列表列：帶入上方「選擇 Lot」（已退回等不可扣庫者不帶入） */
@@ -252,9 +340,12 @@ async function initMovementLotDropdown(){
   mvUpdateMvQtyState_();
 }
 
-async function createMovement(){
+async function createMovement(triggerEl){
   const lot_id = document.getElementById("mv_lot")?.value || "";
   const qty = Number(document.getElementById("mv_qty")?.value || 0);
+  const purpose = (document.getElementById("mv_purpose")?.value || "INTERNAL_USE").trim().toUpperCase();
+  const userRemark = (document.getElementById("mv_remark")?.value || "").trim();
+  const issuedTo = (document.getElementById("mv_issued_to")?.value || "").trim();
 
   if(!lot_id) return showToast("請選擇 Lot","error");
   if(!qty || qty <= 0) return showToast("數量需大於 0","error");
@@ -272,32 +363,161 @@ async function createMovement(){
     return showToast("扣庫數量不可超過可用量", "error");
   }
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   // 這個頁面先提供最常用的「扣庫」：OUT（存負數）
+  const purposeLabel = (typeof termLabel === "function" ? termLabel(purpose) : "") || purpose;
+  const systemRemark = purposeLabel ? `Manual OUT: ${purposeLabel}` : "Manual OUT";
   const movement = {
     movement_id: generateId("MV"),
     movement_type: "OUT",
     lot_id,
     product_id: lot.product_id,
+    warehouse_id: String(lot.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
     qty: String(-Math.abs(qty)),
     unit: lot.unit || "",
-    ref_type: "MANUAL",
+    ref_type: purpose || "MANUAL",
     ref_id: "",
-    remark: "Manual OUT",
+    issued_to: issuedTo,
+    remark: userRemark,
     created_by: getCurrentUser(),
     created_at: nowIso16(),
     updated_by: "",
     updated_at: "",
+    system_remark: systemRemark,
   };
 
   await createRecord("inventory_movement", movement);
 
   await refreshMovementData();
   await initMovementLotDropdown();
+  mvInitIssuedToDropdown_();
   renderMovementTable();
   showToast("異動已建立");
+  const qtyEl = document.getElementById("mv_qty");
+  if(qtyEl) qtyEl.value = "";
+  const rmEl = document.getElementById("mv_remark");
+  if(rmEl) rmEl.value = "";
+  const itEl = document.getElementById("mv_issued_to");
+  if(itEl) itEl.value = "";
   } finally { hideSaveHint(); }
+}
+
+async function transferMovement(triggerEl){
+  const lot_id = document.getElementById("mv_lot")?.value || "";
+  const qty = Number(document.getElementById("mv_qty")?.value || 0);
+  const toWh = String(document.getElementById("mv_transfer_wh")?.value || "").trim().toUpperCase();
+  const userRemark = (document.getElementById("mv_remark")?.value || "").trim();
+
+  if(!lot_id) return showToast("請選擇 Lot","error");
+  if(!qty || qty <= 0) return showToast("數量需大於 0","error");
+  if(!toWh) return showToast("請選擇 轉倉到 哪個倉別","error");
+
+  const lot = (mvLots || []).find(l => l.lot_id === lot_id);
+  if(!lot) return showToast("找不到 Lot","error");
+
+  if(String(lot.inventory_status || "ACTIVE").toUpperCase() !== "ACTIVE"){
+    return showToast("僅庫存狀態為 ACTIVE 的批次可轉倉", "error");
+  }
+
+  const fromWh = String(lot.warehouse_id || "").trim().toUpperCase();
+  if(fromWh && fromWh === toWh){
+    return showToast("目標倉別不可與目前倉別相同", "error");
+  }
+
+  const available = getMovementAvailableByLotId(lot_id);
+  if(qty > available){
+    return showToast("轉倉數量不可超過可用量", "error");
+  }
+
+  const newLotId = generateId("LOT");
+  const now = nowIso16();
+  const today = String(now || "").slice(0, 10);
+  const fromWhLabel = mvWarehouseLabelById_(fromWh) || (fromWh || "—");
+  const toWhLabel = mvWarehouseLabelById_(toWh) || toWh;
+
+  showSaveHint(triggerEl);
+  try{
+    // 轉倉後仍歸屬原來源（採購/進口/加工等），避免在 Lots/Movements 分組中「脫離原單」
+    const srcType = String(lot.source_type || "").trim().toUpperCase();
+    const srcId = String(lot.source_id || "").trim();
+
+    await createRecord("lot", {
+      lot_id: newLotId,
+      product_id: lot.product_id || "",
+      warehouse_id: toWh,
+      source_type: srcType || lot.source_type || "",
+      source_id: srcId || lot.source_id || "",
+      qty: String(qty),
+      unit: lot.unit || "",
+      type: lot.type || "",
+      status: lot.status || "PENDING",
+      inventory_status: "ACTIVE",
+      received_date: lot.received_date || today,
+      manufacture_date: lot.manufacture_date || "",
+      expiry_date: lot.expiry_date || "",
+      remark: "",
+      created_by: getCurrentUser(),
+      created_at: now,
+      updated_by: "",
+      updated_at: "",
+      system_remark: `轉倉自 ${lot_id}（${fromWhLabel} → ${toWhLabel}）`
+    });
+
+    await createRecord("inventory_movement", {
+      movement_id: generateId("MV"),
+      movement_type: "OUT",
+      lot_id: lot_id,
+      product_id: lot.product_id,
+      warehouse_id: fromWh || "",
+      qty: String(-Math.abs(qty)),
+      unit: lot.unit || "",
+      ref_type: "TRANSFER",
+      ref_id: newLotId,
+      issued_to: "",
+      remark: userRemark,
+      created_by: getCurrentUser(),
+      created_at: now,
+      updated_by: "",
+      updated_at: "",
+      system_remark: `轉倉 OUT：${lot_id} → ${newLotId}（${fromWhLabel} → ${toWhLabel}）`
+    });
+
+    await createRecord("inventory_movement", {
+      movement_id: generateId("MV"),
+      movement_type: "IN",
+      lot_id: newLotId,
+      product_id: lot.product_id,
+      warehouse_id: toWh,
+      qty: String(Math.abs(qty)),
+      unit: lot.unit || "",
+      ref_type: "TRANSFER",
+      ref_id: lot_id,
+      issued_to: "",
+      remark: "",
+      created_by: getCurrentUser(),
+      created_at: now,
+      updated_by: "",
+      updated_at: "",
+      system_remark: `轉倉 IN：${newLotId} ← ${lot_id}（${fromWhLabel} → ${toWhLabel}）`
+    });
+
+    await refreshMovementData();
+    await initMovementLotDropdown();
+    await mvInitWarehouseDropdown_();
+    mvInitIssuedToDropdown_();
+    renderMovementTable();
+
+    const qtyEl = document.getElementById("mv_qty");
+    if(qtyEl) qtyEl.value = "";
+    const rmEl = document.getElementById("mv_remark");
+    if(rmEl) rmEl.value = "";
+    const whEl = document.getElementById("mv_transfer_wh");
+    if(whEl) whEl.value = "";
+    showToast(`已轉倉並產生新 Lot：${newLotId}`);
+  }finally{
+    hideSaveHint();
+  }
 }
 
 function renderMovementTable(){
@@ -318,11 +538,25 @@ function renderMovementTable(){
     countByKey[x.key] = (countByKey[x.key] || 0) + 1;
   });
 
-  const groupKeys = [...new Set(enriched.map(x => x.key))].sort((a, b) => a.localeCompare(b));
+  // 分組排序：依該分組「最新異動時間」新→舊（避免不同分組穿插造成視覺混亂）
+  const latestAtByKey = {};
+  enriched.forEach(x => {
+    const k = x.key;
+    const t = String(x.m?.created_at || "");
+    if(!t) return;
+    const prev = String(latestAtByKey[k] || "");
+    if(!prev || t > prev) latestAtByKey[k] = t;
+  });
+  const groupKeys = [...new Set(enriched.map(x => x.key))].sort((a, b) => {
+    const ta = String(latestAtByKey[a] || "");
+    const tb = String(latestAtByKey[b] || "");
+    if(ta !== tb) return tb.localeCompare(ta); // 新→舊
+    return a.localeCompare(b);
+  });
 
   function renderDataRow(m, lot){
     const productSpec = mvFormatProductSpec_(lot, m);
-    const refHint = [m.ref_type, m.ref_id].filter(Boolean).join(" ");
+    const refHint = [m.ref_type, m.ref_id, m.issued_to].filter(Boolean).join(" ");
     const canClick = mvCanManualOut_(lot);
     const titleLot = canClick
       ? escapeMvAttr_(`${m.lot_id || ""}${refHint ? "｜參考：" + refHint : ""}｜點列可帶入 Lot`)
@@ -336,10 +570,12 @@ function renderMovementTable(){
     const lidAttr = escapeMvAttr_(lotIdRaw);
     const lidCell = escapeMvHtml_(lotIdRaw);
     const clickAttr = canClick ? `onclick="mvSelectLotFromRow(this)"` : "";
+    const whText = mvWarehouseLabelById_(m.warehouse_id) || (m.warehouse_id ? String(m.warehouse_id) : "");
     tbody.innerHTML += `
       <tr data-mv-lot-id="${lidAttr}" ${clickAttr} style="border-bottom:1px solid #eee;cursor:${rowCursor};opacity:${rowOp};" title="${titleLot}">
         <td>${lidCell}</td>
         <td>${escapeMvHtml_(productSpec)}</td>
+        <td>${escapeMvHtml_(whText || "—")}</td>
         <td>${termLabel(m.movement_type)}</td>
         <td>${escapeMvHtml_(String(m.qty ?? ""))}</td>
         <td>${escapeMvHtml_(m.unit || "")}</td>
@@ -362,7 +598,7 @@ function renderMovementTable(){
     }
     tbody.innerHTML += `
       <tr style="background:#f8fafc;">
-        <td colspan="6" style="font-weight:600;color:#334155;padding:10px 12px;">
+        <td colspan="7" style="font-weight:600;color:#334155;padding:10px 12px;">
           ${headerL1}（共 ${cnt} 筆異動）
         </td>
       </tr>
@@ -391,7 +627,7 @@ function renderMovementTable(){
       const label = rk === "__EMPTY__" ? "—" : rk;
       tbody.innerHTML += `
         <tr style="background:#f1f5f9;">
-          <td colspan="6" style="font-weight:600;color:#475569;padding:8px 12px;font-size:13px;">
+          <td colspan="7" style="font-weight:600;color:#475569;padding:8px 12px;font-size:13px;">
             收貨單ID：${escapeMvHtml_(label)}（共 ${subCnt} 筆）
           </td>
         </tr>

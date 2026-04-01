@@ -5,11 +5,22 @@
  * - 填本次收貨數量 → 產生批次
  *********************************/
 
-let rcvSourceType = "PO";
+let rcvSourceType = "";
 let rcvSourceId = "";
 /** 明細行：{ item_no, product_id, order_qty, received_qty, remaining, unit, po_id?, po_item_id?, import_doc_id?, import_item_id? } */
 let rcvLines = [];
 let rcvProducts = [];
+
+function setRcvReceiptState_(text, type = ""){
+  const el = document.getElementById("rcvReceiptState");
+  if(!el) return;
+  el.textContent = text || "";
+  el.style.color =
+    type === "ok" ? "#166534" :
+    type === "warn" ? "#92400e" :
+    type === "error" ? "#991b1b" :
+    "#64748b";
+}
 
 function formatRcvProductDisplay_(productId){
   const p = (rcvProducts || []).find(x => x.product_id === productId) || {};
@@ -33,14 +44,46 @@ function gotoReceive(sourceType, sourceId){
 }
 
 function generateRcvId() {
-  return rcvSourceType === "PO" ? generateId("GR") : generateId("IR");
+  if(rcvSourceType === "PO") return generateId("GR");
+  if(rcvSourceType === "IMPORT") return generateId("IR");
+  return "";
+}
+
+async function rcvInitWarehouseDropdown_(){
+  const whEl = document.getElementById("rcv_warehouse");
+  if(!whEl) return;
+  try{
+    const list = await getAll("warehouse").catch(()=>[]);
+    const rows = (list || []).filter(w => String(w.status || "ACTIVE").toUpperCase() === "ACTIVE");
+    rows.sort((a,b)=>String(a.warehouse_id||"").localeCompare(String(b.warehouse_id||"")));
+    if(rows.length){
+      whEl.innerHTML =
+        '<option value="">請選擇倉別</option>' +
+        rows
+          .map(w=>{
+            const id = String(w.warehouse_id || "").toUpperCase();
+            const name = String(w.warehouse_name || "").trim();
+            const cat = String(w.category || "").trim().toUpperCase();
+            const catLabel = (typeof termShortZh_ === "function" ? termShortZh_(cat) : ((typeof termLabel === "function" ? termLabel(cat) : "") || cat));
+            const namePart = name || id;
+            const label = catLabel ? `${namePart}-${catLabel}` : namePart;
+            return `<option value="${id}">${label}</option>`;
+          })
+          .join("");
+      whEl.value = rows[0]?.warehouse_id ? String(rows[0].warehouse_id).toUpperCase() : "";
+    }else{
+      whEl.innerHTML = '<option value="">尚無倉庫，請先至「Warehouses 倉庫」建立</option>';
+    }
+  }catch(_e){
+    whEl.innerHTML = '<option value="">倉庫載入失敗</option>';
+  }
+  // 不強塞 MAIN，讓流程以「必選倉別」為準
 }
 
 async function receiveInit() {
   const dateEl = document.getElementById("rcv_receipt_date");
   if (dateEl) dateEl.value = nowIso16();
-  const whEl = document.getElementById("rcv_warehouse");
-  if (whEl) whEl.value = "MAIN";
+  await rcvInitWarehouseDropdown_();
   // 並行預取 product / PO / 報單，後續選來源時會走快取
   const [products] = await Promise.all([
     getAll("product").catch(() => []),
@@ -54,7 +97,7 @@ async function receiveInit() {
   const srcId = document.getElementById("rcv_source_id");
   if (srcId) srcId.onchange = onRcvSourceSelect;
   const postBtn = document.getElementById("rcv_post_btn");
-  if (postBtn) postBtn.onclick = postReceipt;
+  if (postBtn) postBtn.onclick = function(){ return postReceipt(postBtn); };
   const resetBtn = document.getElementById("rcv_reset_btn");
   if (resetBtn) resetBtn.onclick = resetRcvForm;
   const logBtn = document.getElementById("rcv_log_btn");
@@ -62,7 +105,7 @@ async function receiveInit() {
   const voidBtn = document.getElementById("rcv_void_btn");
   if (voidBtn && !voidBtn.dataset.bound) {
     voidBtn.dataset.bound = "1";
-    voidBtn.onclick = voidPostedReceipt;
+    voidBtn.onclick = function(){ return voidPostedReceipt(voidBtn); };
   }
 
   // 其他列表跳轉進來：自動選好來源與單號
@@ -82,14 +125,26 @@ async function receiveInit() {
     await onRcvSourceTypeChange();
     resetRcvForm();
   }
+  setRcvReceiptState_("收庫狀態：未選擇來源", "warn");
 }
 
 async function onRcvSourceTypeChange() {
-  rcvSourceType = document.getElementById("rcv_source_type")?.value || "PO";
+  rcvSourceType = document.getElementById("rcv_source_type")?.value || "";
   const label = document.getElementById("rcv_source_label");
   const sel = document.getElementById("rcv_source_id");
-  const hint = document.getElementById("rcv_source_hint");
   if (!sel) return;
+
+  if(!rcvSourceType){
+    if(label) label.textContent = "選擇來源 *";
+    sel.innerHTML = '<option value="">請先選擇來源類型</option>';
+    rcvSourceId = "";
+    rcvLines = [];
+    renderRcvLines();
+    document.getElementById("rcv_receipt_id").value = "";
+    setRcvReceiptState_("收庫狀態：未選擇來源", "warn");
+    await refreshRcvVoidReceiptOptions();
+    return;
+  }
 
   label.textContent = rcvSourceType === "PO" ? "選擇 PO *" : "選擇報單 *";
   sel.innerHTML = '<option value="">載入中…</option>';
@@ -97,7 +152,7 @@ async function onRcvSourceTypeChange() {
   rcvLines = [];
   renderRcvLines();
   document.getElementById("rcv_receipt_id").value = generateRcvId();
-  if (hint) hint.textContent = rcvSourceType === "IMPORT" ? "請在下方選擇一張報單" : "請在下方選擇一張 PO";
+  setRcvReceiptState_("收庫狀態：未選擇來源", "warn");
 
   try {
     if (rcvSourceType === "PO") {
@@ -129,8 +184,16 @@ async function onRcvSourceSelect() {
   if (!tbody) return;
   tbody.innerHTML = "";
 
+  if(!rcvSourceType){
+    document.getElementById("rcv_receipt_id").value = "";
+    setRcvReceiptState_("收庫狀態：未選擇來源", "warn");
+    await refreshRcvVoidReceiptOptions();
+    return;
+  }
+
   if (!rcvSourceId) {
     document.getElementById("rcv_receipt_id").value = generateRcvId();
+    setRcvReceiptState_("收庫狀態：未選擇來源", "warn");
     await refreshRcvVoidReceiptOptions();
     return;
   }
@@ -192,6 +255,7 @@ async function onRcvSourceSelect() {
 
   renderRcvLines();
   document.getElementById("rcv_receipt_id").value = generateRcvId();
+  setRcvReceiptState_(`收庫狀態：已載入明細（${rcvLines.length} 筆）`, "ok");
   await refreshRcvVoidReceiptOptions();
 }
 
@@ -284,14 +348,14 @@ function resetRcvForm() {
   document.getElementById("rcv_receipt_id").value = generateRcvId();
   const dateEl = document.getElementById("rcv_receipt_date");
   if (dateEl) dateEl.value = nowIso16();
-  const whEl = document.getElementById("rcv_warehouse");
-  if (whEl) whEl.value = "MAIN";
+  rcvInitWarehouseDropdown_().catch(()=>{});
   const rmEl = document.getElementById("rcv_remark");
   if (rmEl) rmEl.value = "";
   const sel = document.getElementById("rcv_source_id");
   if (sel) sel.value = "";
   rcvSourceId = "";
   refreshRcvVoidReceiptOptions().catch(() => {});
+  setRcvReceiptState_("收庫狀態：未選擇來源", "warn");
 }
 
 function openRcvLog() {
@@ -300,15 +364,17 @@ function openRcvLog() {
   if (typeof openLogs === "function") openLogs(type, id, "inbound");
 }
 
-async function postReceipt() {
+async function postReceipt(triggerEl) {
   const receiptId = (document.getElementById("rcv_receipt_id")?.value || "").trim().toUpperCase();
   const receiptDate = document.getElementById("rcv_receipt_date")?.value || "";
-  const warehouse = (document.getElementById("rcv_warehouse")?.value || "").trim();
+  const warehouse = (document.getElementById("rcv_warehouse")?.value || "").trim().toUpperCase();
   const remark = (document.getElementById("rcv_remark")?.value || "").trim();
 
+  if (!rcvSourceType) return showToast("請選擇 來源類型", "error");
   if (!receiptId) return showToast("收貨單ID 必填", "error");
   if (!rcvSourceId) return showToast("請選擇 " + (rcvSourceType === "PO" ? "PO" : "報單"), "error");
   if (!receiptDate) return showToast("收貨日期 必填", "error");
+  if (!warehouse) return showToast("倉別 必填", "error");
 
   const qtys = getRcvInputQtys();
   const lotDates = getRcvLotDates();
@@ -325,7 +391,7 @@ async function postReceipt() {
     }
   }
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
   if (rcvSourceType === "PO") {
     await postGoodsReceiptUnified(receiptId, receiptDate, warehouse, remark, qtys, lotDates);
@@ -378,6 +444,7 @@ async function postGoodsReceiptUnified(gr_id, receipt_date, warehouse, remark, q
     await createRecord("lot", {
       lot_id,
       product_id: row.product_id,
+      warehouse_id: String(warehouse || "").trim().toUpperCase() || "MAIN",
       source_type: "PURCHASE",
       source_id: gr_id,
       qty: String(qty),
@@ -392,7 +459,8 @@ async function postGoodsReceiptUnified(gr_id, receipt_date, warehouse, remark, q
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
-      remark: `PO:${po_id} / ITEM:${row.po_item_id}`,
+      remark: "",
+      system_remark: `PO:${po_id} / ITEM:${row.po_item_id}`,
     });
 
     await createRecord("inventory_movement", {
@@ -400,15 +468,17 @@ async function postGoodsReceiptUnified(gr_id, receipt_date, warehouse, remark, q
       movement_type: "IN",
       lot_id,
       product_id: row.product_id,
+      warehouse_id: String(warehouse || "").trim().toUpperCase() || "MAIN",
       qty: String(qty),
       unit: row.unit,
       ref_type: "GOODS_RECEIPT",
       ref_id: gr_id,
-      remark: `PO IN: ${po_id}`,
+      remark: "",
       created_by: getCurrentUser(),
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
+      system_remark: `PO IN: ${po_id}`,
     });
 
     await createRecord("goods_receipt_item", {
@@ -491,6 +561,7 @@ async function postImportReceiptUnified(import_receipt_id, receipt_date, warehou
     await createRecord("lot", {
       lot_id,
       product_id: row.product_id,
+      warehouse_id: String(warehouse || "").trim().toUpperCase() || "MAIN",
       source_type: "IMPORT",
       source_id: import_receipt_id,
       qty: String(qty),
@@ -505,7 +576,8 @@ async function postImportReceiptUnified(import_receipt_id, receipt_date, warehou
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
-      remark: `Import: ${import_doc_id}${docNo ? " / " + docNo : ""}`.trim(),
+      remark: "",
+      system_remark: `Import: ${import_doc_id}${docNo ? " / " + docNo : ""}`.trim(),
     });
 
     await createRecord("inventory_movement", {
@@ -513,15 +585,17 @@ async function postImportReceiptUnified(import_receipt_id, receipt_date, warehou
       movement_type: "IN",
       lot_id,
       product_id: row.product_id,
+      warehouse_id: String(warehouse || "").trim().toUpperCase() || "MAIN",
       qty: String(qty),
       unit: row.unit,
       ref_type: "IMPORT_RECEIPT",
       ref_id: import_receipt_id,
-      remark: `Import IN: ${import_doc_id}`,
+      remark: "",
       created_by: getCurrentUser(),
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
+      system_remark: `Import IN: ${import_doc_id}`,
     });
 
     await createRecord("import_receipt_item", {
@@ -549,15 +623,15 @@ async function postImportReceiptUnified(import_receipt_id, receipt_date, warehou
   await onRcvSourceTypeChange();
 }
 
-async function voidPostedReceipt() {
+async function voidPostedReceipt(triggerEl) {
   const receiptId = (document.getElementById("rcv_void_receipt_id")?.value || "").trim();
   if (!receiptId) return showToast("請選擇要作廢的收貨單", "error");
   if (!rcvSourceId) return showToast("請先選擇 PO 或進口報單", "error");
 
   if (rcvSourceType === "PO") {
-    await cancelGoodsReceiptUnified(receiptId);
+    await cancelGoodsReceiptUnified(receiptId, triggerEl);
   } else {
-    await cancelImportReceiptUnified(receiptId);
+    await cancelImportReceiptUnified(receiptId, triggerEl);
   }
 }
 
@@ -565,7 +639,7 @@ async function voidPostedReceipt() {
  * 作廢採購收貨：ADJUST 沖銷原 IN、Lot→VOID／QA REJECTED、goods_receipt→CANCELLED、回退 PO 已收。
  * 僅當各 Lot 之 movements 加總仍 ≥ 該筆入庫量（未被下游扣用）時允許。
  */
-async function cancelGoodsReceiptUnified(gr_id) {
+async function cancelGoodsReceiptUnified(gr_id, triggerEl) {
   const gr = await getOne("goods_receipt", "gr_id", gr_id).catch(() => null);
   if (!gr) return showToast("找不到收貨單", "error");
   if (String(gr.status || "").toUpperCase() === "CANCELLED") return showToast("此收貨單已作廢", "error");
@@ -610,7 +684,7 @@ async function cancelGoodsReceiptUnified(gr_id) {
   );
   if (!ok) return;
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
     for (const { inMv, lotId, inQty } of plan) {
       await createRecord("inventory_movement", {
@@ -618,15 +692,17 @@ async function cancelGoodsReceiptUnified(gr_id) {
         movement_type: "ADJUST",
         lot_id: lotId,
         product_id: inMv.product_id || "",
+        warehouse_id: String(gr.warehouse || inMv.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
         qty: String(-Math.abs(inQty)),
         unit: inMv.unit || "",
         ref_type: "GOODS_RECEIPT_CANCEL",
         ref_id: gr_id,
-        remark: `REVERSAL(IN) of ${inMv.movement_id || ""}`,
+        remark: "",
         created_by: getCurrentUser(),
         created_at: nowIso16(),
         updated_by: "",
         updated_at: "",
+        system_remark: `REVERSAL(IN) of ${inMv.movement_id || ""}`,
       });
     }
     for (const { it } of plan) {
@@ -681,7 +757,7 @@ async function cancelGoodsReceiptUnified(gr_id) {
 /**
  * 作廢進口收貨：同上，但不涉及 PO（進口已收由 import_receipt_item 匯總）。
  */
-async function cancelImportReceiptUnified(import_receipt_id) {
+async function cancelImportReceiptUnified(import_receipt_id, triggerEl) {
   const ir = await getOne("import_receipt", "import_receipt_id", import_receipt_id).catch(() => null);
   if (!ir) return showToast("找不到進口收貨單", "error");
   if (String(ir.status || "").toUpperCase() === "CANCELLED") return showToast("此收貨單已作廢", "error");
@@ -728,7 +804,7 @@ async function cancelImportReceiptUnified(import_receipt_id) {
   );
   if (!ok) return;
 
-  showSaveHint();
+  showSaveHint(triggerEl);
   try {
     for (const { inMv, lotId, inQty } of plan) {
       await createRecord("inventory_movement", {
@@ -736,15 +812,17 @@ async function cancelImportReceiptUnified(import_receipt_id) {
         movement_type: "ADJUST",
         lot_id: lotId,
         product_id: inMv.product_id || "",
+        warehouse_id: String(ir.warehouse || inMv.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
         qty: String(-Math.abs(inQty)),
         unit: inMv.unit || "",
         ref_type: "IMPORT_RECEIPT_CANCEL",
         ref_id: import_receipt_id,
-        remark: `REVERSAL(IN) of ${inMv.movement_id || ""}`,
+        remark: "",
         created_by: getCurrentUser(),
         created_at: nowIso16(),
         updated_by: "",
         updated_at: "",
+        system_remark: `REVERSAL(IN) of ${inMv.movement_id || ""}`,
       });
     }
     for (const { it } of plan) {

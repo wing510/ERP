@@ -22,6 +22,11 @@
       </div>
 
       <div class="form-group">
+        <label>業務</label>
+        <select id="so_salesperson_id"></select>
+      </div>
+
+      <div class="form-group">
         <label>下單日期 *</label>
         <input type="date" id="so_order_date">
       </div>
@@ -31,7 +36,7 @@
         <select id="so_status" onchange="onSOStatusChange_()">
           <option value="OPEN">OPEN（開單中）</option>
           <option value="PARTIAL">PARTIAL（部分出貨）</option>
-          <option value="SHIPPED">SHIPPED（已出貨）</option>
+          <option value="SHIPPED">SHIPPED（全數出貨）</option>
           <option value="CANCELLED">CANCELLED（已取消）</option>
         </select>
       </div>
@@ -43,7 +48,7 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-secondary" id="so_update_btn" onclick="updateSalesOrder()">更新</button>
+      <button class="btn-secondary" id="so_update_btn" onclick="updateSalesOrder(this)">更新</button>
       <button class="btn-secondary" onclick="resetSOForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('sales_order', document.getElementById('so_id')?.value || '', 'sales')">Log</button>
     </div>
@@ -94,7 +99,7 @@
 
     <div class="button-group">
       <button class="btn-primary" id="so_add_item_btn" onclick="addSOItemDraft()">新增品項</button>
-      <button type="button" class="btn-secondary" onclick="updateSelectedSOItemRemark()">更新本筆備註</button>
+      <button type="button" class="btn-secondary" onclick="updateSelectedSOItemRemark(this)">更新本筆備註</button>
     </div>
 
     <br>
@@ -119,8 +124,8 @@
     </div>
 
     <div class="button-group" id="soItemsCommitGroup" style="margin-top:12px;">
-      <button class="btn-primary" id="so_create_btn" onclick="createSalesOrder()">建立</button>
-      <button class="btn-secondary" id="so_items_save_btn" onclick="updateSalesOrder()">更新</button>
+      <button class="btn-primary" id="so_create_btn" onclick="createSalesOrder(this)">建立</button>
+      <button class="btn-secondary" id="so_items_save_btn" onclick="updateSalesOrder(this)">更新</button>
       <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
     </div>
   </div>
@@ -142,7 +147,7 @@
         <option value="">全部狀態</option>
         <option value="OPEN">OPEN（開單中）</option>
         <option value="PARTIAL">PARTIAL（部分出貨）</option>
-        <option value="SHIPPED">SHIPPED（已出貨）</option>
+        <option value="SHIPPED">SHIPPED（全數出貨）</option>
         <option value="CANCELLED">CANCELLED（已取消）</option>
       </select>
       <button type="button" class="btn-secondary" onclick="resetSalesSearch()">重設</button>
@@ -153,6 +158,7 @@
           <tr>
             <th>銷售單ID</th>
             <th>客戶</th>
+            <th>業務</th>
             <th>狀態</th>
             <th>建立時間</th>
             <th>操作</th>

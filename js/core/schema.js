@@ -48,11 +48,27 @@ const SCHEMA = {
   customer: [
     "customer_id",
     "customer_name",
+    "category",
     "contact_person",
     "phone",
     "email",
     "address",
     "country",
+    "status",
+    "remark",
+    "created_by",
+    "created_at",
+    "updated_by",
+    "updated_at"
+  ],
+
+  // 倉庫（分倉/定位的主檔）
+  warehouse: [
+    "warehouse_id",
+    "warehouse_name",
+    // AMBIENT / CHILLED / FROZEN
+    "category",
+    "address",
     "status",
     "remark",
     "created_by",
@@ -195,6 +211,7 @@ const SCHEMA = {
   lot: [
     "lot_id",
     "product_id",
+    "warehouse_id",
     // 來源：PO / IMPORT / REPACK / PROCESS 等
     "source_type",
     "source_id",
@@ -210,11 +227,13 @@ const SCHEMA = {
     "received_date",
     "manufacture_date",
     "expiry_date",
+    "remark",
     "created_by",
     "created_at",
     "updated_by",
     "updated_at",
-    "remark"
+    // 系統追溯字串（由各模組自動寫入），與使用者備註 remark 分離；欄位放最後便於 sheet header 對齊
+    "system_remark"
   ],
 
   /*********************************
@@ -227,17 +246,22 @@ const SCHEMA = {
     "movement_type",
     "lot_id",
     "product_id",
+    "warehouse_id",
     // qty 建議：IN 為正數、OUT 為負數（避免方向欄位分裂）
     "qty",
     "unit",
     // ref_type / ref_id 用來追溯來源單據（PO / IMPORT / PROCESS / SHIPMENT...）
     "ref_type",
     "ref_id",
+    // 手動異動：領用/交付對象（例如 公關/員工/KOL/經銷）
+    "issued_to",
     "remark",
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    // 系統追溯字串（由各模組自動寫入），與使用者備註 remark 分離
+    "system_remark"
   ],
 
   /*********************************
@@ -354,6 +378,7 @@ const SCHEMA = {
   sales_order: [
     "so_id",
     "customer_id",
+    "salesperson_id",
     "order_date",
     "status",
     "remark",
@@ -463,7 +488,7 @@ const ENUMS = {
     status: ["OPEN", "POSTED", "CANCELLED"]
   },
   user: {
-    role: ["ADMIN", "QA", "OP"],
+    role: ["ADMIN", "QA", "OP", "SALES"],
     status: ["ACTIVE", "INACTIVE"]
   },
   lot_relation: {

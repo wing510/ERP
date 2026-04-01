@@ -72,6 +72,10 @@ function navigate(module) {
       loadModule("modules/customers.html", "customers");
       break;
 
+    case "warehouses":
+      loadModule("modules/warehouses.html", "warehouses");
+      break;
+
     case "users":
       loadModule("modules/users.html", "users");
       break;
@@ -86,6 +90,10 @@ function navigate(module) {
 
     case "movements":
       loadModule("modules/movements.html", "movements");
+      break;
+
+    case "warehouse_stock":
+      loadModule("modules/warehouse-stock.html", "warehouseStock");
       break;
 
     case "split":

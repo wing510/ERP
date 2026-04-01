@@ -11,6 +11,7 @@ let shipCustomers = [];
 let shipSalesOrders = [];
 let shipSalesItems = [];
 let shipProducts = [];
+let shipWarehouses = [];
 let shipEditing = false;
 let shipReadOnlyDraft = false;
 let shipGoodsReceiptIdToPoId = {};
@@ -58,13 +59,14 @@ async function shippingInit(){
 }
 
 async function loadShipMasterData(){
-  const [lots, movements, customersRaw, salesOrders, salesItems, products, importReceipts, goodsReceipts, importDocs] = await Promise.all([
+  const [lots, movements, customersRaw, salesOrders, salesItems, products, warehouses, importReceipts, goodsReceipts, importDocs] = await Promise.all([
     getAll("lot"),
     getAll("inventory_movement").catch(() => []),
     getAll("customer"),
     getAll("sales_order").catch(() => []),
     getAll("sales_order_item").catch(() => []),
     getAll("product").catch(() => []),
+    getAll("warehouse").catch(() => []),
     getAll("import_receipt").catch(() => []),
     getAll("goods_receipt").catch(() => []),
     getAll("import_document").catch(() => [])
@@ -75,6 +77,7 @@ async function loadShipMasterData(){
   shipSalesOrders = salesOrders || [];
   shipSalesItems = salesItems || [];
   shipProducts = products || [];
+  shipWarehouses = (warehouses || []).filter(w => String(w.status || "ACTIVE").toUpperCase() === "ACTIVE");
 
   shipImportReceiptIdToDocId = {};
   (importReceipts || []).forEach(r => {
@@ -96,6 +99,22 @@ async function loadShipMasterData(){
   });
 
   initShipDropdowns();
+}
+
+function shipWarehouseLabelById_(warehouseId){
+  const id = String(warehouseId || "").trim().toUpperCase();
+  if(!id) return "";
+  const w = (shipWarehouses || []).find(x => String(x.warehouse_id || "").toUpperCase() === id) || null;
+  if(!w) return id;
+  const name = String(w.warehouse_name || "").trim();
+  const cat = String(w.category || "").trim().toUpperCase();
+  const catLabel = (typeof termShortZh_ === "function" ? termShortZh_(cat) : ((typeof termLabel === "function" ? termLabel(cat) : "") || cat));
+  const namePart = name || id;
+  return catLabel ? `${namePart}-${catLabel}` : namePart;
+}
+
+function shipWarehouseLabelByLot_(lot){
+  return shipWarehouseLabelById_(lot?.warehouse_id || "");
 }
 
 function shipGetAvailable(lotId){
@@ -149,11 +168,12 @@ function renderShipLotPicker_(lots){
     const lotId = String(l.lot_id || "").toLowerCase();
     const pname = String(formatShipProductDisplay_(l.product_id || "") || "").toLowerCase();
     const src = String(formatShipLotSourceText_(l) || "").toLowerCase();
-    return lotId.includes(kw) || pname.includes(kw) || src.includes(kw);
+    const wh = String(shipWarehouseLabelByLot_(l) || "").toLowerCase();
+    return lotId.includes(kw) || pname.includes(kw) || src.includes(kw) || wh.includes(kw);
   });
   tbody.innerHTML = "";
   if(!list.length){
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:#64748b;">目前無可選 Lot</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#64748b;">目前無可選 Lot</td></tr>`;
     return;
   }
 
@@ -161,12 +181,14 @@ function renderShipLotPicker_(lots){
     const av = shipGetAvailable(l.lot_id);
     const lotId = String(l.lot_id || "");
     const productText = formatShipProductDisplay_(l.product_id || "");
+    const whText = shipWarehouseLabelByLot_(l) || (l.warehouse_id ? String(l.warehouse_id) : "");
     const createdAt = String(l.created_at || "");
     const safeId = lotId.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     tbody.innerHTML += `
       <tr style="cursor:pointer;" onclick="pickShipLineLot('${safeId}')">
         <td>${lotId}</td>
         <td>${productText}</td>
+        <td>${whText || "—"}</td>
         <td>${av}</td>
         <td>${createdAt}</td>
         <td><button type="button" class="btn-secondary">帶入</button></td>
@@ -183,7 +205,7 @@ function renderShipLotPicker_(lots){
     Object.keys(groups).sort().forEach(k => {
       tbody.innerHTML += `
         <tr style="background:#f8fafc;">
-          <td colspan="5" style="font-weight:600;color:#334155;padding:8px 10px;">來源：${k}（${groups[k].length}）</td>
+          <td colspan="6" style="font-weight:600;color:#334155;padding:8px 10px;">來源：${k}（${groups[k].length}）</td>
         </tr>
       `;
       groups[k].forEach(renderLotRow_);
@@ -219,7 +241,8 @@ function pickShipLineLot(lotId){
   if(display){
     const lot = (shipLots || []).find(l => String(l.lot_id || "") === String(lotId || ""));
     const av = lot ? shipGetAvailable(lot.lot_id) : "";
-    display.value = lot ? formatShipLotOptionLabel_(lot, av) : (lotId || "");
+    const whText = lot ? (shipWarehouseLabelByLot_(lot) || "") : "";
+    display.value = lot ? (formatShipLotOptionLabel_(lot, av) + (whText ? ` | ${whText}` : "")) : (lotId || "");
   }
   onSelectShipLot();
   closeShipLotPicker();
@@ -243,7 +266,11 @@ function initShipDropdowns(){
   if(cSel){
     cSel.innerHTML =
       `<option value="">請選擇客戶</option>` +
-      shipCustomers.map(c => `<option value="${c.customer_id}">${c.customer_id} - ${c.customer_name}</option>`).join("");
+      shipCustomers.map(c => {
+        const name = String(c.customer_name || "").trim();
+        const label = name || c.customer_id;
+        return `<option value="${c.customer_id}">${label}</option>`;
+      }).join("");
   }
 
   const soiSel = document.getElementById("ship_so_item_id");
@@ -363,13 +390,13 @@ function beginEditShipDraft_(draftId){
   renderShipDraft();
 }
 
-async function updateSelectedShipItemRemark(){
+async function updateSelectedShipItemRemark(triggerEl){
   const selId = String(shipSelectedLineId_ || "").trim();
   if(!selId) return showToast("請先點選一筆明細列", "error");
   const remark = (document.getElementById("ship_item_remark")?.value || "").trim();
 
   if(shipReadOnlyDraft){
-    showSaveHint(document.getElementById("shipPostButtonGroup"));
+    showSaveHint(triggerEl || document.getElementById("shipPostButtonGroup"));
     try{
       await updateRecord("shipment_item", "shipment_item_id", selId, {
         remark,
@@ -494,6 +521,7 @@ function addShipItemDraft(){
     so_item_id,
     lot_id,
     product_id: lot.product_id,
+    warehouse_id: String(lot.warehouse_id || "").trim().toUpperCase(),
     ship_qty: qty,
     unit,
     remark
@@ -535,6 +563,7 @@ function renderShipDraft(){
         <td>${idx+1}</td>
         <td>${it.lot_id}</td>
         <td>${formatShipProductDisplay_(it.product_id)}</td>
+        <td>${shipWarehouseLabelById_(it.warehouse_id) || "—"}</td>
         <td>${it.ship_qty}</td>
         <td>${it.unit}</td>
         <td>${it.so_item_id || ""}</td>
@@ -561,6 +590,8 @@ async function renderShipments(){
   const qSt = (document.getElementById("ship_search_status")?.value || "").trim().toUpperCase();
 
   const list = await getAll("shipment").catch(()=>[]);
+  const customerMap = {};
+  (shipCustomers || []).forEach(c => { if(c && c.customer_id) customerMap[c.customer_id] = c; });
   const filtered = (list || []).filter(s => {
     const stOk = !qSt || String(s.status||"").toUpperCase() === qSt;
     if(!stOk) return false;
@@ -568,11 +599,14 @@ async function renderShipments(){
     const sid = String(s.shipment_id||"").toUpperCase();
     const cid = String(s.customer_id||"").toUpperCase();
     const soid = String(s.so_id||"").toUpperCase();
-    return sid.includes(qKw) || cid.includes(qKw) || soid.includes(qKw);
+    const cn = String(customerMap[s.customer_id]?.customer_name || "").toUpperCase();
+    return sid.includes(qKw) || cid.includes(qKw) || (cn && cn.includes(qKw)) || soid.includes(qKw);
   }).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||"")));
 
   tbody.innerHTML = "";
   filtered.forEach(s => {
+    const c = customerMap[s.customer_id] || null;
+    const customerNameOnly = (c && c.customer_name) ? c.customer_name : (s.customer_id || "");
     const canCancel = String(s.status||"").toUpperCase() === "POSTED";
     const cancelBtn = canCancel
       ? `<button class="btn-secondary" onclick="loadShipment('${s.shipment_id}');setTimeout(()=>cancelShipment(),0)">作廢</button>`
@@ -581,7 +615,7 @@ async function renderShipments(){
       <tr>
         <td>${s.shipment_id || ""}</td>
         <td>${s.so_id || ""}</td>
-        <td>${s.customer_id || ""}</td>
+        <td>${customerNameOnly}</td>
         <td>${termLabel(s.status)}</td>
         <td>${dateInputValue_(s.ship_date)}</td>
         <td>
@@ -641,7 +675,7 @@ async function loadShipment(shipmentId){
   updateShipStatusHint_();
 }
 
-async function cancelShipment(){
+async function cancelShipment(triggerEl){
   const shipment_id = (document.getElementById("ship_id")?.value || "").trim().toUpperCase();
   if(!shipment_id) return showToast("請先載入出貨單","error");
 
@@ -655,7 +689,9 @@ async function cancelShipment(){
   const ok = confirm("確定要作廢此出貨單？系統將反沖庫存（ADJUST +）並回寫 SO 已出貨量。");
   if(!ok) return;
 
-  await loadShipMasterData();
+  showSaveHint(triggerEl || document.getElementById("shipPostButtonGroup"));
+  try{
+    await loadShipMasterData();
 
   const itemsAll = await getAll("shipment_item").catch(()=>[]);
   const items = (itemsAll || []).filter(x => x.shipment_id === shipment_id);
@@ -663,20 +699,23 @@ async function cancelShipment(){
 
   // 1) 反沖庫存：ADJUST +qty
   for(const it of items){
+    const lot = (shipLots || []).find(l => String(l.lot_id||"") === String(it.lot_id||"")) || null;
     await createRecord("inventory_movement", {
       movement_id: generateId("MV"),
       movement_type: "ADJUST",
       lot_id: it.lot_id,
       product_id: it.product_id,
+      warehouse_id: String(lot?.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
       qty: String(Math.abs(Number(it.ship_qty || 0))),
       unit: it.unit || "",
       ref_type: "SHIPMENT_CANCEL",
       ref_id: shipment_id,
-      remark: `Cancel Shipment: ${shipment_id}`,
+      remark: "",
       created_by: getCurrentUser(),
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
+      system_remark: `Cancel Shipment: ${shipment_id}`,
     });
   }
 
@@ -720,12 +759,15 @@ async function cancelShipment(){
     });
   }
 
-  showToast("作廢完成：已反沖庫存並回寫 SO");
-  await renderShipments();
-  await loadShipment(shipment_id);
+    showToast("作廢完成：已反沖庫存並回寫 SO");
+    await renderShipments();
+    await loadShipment(shipment_id);
+  } finally {
+    hideSaveHint();
+  }
 }
 
-async function postShipment(){
+async function postShipment(triggerEl){
   const shipment_id = (document.getElementById("ship_id")?.value || "").trim().toUpperCase();
   document.getElementById("ship_id").value = shipment_id;
 
@@ -740,7 +782,7 @@ async function postShipment(){
   if(!ship_date) return showToast("出貨日期必填","error");
   if(shipDraft.length === 0) return showToast("請至少新增 1 筆出貨明細","error");
 
-  showSaveHint(document.getElementById("shipPostButtonGroup"));
+  showSaveHint(triggerEl || document.getElementById("shipPostButtonGroup"));
   try {
   // refresh
   await loadShipMasterData();
@@ -759,6 +801,7 @@ async function postShipment(){
   // write items + movements + update SO shipped_qty
   for(let idx=0; idx<shipDraft.length; idx++){
     const it = shipDraft[idx];
+    const lot = (shipLots || []).find(l => String(l.lot_id||"") === String(it.lot_id||"")) || null;
 
     await createRecord("shipment_item", {
       shipment_item_id: `SHI-${shipment_id}-${String(idx+1).padStart(3,"0")}`,
@@ -779,15 +822,17 @@ async function postShipment(){
       movement_type: "SHIP_OUT",
       lot_id: it.lot_id,
       product_id: it.product_id,
+      warehouse_id: String(lot?.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
       qty: String(-Math.abs(it.ship_qty)),
       unit: it.unit,
       ref_type: "SHIPMENT",
       ref_id: shipment_id,
-      remark: `Ship OUT: ${shipment_id}`,
+      remark: "",
       created_by: getCurrentUser(),
       created_at: nowIso16(),
       updated_by: "",
       updated_at: "",
+      system_remark: `Ship OUT: ${shipment_id}`,
     });
 
     if(it.so_item_id){

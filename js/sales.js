@@ -7,6 +7,7 @@ let soEditing = false;
 let soItemsDraft = [];
 let soProducts = [];
 let soCustomers = [];
+let soUsers = [];
 /** 委外同款：由「編輯」帶回表單後，再按「新增品項」重新加入（新 draft_id）；已出貨量暫存於此 */
 let soEditingShippedQtyHold = 0;
 /** 點選已存檔列（so_item_id）供「更新本筆備註」 */
@@ -80,25 +81,51 @@ async function salesInit(){
 }
 
 async function initSalesDropdowns(){
-  const [productsRaw, customersRaw] = await Promise.all([
+  const [productsRaw, customersRaw, usersRaw] = await Promise.all([
     getAll("product"),
-    getAll("customer")
+    getAll("customer"),
+    getAll("user").catch(() => [])
   ]);
   soProducts = (productsRaw || []).filter(p => p.status === "ACTIVE");
   soCustomers = (customersRaw || []).filter(c => c.status === "ACTIVE");
+  soUsers = usersRaw || [];
 
   const cSel = document.getElementById("so_customer_id");
   if(cSel){
     cSel.innerHTML =
       `<option value="">請選擇客戶</option>` +
-      soCustomers.map(c => `<option value="${c.customer_id}">${c.customer_id} - ${c.customer_name}</option>`).join("");
+      soCustomers.map(c => {
+        const name = String(c.customer_name || "").trim();
+        const label = name || c.customer_id;
+        return `<option value="${c.customer_id}">${label}</option>`;
+      }).join("");
   }
 
   const pSel = document.getElementById("so_item_product_id");
   if(pSel){
     pSel.innerHTML =
       `<option value="">請選擇產品</option>` +
-      soProducts.map(p => `<option value="${p.product_id}" data-unit="${p.unit}" data-spec="${(p.spec || "").replace(/"/g, "&quot;")}">${p.product_id} - ${p.product_name}${p.spec ? " / " + p.spec : ""}</option>`).join("");
+      soProducts.map(p => {
+        const name = String(p.product_name || "").trim();
+        const spec = String(p.spec || "").trim();
+        const label = name ? (spec ? `${name} / ${spec}` : name) : (p.product_id || "");
+        return `<option value="${p.product_id}" data-unit="${p.unit}" data-spec="${(p.spec || "").replace(/"/g, "&quot;")}">${label}</option>`;
+      }).join("");
+  }
+
+  const spSel = document.getElementById("so_salesperson_id");
+  if(spSel){
+    const salesUsers = (soUsers || [])
+      .filter(u => String(u.status || "").toUpperCase() === "ACTIVE")
+      .filter(u => String(u.role || "").toUpperCase() === "SALES");
+    salesUsers.sort((a,b)=>String(a.user_id||"").localeCompare(String(b.user_id||"")));
+    spSel.innerHTML =
+      `<option value="">（未指定）</option>` +
+      salesUsers.map(u => {
+        const name = String(u.user_name || "").trim();
+        const label = name || u.user_id;
+        return `<option value="${u.user_id}">${label}</option>`;
+      }).join("");
   }
 }
 
@@ -118,6 +145,9 @@ function resetSOForm(){
 
   const c = document.getElementById("so_customer_id");
   if(c) c.value = "";
+
+  const sp = document.getElementById("so_salesperson_id");
+  if(sp) sp.value = "";
 
   const st = document.getElementById("so_status");
   if(st) st.value = "OPEN";
@@ -179,7 +209,7 @@ function selectSOItemDbRow_(soItemId){
   showToast("已帶入明細（僅改備註可用「更新本筆備註」；改數量／產品請用「編輯」）");
 }
 
-async function updateSelectedSOItemRemark(){
+async function updateSelectedSOItemRemark(triggerEl){
   if(!soEditing) return showToast("請先載入銷售單", "error");
   if(isSOFormLocked_()){
     return showToast("此銷售單已結束（SHIPPED/CANCELLED），不可再修改。", "error");
@@ -190,7 +220,7 @@ async function updateSelectedSOItemRemark(){
   }
   const remark = (document.getElementById("so_item_remark")?.value || "").trim();
 
-  showSaveHint(document.getElementById("soItemsCommitGroup"));
+  showSaveHint(triggerEl || document.getElementById("soItemsCommitGroup"));
   try{
     await updateRecord("sales_order_item", "so_item_id", sid, {
       remark,
@@ -338,10 +368,11 @@ function renderSOItemsDraft(){
   });
 }
 
-async function createSalesOrder(){
+async function createSalesOrder(triggerEl){
   const so_id = (document.getElementById("so_id")?.value || "").trim().toUpperCase();
   document.getElementById("so_id").value = so_id;
   const customer_id = document.getElementById("so_customer_id")?.value || "";
+  const salesperson_id = document.getElementById("so_salesperson_id")?.value || "";
   const order_date = document.getElementById("so_order_date")?.value || "";
   const status = document.getElementById("so_status")?.value || "OPEN";
   const remark = (document.getElementById("so_remark")?.value || "").trim();
@@ -351,7 +382,7 @@ async function createSalesOrder(){
   if(!order_date) return showToast("下單日期必填","error");
   if(soItemsDraft.length === 0) return showToast("請至少新增 1 筆品項","error");
 
-  showSaveHint(document.getElementById("soItemsCommitGroup"));
+  showSaveHint(triggerEl || document.getElementById("soItemsCommitGroup"));
   try {
   const exists = await getOne("sales_order","so_id",so_id).catch(()=>null);
   if(exists) return showToast("銷售單ID 已存在","error");
@@ -359,6 +390,7 @@ async function createSalesOrder(){
   await createRecord("sales_order", {
     so_id,
     customer_id,
+    salesperson_id,
     order_date,
     status,
     remark,
@@ -409,6 +441,8 @@ async function loadSalesOrder(soId){
   idEl.disabled = true;
 
   document.getElementById("so_customer_id").value = so.customer_id || "";
+  const sp = document.getElementById("so_salesperson_id");
+  if(sp) sp.value = so.salesperson_id || "";
   document.getElementById("so_order_date").value = dateInputValue_(so.order_date);
   document.getElementById("so_status").value = so.status || "OPEN";
   document.getElementById("so_remark").value = so.remark || "";
@@ -435,13 +469,14 @@ async function loadSalesOrder(soId){
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
 }
 
-async function updateSalesOrder(){
+async function updateSalesOrder(triggerEl){
   if(isSOFormLocked_()){
     return showToast("此銷售單已結束（SHIPPED/CANCELLED），不可再修改。", "error");
   }
   if(!soEditing) return showToast("請先載入銷售單再更新","error");
   const so_id = (document.getElementById("so_id")?.value || "").trim().toUpperCase();
   const customer_id = document.getElementById("so_customer_id")?.value || "";
+  const salesperson_id = document.getElementById("so_salesperson_id")?.value || "";
   const order_date = document.getElementById("so_order_date")?.value || "";
   const status = document.getElementById("so_status")?.value || "OPEN";
   const remark = (document.getElementById("so_remark")?.value || "").trim();
@@ -456,7 +491,7 @@ async function updateSalesOrder(){
     return showToast("此銷售單已結束 (SHIPPED/CANCELLED)，不可再修改。", "error");
   }
 
-  showSaveHint(document.getElementById("soItemsCommitGroup"));
+  showSaveHint(triggerEl || document.getElementById("soItemsCommitGroup"));
   try {
   // 若已有出貨紀錄，禁止重建明細（保持追溯一致）
   const shipments = await getAll("shipment_item").catch(()=>[]);
@@ -464,6 +499,7 @@ async function updateSalesOrder(){
 
   await updateRecord("sales_order","so_id",so_id,{
     customer_id,
+    salesperson_id,
     order_date,
     status,
     remark,
@@ -524,25 +560,39 @@ async function renderSalesOrders(){
   const qKw = (document.getElementById("so_search_keyword")?.value || "").trim().toUpperCase();
   const qSt = (document.getElementById("so_search_status")?.value || "").trim().toUpperCase();
   const list = await getAll("sales_order").catch(()=>[]);
+  const userMap = {};
+  (soUsers || []).forEach(u => { if(u && u.user_id) userMap[u.user_id] = u; });
+  const customerMap = {};
+  (soCustomers || []).forEach(c => { if(c && c.customer_id) customerMap[c.customer_id] = c; });
+
   const filtered = (list || []).filter(so => {
     const stOk = !qSt || String(so.status || "").toUpperCase() === qSt;
     if(!stOk) return false;
     if(!qKw) return true;
     const sid = String(so.so_id || "").toUpperCase();
     const cid = String(so.customer_id || "").toUpperCase();
-    return sid.includes(qKw) || cid.includes(qKw);
+    const spid = String(so.salesperson_id || "").toUpperCase();
+    const cn = String(customerMap[so.customer_id]?.customer_name || "").toUpperCase();
+    return sid.includes(qKw) || cid.includes(qKw) || (cn && cn.includes(qKw)) || spid.includes(qKw);
   });
   const sorted = [...filtered].sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||""));
   tbody.innerHTML = "";
   if (!sorted.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:24px;">尚無銷售單。請先至「產品」「客戶」建立主檔，再於銷售單填妥主檔與明細後按明細下方「建立」。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748b;padding:24px;">尚無銷售單。請先至「產品」「客戶」建立主檔，再於銷售單填妥主檔與明細後按明細下方「建立」。</td></tr>';
     return;
   }
   sorted.forEach(so => {
+    const sp = userMap[so.salesperson_id] || null;
+    const spLabel = so.salesperson_id
+      ? `${so.salesperson_id}${sp && sp.user_name ? " - " + sp.user_name : ""}`
+      : "";
+    const c = customerMap[so.customer_id] || null;
+    const customerNameOnly = (c && c.customer_name) ? c.customer_name : (so.customer_id || "");
     tbody.innerHTML += `
       <tr>
         <td>${so.so_id || ""}</td>
-        <td>${so.customer_id || ""}</td>
+        <td>${customerNameOnly}</td>
+        <td>${spLabel}</td>
         <td>${termLabel(so.status)}</td>
         <td>${so.created_at || ""}</td>
         <td>
