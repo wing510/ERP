@@ -139,7 +139,13 @@ function shipUpdateAllocModeUI_(){
   const pickBtn = document.getElementById("ship_pick_lot_btn");
   const lotDisp = document.getElementById("ship_lot_display");
   const lotId = document.getElementById("ship_lot_id");
-  if(pickBtn) pickBtn.disabled = !!shipReadOnlyDraft || auto;
+  if(pickBtn){
+    pickBtn.disabled = !!shipReadOnlyDraft || auto;
+    pickBtn.title =
+      shipReadOnlyDraft ? "此出貨單已結束（POSTED/CANCELLED），不可再選擇 Lot" :
+      auto ? "已勾選自動分配（依效期 FEFO），不需手動選擇 Lot" :
+      "選擇要出貨的 Lot";
+  }
   if(lotDisp){
     lotDisp.placeholder = auto ? "自動分配（依效期 FEFO）" : "請在下方按「選擇 Lot」帶入";
     lotDisp.style.background = auto ? "#f8fafc" : "";

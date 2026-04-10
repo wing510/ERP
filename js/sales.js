@@ -77,8 +77,21 @@ function setSOButtons_(){
   const addBtn = document.getElementById("so_add_item_btn");
   const itemsSaveBtn = document.getElementById("so_items_save_btn");
   if(createBtn) createBtn.disabled = locked || soEditing;
-  if(updateBtn) updateBtn.disabled = locked || !soEditing;
-  if(itemsSaveBtn) itemsSaveBtn.disabled = locked || !soEditing;
+  if(updateBtn){
+    updateBtn.disabled = locked || !soEditing;
+    updateBtn.title =
+      !soEditing ? "請先載入銷售單" :
+      locked ? "此銷售單已結束（SHIPPED/CANCELLED），不可更新" :
+      "更新此銷售單";
+  }
+  if(itemsSaveBtn){
+    itemsSaveBtn.disabled = locked || !soEditing;
+    // 明細區更新按鈕與主檔更新同一個行為，title 同步
+    itemsSaveBtn.title =
+      !soEditing ? "請先載入銷售單" :
+      locked ? "此銷售單已結束（SHIPPED/CANCELLED），不可更新" :
+      "更新此銷售單";
+  }
   if(addBtn) addBtn.disabled = locked;
   if(cancelBtn){
     if(!soEditing){
@@ -572,17 +585,15 @@ async function cancelSalesOrder(triggerEl){
     const note = prompt("作廢原因（可留空）") ?? "";
     if(!confirm(`確定作廢此銷售單？\n- SO：${so_id}\n\n限制：需先作廢所有出貨單。`)) return;
 
-    const prevRemark = String(header.remark || "").trim();
-    const nextRemark = String(note).trim()
-      ? (prevRemark ? `${prevRemark}\n[作廢 ${nowIso16()} ${getCurrentUser()}] ${String(note).trim()}` : `[作廢 ${nowIso16()} ${getCurrentUser()}] ${String(note).trim()}`)
-      : prevRemark;
-
-    await updateRecord("sales_order","so_id",so_id,{
-      status: "CANCELLED",
-      ...(nextRemark ? { remark: nextRemark } : {}),
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16()
-    });
+    await callAPI(
+      {
+        action: "cancel_sales_order_bundle",
+        so_id,
+        cancel_note: String(note || "").trim(),
+        updated_by: getCurrentUser()
+      },
+      { method: "POST" }
+    );
 
     soLoadedStatus_ = "CANCELLED";
     if(typeof invalidateCache === "function") invalidateCache("sales_order");

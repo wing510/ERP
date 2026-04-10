@@ -62,6 +62,46 @@ let rcvLines = [];
 let rcvProducts = [];
 let rcvWarehouses = [];
 
+function setRcvPostBtnState_(){
+  const postBtn = document.getElementById("rcv_post_btn");
+  if(!postBtn) return;
+
+  if(!rcvSourceType){
+    postBtn.disabled = true;
+    postBtn.title = "請先選擇來源類型";
+    return;
+  }
+  if(!rcvSourceId){
+    postBtn.disabled = true;
+    postBtn.title = "請先選擇" + (rcvSourceType === "PO" ? "PO" : "報單");
+    return;
+  }
+  if(!Array.isArray(rcvLines) || rcvLines.length === 0){
+    postBtn.disabled = true;
+    postBtn.title = "尚無可收貨明細";
+    return;
+  }
+
+  const anyRemaining = (rcvLines || []).some(r => Number(r?.remaining || 0) > 0);
+  if(!anyRemaining){
+    postBtn.disabled = true;
+    postBtn.title = "所有品項剩餘可收皆為 0，無法產生批次";
+    return;
+  }
+
+  // 尚未輸入任何本次收貨數量時，先禁用（避免按了才跳錯）
+  const qtys = getRcvInputQtys();
+  const hasQty = (qtys || []).some(q => Number(q || 0) > 0);
+  if(!hasQty){
+    postBtn.disabled = true;
+    postBtn.title = "請至少輸入一筆本次收貨數量";
+    return;
+  }
+
+  postBtn.disabled = false;
+  postBtn.title = "產生批次";
+}
+
 function rcvWarehouseLabelById_(warehouseId){
   const id = String(warehouseId || "").trim().toUpperCase();
   if(!id) return "—";
@@ -386,6 +426,7 @@ async function onRcvSourceTypeChange() {
     setRcvReceiptState_("收庫流程：未載入 — 請先選擇來源類型與單號", "warn");
     setRcvLotState_("批次狀態：未產生", "warn");
     await refreshRcvVoidReceiptOptions();
+    setRcvPostBtnState_();
     return;
   }
 
@@ -434,6 +475,7 @@ async function onRcvSourceTypeChange() {
     console.error(e);
   }
   renderRcvLines();
+  setRcvPostBtnState_();
   await refreshRcvVoidReceiptOptions();
 }
 
@@ -449,6 +491,7 @@ async function onRcvSourceSelect() {
     setRcvReceiptState_("收庫流程：未載入 — 請先選擇來源類型與單號", "warn");
     setRcvLotState_("批次狀態：未產生", "warn");
     await refreshRcvVoidReceiptOptions();
+    setRcvPostBtnState_();
     return;
   }
 
@@ -457,6 +500,7 @@ async function onRcvSourceSelect() {
     setRcvReceiptState_("收庫流程：未載入 — 請先選擇來源類型與單號", "warn");
     setRcvLotState_("批次狀態：未產生", "warn");
     await refreshRcvVoidReceiptOptions();
+    setRcvPostBtnState_();
     return;
   }
 
@@ -716,6 +760,16 @@ function renderRcvLines() {
       </tr>
     `;
   });
+
+  // 綁定輸入事件：即時更新「產生批次」按鈕狀態/提示
+  rcvLines.forEach((row, idx) => {
+    const q = document.getElementById(`rcv_qty_${idx}`);
+    if(q){
+      q.oninput = setRcvPostBtnState_;
+      q.onchange = setRcvPostBtnState_;
+    }
+  });
+  setRcvPostBtnState_();
 }
 
 function getRcvInputQtys() {
@@ -747,6 +801,7 @@ function resetRcvForm() {
   rcvSourceId = "";
   refreshRcvVoidReceiptOptions().catch(() => {});
   setRcvReceiptState_("收庫流程：未載入 — 請先選擇來源類型與單號", "warn");
+  setRcvPostBtnState_();
 }
 
 function openRcvLog() {

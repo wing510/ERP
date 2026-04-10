@@ -14,6 +14,75 @@ const API_BASE = (function () {
   return "";
 })();
 
+// #region agent log
+function erpDbgSanitizeParams_(params) {
+  try {
+    const p = params && typeof params === "object" ? params : {};
+    const action = String(p.action || "");
+    const keys = Object.keys(p)
+      .filter(k => k !== "action")
+      .slice(0, 30);
+    return { action, keysCount: Object.keys(p).length, keys };
+  } catch (_e) {
+    return { action: "", keysCount: 0, keys: [] };
+  }
+}
+
+function erpDbgLog_(payload) {
+  try {
+    fetch("http://127.0.0.1:7691/ingest/9f180fc6-490e-4b37-95d1-7628a27b6a8b", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "c12007"
+      },
+      body: JSON.stringify(
+        Object.assign(
+          {
+            sessionId: "c12007",
+            timestamp: Date.now()
+          },
+          payload || {}
+        )
+      )
+    }).catch(function () {});
+  } catch (_e) {}
+}
+
+try {
+  if (!window.__ERP_DBG_HOOKED__) {
+    window.__ERP_DBG_HOOKED__ = "1";
+    window.addEventListener("error", function (ev) {
+      erpDbgLog_({
+        runId: "pre-fix",
+        hypothesisId: "H4",
+        location: "js/core/service.js:hook:error",
+        message: "window error",
+        data: {
+          msg: String(ev && ev.message || ""),
+          file: String(ev && ev.filename || ""),
+          line: Number(ev && ev.lineno || 0),
+          col: Number(ev && ev.colno || 0)
+        }
+      });
+    });
+    window.addEventListener("unhandledrejection", function (ev) {
+      const r = ev && ev.reason;
+      erpDbgLog_({
+        runId: "pre-fix",
+        hypothesisId: "H4",
+        location: "js/core/service.js:hook:unhandledrejection",
+        message: "unhandled rejection",
+        data: {
+          name: String(r && r.name || ""),
+          msg: String(r && r.message || r || "")
+        }
+      });
+    });
+  }
+} catch (_e) {}
+// #endregion
+
 /**
  * 將 callAPI 錯誤轉成繁中說明＋操作建議（供 Toast；可含換行）
  */
@@ -334,6 +403,21 @@ async function callAPI(params, options = {}){
     ? setTimeout(function(){ try{ ctrl.abort(); }catch(_e){} }, timeoutMs)
     : null;
   try{
+    // #region agent log
+    erpDbgLog_({
+      runId: "pre-fix",
+      hypothesisId: "H1",
+      location: "js/core/service.js:callAPI:enter",
+      message: "callAPI enter",
+      data: {
+        method,
+        apiBaseSet: !!API_BASE,
+        timeoutMs,
+        params: erpDbgSanitizeParams_(params)
+      }
+    });
+    // #endregion
+
     if (!API_BASE) {
       const e = new Error("API_BASE missing");
       e.apiBaseMissing = true;
@@ -391,10 +475,49 @@ async function callAPI(params, options = {}){
       throw e;
     }
 
+    // #region agent log
+    try{
+      const t1 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+      erpDbgLog_({
+        runId: "pre-fix",
+        hypothesisId: "H1",
+        location: "js/core/service.js:callAPI:ok",
+        message: "callAPI ok",
+        data: {
+          method,
+          action: actionName,
+          ms: Math.round((t1 - t0) * 10) / 10,
+          hasDataArray: !!(result && Array.isArray(result.data)),
+          dataLen: (result && Array.isArray(result.data)) ? result.data.length : null
+        }
+      });
+    }catch(_e){}
+    // #endregion
+
     return result;
 
   } catch(err){
     console.error("API ERROR:", err);
+    // #region agent log
+    try{
+      const t1 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+      erpDbgLog_({
+        runId: "pre-fix",
+        hypothesisId: "H2",
+        location: "js/core/service.js:callAPI:err",
+        message: "callAPI error",
+        data: {
+          method,
+          action: actionName,
+          ms: Math.round((t1 - t0) * 10) / 10,
+          name: String(err && err.name || ""),
+          msg: String(err && err.message || err || ""),
+          httpStatus: err && err.httpStatus != null ? err.httpStatus : null,
+          backendErrors: Array.isArray(err && err.backendErrors) ? err.backendErrors.slice(0, 5) : null
+        }
+      });
+    }catch(_e){}
+    // #endregion
     if(ERP_PERF.enabled){
       const t1 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
       const ms = Math.round((t1 - t0) * 10) / 10;

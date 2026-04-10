@@ -716,17 +716,15 @@ async function cancelPurchaseOrder(triggerEl){
     const note = prompt("作廢原因（可留空）") ?? "";
     if(!confirm(`確定作廢此採購單？\n- PO：${po_id}\n\n限制：需先作廢所有收貨單。`)) return;
 
-    const prevRemark = String(header.remark || "").trim();
-    const nextRemark = String(note).trim()
-      ? (prevRemark ? `${prevRemark}\n[作廢 ${nowIso16()} ${getCurrentUser()}] ${String(note).trim()}` : `[作廢 ${nowIso16()} ${getCurrentUser()}] ${String(note).trim()}`)
-      : prevRemark;
-
-    await updateRecord("purchase_order","po_id",po_id,{
-      status: "CANCELLED",
-      ...(nextRemark ? { remark: nextRemark } : {}),
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16()
-    });
+    await callAPI(
+      {
+        action: "cancel_purchase_order_bundle",
+        po_id,
+        cancel_note: String(note || "").trim(),
+        updated_by: getCurrentUser()
+      },
+      { method: "POST" }
+    );
 
     if(typeof invalidateCache === "function") invalidateCache("purchase_order");
     await renderPurchaseOrders();

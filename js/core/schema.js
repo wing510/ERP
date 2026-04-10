@@ -93,7 +93,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   purchase_order_item: [
@@ -107,7 +108,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   /*********************************
@@ -143,7 +145,8 @@ const SCHEMA = {
     "created_at",
     "updated_by",
     "updated_at",
-    "remark"
+    "remark",
+    "system_remark"
   ],
 
   import_item: [
@@ -167,7 +170,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   /*********************************
@@ -185,7 +189,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   import_receipt_item: [
@@ -200,7 +205,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   /*********************************
@@ -279,7 +285,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   goods_receipt_item: [
@@ -295,7 +302,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   /*********************************
@@ -319,7 +327,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   process_order_input: [
@@ -333,7 +342,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   process_order_output: [
@@ -352,7 +362,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   lot_relation: [
@@ -368,7 +379,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   /*********************************
@@ -385,7 +397,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   sales_order_item: [
@@ -401,7 +414,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   /*********************************
@@ -419,7 +433,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   shipment_item: [
@@ -435,7 +450,8 @@ const SCHEMA = {
     "created_by",
     "created_at",
     "updated_by",
-    "updated_at"
+    "updated_at",
+    "system_remark"
   ],
 
   /*********************************
