@@ -23,6 +23,19 @@ async function customersInit(){
   clearCustomerForm();
 }
 
+function setCustomerButtons_(){
+  const createBtn = document.getElementById("c_create_btn");
+  const updateBtn = document.getElementById("c_update_btn");
+  if(createBtn){
+    createBtn.disabled = !!customerEditing;
+    createBtn.title = customerEditing ? "已載入客戶，請用更新" : "建立新客戶";
+  }
+  if(updateBtn){
+    updateBtn.disabled = !customerEditing;
+    updateBtn.title = customerEditing ? "更新此客戶" : "請先載入客戶";
+  }
+}
+
 /* ===== 建立 ===== */
 async function createCustomer(triggerEl){
 
@@ -70,6 +83,7 @@ async function createCustomer(triggerEl){
 
   showToast("客戶建立成功");
   } finally { hideSaveHint(); }
+  setCustomerButtons_();
 }
 
 /* ===== 更新 ===== */
@@ -127,6 +141,7 @@ async function updateCustomer(triggerEl){
 
   showToast("客戶更新成功");
   } finally { hideSaveHint(); }
+  setCustomerButtons_();
 }
 
 /* ===== 清除表單 ===== */
@@ -140,6 +155,7 @@ function clearCustomerForm(){
 
   c_status.value="ACTIVE";
   c_id.value = generateShortId("C");
+  setCustomerButtons_();
 }
 
 /* ===== 載入 ===== */
@@ -164,10 +180,12 @@ async function loadCustomer(id){
 
   c_id.disabled=true;
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
+  setCustomerButtons_();
 }
 
 /* ===== 搜尋 ===== */
 async function searchCustomers(){
+  setTbodyLoading_("customerTableBody", 7);
 
   const kw = (document.getElementById("search_customer_keyword")?.value || "").trim().toLowerCase();
   const status = document.getElementById("search_customer_status")?.value || "";
@@ -198,7 +216,7 @@ async function resetCustomerSearch(){
 let customerSort = { field:"", asc:true };
 
 async function sortCustomers(field){
-
+  setTbodyLoading_("customerTableBody", 7);
   const list = [...(await getAll("customer"))];
 
   if(customerSort.field===field){
@@ -226,12 +244,13 @@ async function sortCustomers(field){
 /* ===== Render ===== */
 async function renderCustomers(list=null){
 
-  if(!list){
-    list = await getAll("customer");
-  }
-
   const tbody=document.getElementById("customerTableBody");
   if(!tbody) return;
+
+  if(!list){
+    setTbodyLoading_(tbody, 7);
+    list = await getAll("customer");
+  }
 
   tbody.innerHTML="";
   if(!list.length){

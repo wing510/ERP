@@ -4,7 +4,8 @@
     <span>
       銷售單（Sales Order）
       <button type="button" class="btn-sheet" onclick="openSheetLink('sales_order')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
-      <span id="soStatusHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">銷售狀態：新單（未載入）— 填主檔與明細後按明細下方「建立」</span>
+      <span id="soStatusHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">銷售流程：新單 — 填主檔與明細後按下方「建立」</span>
+      <span id="soShipState" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">出貨狀態：未載入 — 請先載入銷售單</span>
     </span>
     <span data-help="salesHeader"></span>
   </div>
@@ -31,16 +32,6 @@
         <input type="date" id="so_order_date">
       </div>
 
-      <div class="form-group">
-        <label>狀態</label>
-        <select id="so_status" onchange="onSOStatusChange_()">
-          <option value="OPEN">OPEN（開單中）</option>
-          <option value="PARTIAL">PARTIAL（部分出貨）</option>
-          <option value="SHIPPED">SHIPPED（全數出貨）</option>
-          <option value="CANCELLED">CANCELLED（已取消）</option>
-        </select>
-      </div>
-
       <div class="form-group full-width">
         <label>備註</label>
         <input type="text" id="so_remark">
@@ -49,6 +40,7 @@
 
     <div class="button-group">
       <button class="btn-secondary" id="so_update_btn" onclick="updateSalesOrder(this)">更新</button>
+      <button class="btn-secondary" id="so_cancel_btn" onclick="cancelSalesOrder(this)">作廢</button>
       <button class="btn-secondary" onclick="resetSOForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('sales_order', document.getElementById('so_id')?.value || '', 'sales')">Log</button>
     </div>
@@ -108,7 +100,7 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th>項次</th>
             <th>產品（規格）</th>
             <th>訂購數量</th>
             <th>已出貨</th>
@@ -142,7 +134,7 @@
   </div>
   <div class="card-body">
     <div class="search-toolbar" style="margin-bottom:12px;">
-      <input type="text" id="so_search_keyword" placeholder="關鍵字（銷售單／客戶）" style="min-width:240px;" title="比對銷售單ID、客戶ID">
+      <input type="text" id="so_search_keyword" placeholder="關鍵字（銷售單／客戶／業務）" style="min-width:260px;" title="比對銷售單ID、客戶ID／名稱、業務員ID／姓名">
       <select id="so_search_status">
         <option value="">全部狀態</option>
         <option value="OPEN">OPEN（開單中）</option>

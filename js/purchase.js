@@ -10,6 +10,7 @@ let poSuppliers = [];
 let purchaseSort = { field:"", asc:true };
 let poReadOnly = false;
 let poSelectedDbItemId_ = "";
+let poLoadedSnapshot_ = ""; // 用於判斷「是否有變更」
 
 const PO_RULES = {
   idRegex: /^[A-Z0-9_-]+$/,
@@ -39,7 +40,15 @@ async function purchaseInit(){
   bindUppercaseIdInput("po_id");
   await initPurchaseDropdowns();
   resetPOForm();
-  setPOReceiptState_("收貨狀態：未載入採購單", "warn");
+  setPOReceiptState_("收貨狀態：未載入 — 請先載入採購單", "warn");
+  // 主檔變更時，更新「更新」按鈕可用性
+  ["po_supplier_id","po_order_date","po_expected_arrival_date","po_document_link","po_remark"].forEach(function(id){
+    const el = document.getElementById(id);
+    if(!el || el.dataset.poDirtyBound) return;
+    el.dataset.poDirtyBound = "1";
+    el.addEventListener("input", updatePOUpdateBtnState_);
+    el.addEventListener("change", updatePOUpdateBtnState_);
+  });
   bindAutoSearchToolbar_([
     ["search_po_keyword", "input"],
     ["search_po_status", "change"]
@@ -66,14 +75,11 @@ function updatePOFlowHint_(){
     return;
   }
   if(poEditing){
-    const st = (document.getElementById("po_status")?.value || "OPEN").trim().toUpperCase();
     el.textContent =
-      "採購流程：已載入 — " +
-      (typeof termLabel === "function" ? termLabel(st) : st) +
-      " — 變更後按「更新」（主檔區或明細下方皆可，功能相同）";
+      "採購流程：已載入 — 狀態由系統依收貨單自動維護（有未作廢收貨單→CLOSED；否則 OPEN）";
     return;
   }
-  el.textContent = "採購流程：新單 — 填主檔與明細後按明細下方「建立」開單";
+  el.textContent = "採購流程：新單 — 填主檔與明細後按下方「建立」開單";
 }
 
 function setPOReadOnly_(readOnly){
@@ -86,7 +92,11 @@ function setPOReadOnly_(readOnly){
   if(updateBtn) updateBtn.disabled = poReadOnly || !poEditing;
   if(addBtn) addBtn.disabled = poReadOnly;
   if(itemsSaveBtn) itemsSaveBtn.disabled = poReadOnly || !poEditing;
+  if(itemsSaveBtn && (poReadOnly || !poEditing)){
+    itemsSaveBtn.title = poReadOnly ? "已有收貨紀錄（僅可檢視）" : "請先載入採購單";
+  }
   updatePOFlowHint_();
+  updatePOUpdateBtnState_();
 }
 
 function formatPOProductDisplay_(productId, productName, productSpec){
@@ -94,8 +104,62 @@ function formatPOProductDisplay_(productId, productName, productSpec){
   const name = String(productName || id || "").trim();
   const spec = String(productSpec || "").trim();
   if(!name && !id) return "";
-  if(spec) return `${name} (${id} / ${spec})`;
-  return id ? `${name} (${id})` : name;
+  // 對齊其他模組：產品名稱（規格）；不把 product_id 混在同一段顯示字串
+  if(spec) return `${name}（${spec}）`;
+  return name || id;
+}
+
+function poBuildSnapshot_(){
+  const po_id = (document.getElementById("po_id")?.value || "").trim().toUpperCase();
+  const supplier_id = (document.getElementById("po_supplier_id")?.value || "").trim();
+  const order_date = document.getElementById("po_order_date")?.value || "";
+  const expected_arrival_date = document.getElementById("po_expected_arrival_date")?.value || "";
+  const document_link = (document.getElementById("po_document_link")?.value || "").trim();
+  const remark = (document.getElementById("po_remark")?.value || "").trim();
+  const header = { po_id, supplier_id, order_date, expected_arrival_date, document_link, remark };
+  const items = (poItemsDraft || []).map(it => ({
+    product_id: it.product_id,
+    order_qty: Number(it.order_qty || 0),
+    unit: it.unit || "",
+    remark: it.remark || ""
+  }));
+  // 以顯示順序做穩定比較
+  return JSON.stringify({ header, items });
+}
+
+function updatePOUpdateBtnState_(){
+  const updateBtn = document.getElementById("po_update_btn");
+  if(!updateBtn) return;
+  if(!poEditing){
+    updateBtn.disabled = true;
+    updateBtn.title = "請先載入採購單";
+    // 明細區的更新按鈕也同步提示
+    const itemsSaveBtn = document.getElementById("po_items_save_btn");
+    if(itemsSaveBtn){
+      itemsSaveBtn.disabled = true;
+      itemsSaveBtn.title = "請先載入採購單";
+    }
+    return;
+  }
+  if(poReadOnly){
+    updateBtn.disabled = true;
+    updateBtn.title = "已有收貨紀錄（僅可檢視）";
+    const itemsSaveBtn = document.getElementById("po_items_save_btn");
+    if(itemsSaveBtn){
+      itemsSaveBtn.disabled = true;
+      itemsSaveBtn.title = "已有收貨紀錄（僅可檢視）";
+    }
+    return;
+  }
+  const cur = poBuildSnapshot_();
+  const dirty = !!cur && cur !== poLoadedSnapshot_;
+  updateBtn.disabled = !dirty;
+  updateBtn.title = dirty ? "更新此採購單" : "沒有變更，不需要更新";
+  const itemsSaveBtn = document.getElementById("po_items_save_btn");
+  if(itemsSaveBtn){
+    itemsSaveBtn.disabled = !dirty;
+    itemsSaveBtn.title = dirty ? "更新此採購單" : "沒有變更，不需要更新";
+  }
 }
 
 async function hasPOReceipts_(poId){
@@ -147,7 +211,7 @@ async function initPurchaseDropdowns(){
       products.map(p=>{
         const name = String(p.product_name || "").trim();
         const spec = String(p.spec || "").trim();
-        const label = name ? (spec ? `${name} / ${spec}` : name) : (p.product_id || "");
+        const label = spec ? `${name}（${spec}）` : (name || (p.product_id || ""));
         return `<option value="${p.product_id}" data-unit="${p.unit}" data-spec="${(p.spec || "").replace(/"/g, "&quot;")}">${label}</option>`;
       }).join("");
   }
@@ -257,6 +321,7 @@ function addPOItemDraft(){
   document.getElementById("po_item_remark").value = "";
 
   renderPOItemsDraft();
+  updatePOUpdateBtnState_();
 }
 
 function removePOItemDraft(draftId){
@@ -266,6 +331,7 @@ function removePOItemDraft(draftId){
   if(String(poSelectedDbItemId_) === String(draftId)) poSelectedDbItemId_ = "";
   poItemsDraft = poItemsDraft.filter(it => it.draft_id !== draftId);
   renderPOItemsDraft();
+  updatePOUpdateBtnState_();
 }
 
 function renderPOItemsDraft(){
@@ -294,6 +360,7 @@ function renderPOItemsDraft(){
       </tr>
     `;
   });
+  updatePOUpdateBtnState_();
 }
 
 function resetPOForm(){
@@ -325,15 +392,21 @@ function resetPOForm(){
   const expectedEl = document.getElementById("po_expected_arrival_date");
   if(expectedEl) expectedEl.value = "";
 
-  const statusEl = document.getElementById("po_status");
-  if(statusEl) statusEl.value = "OPEN";
+  // po_status 已移除（狀態由系統維護）
 
   const remarkEl = document.getElementById("po_remark");
   if(remarkEl) remarkEl.value = "";
   const docLinkEl = document.getElementById("po_document_link");
   if(docLinkEl) docLinkEl.value = "";
-  setPOReceiptState_("收貨狀態：未載入採購單", "warn");
+  setPOReceiptState_("收貨狀態：未載入 — 請先載入採購單", "warn");
   updatePOFlowHint_();
+  const cancelBtn = document.getElementById("po_cancel_btn");
+  if(cancelBtn){
+    cancelBtn.disabled = true;
+    cancelBtn.title = "請先載入採購單";
+  }
+  poLoadedSnapshot_ = poBuildSnapshot_();
+  updatePOUpdateBtnState_();
 }
 
 async function createPurchaseOrder(triggerEl){
@@ -345,7 +418,7 @@ async function createPurchaseOrder(triggerEl){
   const supplier_id = (document.getElementById("po_supplier_id")?.value || "").trim();
   const order_date = document.getElementById("po_order_date")?.value || "";
   const expected_arrival_date = document.getElementById("po_expected_arrival_date")?.value || "";
-  const status = document.getElementById("po_status")?.value || "OPEN";
+  const status = "OPEN"; // 狀態由系統依收貨單自動維護
   const document_link = (document.getElementById("po_document_link")?.value || "").trim();
   const remark = (document.getElementById("po_remark")?.value || "").trim();
 
@@ -354,7 +427,6 @@ async function createPurchaseOrder(triggerEl){
   if(!PO_RULES.idRegex.test(po_id)) return showToast("採購單號只能使用 A-Z 0-9 _ -","error");
   if(!supplier_id) return showToast("請選擇供應商","error");
   if(!order_date) return showToast("請填寫下單日期","error");
-  if(!["OPEN","PARTIAL","CLOSED"].includes(status)) return showToast("狀態不合法","error");
   if(poItemsDraft.length === 0) return showToast("請至少新增 1 筆品項","error");
 
   showSaveHint(triggerEl || document.getElementById("poItemsCommitGroup"));
@@ -409,7 +481,7 @@ async function createPurchaseOrder(triggerEl){
 
 async function loadPurchaseOrder(poId){
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
-  setPOReceiptState_("收貨狀態：檢查中", "warn");
+  setPOReceiptState_("收貨狀態：檢查中…", "warn");
   const header = await getOne("purchase_order", "po_id", poId);
   if(!header) return showToast("找不到採購單","error");
 
@@ -423,7 +495,7 @@ async function loadPurchaseOrder(poId){
   document.getElementById("po_supplier_id").value = header.supplier_id || "";
   document.getElementById("po_order_date").value = header.order_date || "";
   document.getElementById("po_expected_arrival_date").value = header.expected_arrival_date || "";
-  document.getElementById("po_status").value = header.status || "OPEN";
+  // po_status 已移除（狀態由系統維護）
   document.getElementById("po_remark").value = header.remark || "";
 
   // 載入明細（產品名稱由 poProducts 在 render 時解析）
@@ -442,8 +514,22 @@ async function loadPurchaseOrder(poId){
 
   const locked = await hasPOReceipts_(poId);
   setPOReadOnly_(locked);
+  const cancelBtn = document.getElementById("po_cancel_btn");
+  if(cancelBtn){
+    const hs = String(header.status || "").toUpperCase();
+    if(hs === "CANCELLED"){
+      cancelBtn.disabled = true;
+      cancelBtn.title = "此採購單已作廢";
+    }else if(locked){
+      cancelBtn.disabled = true;
+      cancelBtn.title = "此採購單已有未作廢收貨單，請先作廢所有收貨單";
+    }else{
+      cancelBtn.disabled = false;
+      cancelBtn.title = "作廢此採購單（需先無有效收貨單）";
+    }
+  }
   setPOReceiptState_(
-    locked ? "收貨狀態：已收貨（整張採購單不可修改）" : "收貨狀態：未收貨（可編輯）",
+    locked ? "收貨狀態：已載入 — 已收貨（僅可檢視）" : "收貨狀態：已載入 — 未收貨（可編輯）",
     locked ? "error" : "ok"
   );
   if(locked){
@@ -451,6 +537,8 @@ async function loadPurchaseOrder(poId){
   }
 
   renderPOItemsDraft();
+  poLoadedSnapshot_ = poBuildSnapshot_();
+  updatePOUpdateBtnState_();
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
 }
 
@@ -462,20 +550,20 @@ async function updatePurchaseOrder(triggerEl){
   const supplier_id = (document.getElementById("po_supplier_id")?.value || "").trim();
   const order_date = document.getElementById("po_order_date")?.value || "";
   const expected_arrival_date = document.getElementById("po_expected_arrival_date")?.value || "";
-  const status = document.getElementById("po_status")?.value || "";
   const document_link = (document.getElementById("po_document_link")?.value || "").trim();
   const remark = (document.getElementById("po_remark")?.value || "").trim();
 
   if(!po_id) return showToast("採購單號必填","error");
   if(!supplier_id) return showToast("請選擇供應商","error");
   if(!order_date) return showToast("請填寫下單日期","error");
-  if(!["OPEN","PARTIAL","CLOSED"].includes(status)) return showToast("狀態不合法","error");
   if(poItemsDraft.length === 0) return showToast("請至少保留 1 筆品項","error");
 
-  // 狀態為 CLOSED 的採購單不允許再修改
+  // 狀態為 CLOSED/CANCELLED 的採購單不允許再修改
   const header = await getOne("purchase_order","po_id",po_id).catch(()=>null);
-  if(header && String(header.status || "").toUpperCase() === "CLOSED"){
-    return showToast("此採購單已結案 (CLOSED)，不可再修改。", "error");
+  if(header){
+    const hs = String(header.status || "").toUpperCase();
+    if(hs === "CLOSED") return showToast("此採購單已結案 (CLOSED)，不可再修改。", "error");
+    if(hs === "CANCELLED") return showToast("此採購單已取消 (CANCELLED)，不可再修改。", "error");
   }
 
   showSaveHint(triggerEl || document.getElementById("poItemsCommitGroup"));
@@ -484,7 +572,8 @@ async function updatePurchaseOrder(triggerEl){
     supplier_id,
     order_date,
     expected_arrival_date,
-    status,
+    // 狀態由系統依收貨單自動維護；此處維持原值
+    status: header?.status || "OPEN",
     document_link,
     remark,
     updated_by: getCurrentUser(),
@@ -531,26 +620,30 @@ async function updatePurchaseOrder(triggerEl){
 
   await renderPurchaseOrders();
   showToast("採購單更新成功");
+  poLoadedSnapshot_ = poBuildSnapshot_();
+  updatePOUpdateBtnState_();
   } finally { hideSaveHint(); }
 }
 
 async function renderPurchaseOrders(list=null){
-  if(!list){
-    list = await getAll("purchase_order");
-  }
-
   const tbody = document.getElementById("poTableBody");
   if(!tbody) return;
 
+  let listResolved = list;
+  if(listResolved == null){
+    setTbodyLoading_(tbody, 7);
+    listResolved = await getAll("purchase_order");
+  }
+
   tbody.innerHTML = "";
-  if (!list.length) {
+  if (!listResolved.length) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:24px;">尚無採購單。請先至「產品」「供應商」建立主檔，再在此建立採購單。</td></tr>';
     return;
   }
   const supMap = {};
   (poSuppliers || []).forEach(s => { if(s && s.supplier_id) supMap[s.supplier_id] = s; });
 
-  list.forEach(po => {
+  listResolved.forEach(po => {
     const sid = po.supplier_id || "";
     const s = supMap[sid] || null;
     const supplierNameOnly = (s && s.supplier_name) ? s.supplier_name : sid;
@@ -577,12 +670,14 @@ async function renderPurchaseOrders(list=null){
 }
 
 async function sortPurchaseOrders(field){
+  setTbodyLoading_("poTableBody", 7);
   const list = await getAll("purchase_order");
   const sorted = applySorting(list, field, purchaseSort);
   renderPurchaseOrders(sorted);
 }
 
 async function searchPurchaseOrders(){
+  setTbodyLoading_("poTableBody", 7);
   const kw = (document.getElementById("search_po_keyword")?.value || "").trim().toLowerCase();
   const status = document.getElementById("search_po_status")?.value || "";
 
@@ -599,6 +694,47 @@ async function searchPurchaseOrders(){
     return matchKw && (!status || po.status === status);
   });
   renderPurchaseOrders(result);
+}
+
+async function cancelPurchaseOrder(triggerEl){
+  if(!poEditing) return showToast("請先載入一張採購單再作廢","error");
+  const po_id = (document.getElementById("po_id")?.value || "").trim().toUpperCase();
+  if(!po_id) return showToast("採購單號缺失","error");
+
+  showSaveHint(triggerEl || document.getElementById("poItemsCommitGroup"));
+  try{
+    const header = await getOne("purchase_order","po_id",po_id).catch(()=>null);
+    if(!header) return showToast("找不到採購單","error");
+    const st = String(header.status || "").toUpperCase();
+    if(st === "CANCELLED") return showToast("此採購單已作廢","error");
+
+    const hasReceipt = await hasPOReceipts_(po_id);
+    if(hasReceipt){
+      return showToast("此採購單已有未作廢收貨紀錄，請先至「收貨入庫」作廢所有收貨單後再作廢採購單。","error");
+    }
+
+    const note = prompt("作廢原因（可留空）") ?? "";
+    if(!confirm(`確定作廢此採購單？\n- PO：${po_id}\n\n限制：需先作廢所有收貨單。`)) return;
+
+    const prevRemark = String(header.remark || "").trim();
+    const nextRemark = String(note).trim()
+      ? (prevRemark ? `${prevRemark}\n[作廢 ${nowIso16()} ${getCurrentUser()}] ${String(note).trim()}` : `[作廢 ${nowIso16()} ${getCurrentUser()}] ${String(note).trim()}`)
+      : prevRemark;
+
+    await updateRecord("purchase_order","po_id",po_id,{
+      status: "CANCELLED",
+      ...(nextRemark ? { remark: nextRemark } : {}),
+      updated_by: getCurrentUser(),
+      updated_at: nowIso16()
+    });
+
+    if(typeof invalidateCache === "function") invalidateCache("purchase_order");
+    await renderPurchaseOrders();
+    await loadPurchaseOrder(po_id);
+    showToast("採購單已作廢（CANCELLED）");
+  } finally {
+    hideSaveHint();
+  }
 }
 
 async function resetPurchaseSearch(){

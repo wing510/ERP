@@ -69,8 +69,8 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-primary" onclick="createCustomer(this)">建立</button>
-      <button class="btn-secondary" onclick="updateCustomer(this)">更新</button>
+      <button class="btn-primary" id="c_create_btn" onclick="createCustomer(this)">建立</button>
+      <button class="btn-secondary" id="c_update_btn" onclick="updateCustomer(this)">更新</button>
       <button class="btn-secondary" onclick="clearCustomerForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('customer', document.getElementById('c_id')?.value || '', 'master')">Log</button>
     </div>
@@ -92,7 +92,7 @@
   <div class="card-body">
 
     <div class="search-toolbar">
-      <input type="text" id="search_customer_keyword" placeholder="關鍵字（ID／名稱／聯絡／電話／Email）" style="min-width:260px;" title="比對客戶ID、名稱、聯絡人、電話、Email">
+      <input type="text" id="search_customer_keyword" placeholder="關鍵字（ID／名稱／類別／聯絡／電話／Email）" style="min-width:280px;" title="比對客戶ID、名稱、類別、聯絡人、電話、Email">
       <select id="search_customer_status">
         <option value="">全部狀態</option>
         <option value="ACTIVE">ACTIVE（使用中）</option>

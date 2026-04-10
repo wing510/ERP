@@ -19,6 +19,19 @@ async function suppliersInit(){
   clearSupplierForm();
 }
 
+function setSupplierButtons_(){
+  const createBtn = document.getElementById("s_create_btn");
+  const updateBtn = document.getElementById("s_update_btn");
+  if(createBtn){
+    createBtn.disabled = !!supplierEditing;
+    createBtn.title = supplierEditing ? "已載入供應商，請用更新" : "建立新供應商";
+  }
+  if(updateBtn){
+    updateBtn.disabled = !supplierEditing;
+    updateBtn.title = supplierEditing ? "更新此供應商" : "請先載入供應商";
+  }
+}
+
 /* ===== 建立 ===== */
 async function createSupplier(triggerEl){
 
@@ -64,6 +77,7 @@ async function createSupplier(triggerEl){
 
   showToast("供應商建立成功");
   } finally { hideSaveHint(); }
+  setSupplierButtons_();
 }
 
 /* ===== 更新 ===== */
@@ -122,6 +136,7 @@ async function updateSupplier(triggerEl){
 
   showToast("供應商更新成功");
   } finally { hideSaveHint(); }
+  setSupplierButtons_();
 }
 
 /* ===== 清除 ===== */
@@ -135,6 +150,7 @@ function clearSupplierForm(){
 
   s_status.value="ACTIVE";
   s_id.value = generateShortId("S");
+  setSupplierButtons_();
 }
 
 /* ===== 載入 ===== */
@@ -157,17 +173,19 @@ async function loadSupplier(id){
 
   s_id.disabled=true;
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
+  setSupplierButtons_();
 }
 
 /* ===== Render ===== */
 async function renderSuppliers(list=null){
 
-  if(!list){
-    list = await getAll("supplier");
-  }
-
   const tbody=document.getElementById("supplierTableBody");
   if(!tbody) return;
+
+  if(!list){
+    setTbodyLoading_(tbody, 6);
+    list = await getAll("supplier");
+  }
 
   tbody.innerHTML="";
   if(!list.length){
@@ -204,7 +222,7 @@ async function renderSuppliers(list=null){
 let supplierSort = { field:"", asc:true };
 
 async function sortSuppliers(field){
-
+  setTbodyLoading_("supplierTableBody", 6);
   const list = [...(await getAll("supplier"))];
 
   if(supplierSort.field===field){
@@ -231,6 +249,7 @@ async function sortSuppliers(field){
 
 /* ===== 搜尋 ===== */
 async function searchSuppliers(){
+  setTbodyLoading_("supplierTableBody", 6);
 
   const kw = (document.getElementById("search_supplier_keyword")?.value || "").trim().toLowerCase();
   const status = document.getElementById("search_supplier_status")?.value || "";

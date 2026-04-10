@@ -51,10 +51,11 @@ function invNormalizeId_(s){
  * @param {Array<object>} movements
  */
 function invAvailableByLotId_(lotId, lots, movements){
-  const lid = String(lotId || "");
-  const rows = (movements || []).filter(m => String(m.lot_id||"") === lid);
+  const lid = invNormalizeId_(lotId);
+  if(!lid) return 0;
+  const rows = (movements || []).filter(m => invNormalizeId_(m.lot_id) === lid);
   if(!rows.length){
-    const lot = (lots || []).find(l => String(l.lot_id||"") === lid);
+    const lot = (lots || []).find(l => invNormalizeId_(l.lot_id) === lid);
     return Number(lot?.qty || 0);
   }
   return rows.reduce((sum, m) => sum + Number(m.qty || 0), 0);

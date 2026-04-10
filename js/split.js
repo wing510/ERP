@@ -5,21 +5,28 @@
  */
 
 let splitLots = [];
-let splitMovements = [];
+/** lot_id -> 可用量（來自後端彙總 API，避免全表 inventory_movement） */
+let splitAvailByLotId_ = {};
+let splitMovementLoadFailed_ = false;
 let splitDraft = [];
+let splitPosting_ = false;
 
 async function splitInit(){
   await loadSplitCaches();
   resetSplit();
+  setSplitButtons_();
 }
 
 async function loadSplitCaches(){
-  const [lots, movements] = await Promise.all([
+  const [lots, availPack] = await Promise.all([
     getAll("lot"),
-    getAll("inventory_movement").catch(() => [])
+    typeof loadInventoryMovementAvailableMap_ === "function"
+      ? loadInventoryMovementAvailableMap_()
+      : Promise.resolve({ map: {}, failed: true })
   ]);
   splitLots = lots || [];
-  splitMovements = movements || [];
+  splitAvailByLotId_ = (availPack && availPack.map) || {};
+  splitMovementLoadFailed_ = !!(availPack && availPack.failed);
 
   const sel = document.getElementById("split_source_lot");
   if(sel){
@@ -28,13 +35,21 @@ async function loadSplitCaches(){
       `<option value="">請選擇來源 Lot</option>` +
       lots.map(l => {
         const av = splitGetAvailable(l.lot_id);
-        return `<option value="${l.lot_id}" data-product="${l.product_id}" data-unit="${l.unit}" data-av="${av}">${l.lot_id} (${l.product_id}) 可用:${av}</option>`;
+        return `<option value="${l.lot_id}" data-product="${l.product_id}" data-unit="${l.unit}" data-av="${av}">${l.lot_id} 可用:${av}</option>`;
       }).join("");
   }
 }
 
 function splitGetAvailable(lotId){
-  return splitMovements.filter(m => m.lot_id === lotId).reduce((sum, m) => sum + Number(m.qty||0), 0);
+  const id = String(lotId || "");
+  if (!id) return 0;
+  const hit = splitAvailByLotId_[id];
+  if (hit != null) return Number(hit || 0);
+  if (splitMovementLoadFailed_) {
+    const lot = (splitLots || []).find(l => String(l.lot_id || "") === id);
+    return Number(lot?.qty || 0);
+  }
+  return 0;
 }
 
 function onSelectSplitSource(){
@@ -47,6 +62,7 @@ function onSelectSplitSource(){
 
   document.getElementById("split_new_unit").value = opt.getAttribute("data-unit") || "";
   document.getElementById("split_new_lot_id").value = generateId("LOT");
+  setSplitButtons_();
 }
 
 function resetSplit(){
@@ -63,6 +79,7 @@ function resetSplit(){
   document.getElementById("split_new_qty").value = "";
   document.getElementById("split_new_unit").value = "";
   document.getElementById("split_new_remark").value = "";
+  setSplitButtons_();
 }
 
 function addSplitDraft(){
@@ -93,11 +110,13 @@ function addSplitDraft(){
   document.getElementById("split_new_remark").value = "";
 
   renderSplitDraft();
+  setSplitButtons_();
 }
 
 function removeSplitDraft(draftId){
   splitDraft = splitDraft.filter(x => x.draft_id !== draftId);
   renderSplitDraft();
+  setSplitButtons_();
 }
 
 function renderSplitDraft(){
@@ -116,6 +135,27 @@ function renderSplitDraft(){
       </tr>
     `;
   });
+  setSplitButtons_();
+}
+
+function setSplitButtons_(){
+  const addBtn = document.getElementById("split_add_btn");
+  const postBtn = document.getElementById("split_post_btn");
+  const hasSource = !!(document.getElementById("split_source_lot")?.value || "");
+  const hasLines = (splitDraft || []).length > 0;
+  if(addBtn){
+    addBtn.disabled = splitPosting_;
+    addBtn.title = splitPosting_ ? "過帳中…" : "新增拆出批次";
+  }
+  if(postBtn){
+    const can = !splitPosting_ && hasSource && hasLines;
+    postBtn.disabled = !can;
+    postBtn.title =
+      splitPosting_ ? "過帳中…" :
+      (!hasSource ? "請先選擇來源 Lot" :
+      (!hasLines ? "請至少新增 1 筆新批次" :
+      "確認拆批（過帳）"));
+  }
 }
 
 async function postSplit(triggerEl){
@@ -133,6 +173,8 @@ async function postSplit(triggerEl){
   const refId = generateId("SPLIT");
 
   showSaveHint(triggerEl || document.getElementById("splitPostButtonGroup"));
+  splitPosting_ = true;
+  setSplitButtons_();
   try {
   // source OUT
   await createRecord("inventory_movement", {
@@ -216,6 +258,8 @@ async function postSplit(triggerEl){
   resetSplit();
   } finally {
     hideSaveHint();
+    splitPosting_ = false;
+    setSplitButtons_();
   }
 }
 

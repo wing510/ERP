@@ -7,6 +7,9 @@
 let mvLots = [];
 let mvProducts = [];
 let mvMovements = [];
+/** 與 Lots 相同：後端全量彙總 lot_id -> sum(qty)，供下拉「可用」與扣庫上限（不依賴近 N 天 movements） */
+let mvAvailByLotId_ = {};
+let mvAvailMapOk_ = false;
 let mvUsers = [];
 let mvCustomers = [];
 let mvWarehouses = [];
@@ -37,11 +40,90 @@ async function movementsInit(){
   await initMovementLotDropdown();
   await mvInitWarehouseDropdown_();
   mvInitIssuedToDropdown_();
+  bindAutoSearchToolbar_([
+    ["mv_search_keyword", "input"],
+    ["mv_filter_movement_type", "change"]
+  ], () => renderMovementTable());
   renderMovementTable();
 }
 
+function resetMvListSearch(){
+  const el = document.getElementById("mv_search_keyword");
+  const mt = document.getElementById("mv_filter_movement_type");
+  if(el) el.value = "";
+  if(mt) mt.value = "";
+  renderMovementTable();
+}
+
+function mvGetMovementSearchKw_(){
+  return (document.getElementById("mv_search_keyword")?.value || "").trim().toLowerCase();
+}
+
+function mvMovementRowMatchesKeyword_(m, kw){
+  if(!kw) return true;
+  const lot = mvFindLot_(m.lot_id);
+  const p = lot ? mvFindProduct_(lot.product_id) : mvFindProduct_(m.product_id);
+  const pid = String(m.product_id || lot?.product_id || "").toLowerCase();
+  const pname = String(p?.product_name || "").toLowerCase();
+  const pspec = String(p?.spec || "").toLowerCase();
+  const whText = String(mvWarehouseLabelById_(m.warehouse_id) || m.warehouse_id || "").toLowerCase();
+  const mtCode = String(m.movement_type || "").toLowerCase();
+  const mtLabel = String(typeof termLabel === "function" ? termLabel(m.movement_type) : "").toLowerCase();
+  const hay = [
+    m.lot_id,
+    m.movement_id,
+    m.movement_type,
+    mtLabel,
+    m.ref_type,
+    m.ref_id,
+    m.issued_to,
+    m.remark,
+    m.system_remark,
+    m.unit,
+    m.warehouse_id,
+    whText,
+    pid,
+    pname,
+    pspec,
+    lot?.source_id,
+    lot?.source_type,
+    lot?.remark
+  ].filter(Boolean).join(" ").toLowerCase();
+  return hay.includes(kw);
+}
+
+function mvIsTransferMode_(){
+  return !!String(document.getElementById("mv_transfer_wh")?.value || "").trim();
+}
+
+function mvFillTransferAllQty_(){
+  // 轉倉修正用：一鍵帶入目前 Lot 的「全部可用量」
+  if(!mvIsTransferMode_()){
+    return showToast("請先選擇「轉倉到」才可使用『轉全部』", "error");
+  }
+  const lotId = String(document.getElementById("mv_lot")?.value || "").trim();
+  if(!lotId) return showToast("請先選擇 Lot（可從下方列表點選）", "error");
+  const qtyEl = document.getElementById("mv_qty");
+  if(!qtyEl) return;
+  const av = getMovementAvailableByLotId(lotId);
+  qtyEl.value = String(Math.max(0, Number(av || 0)));
+}
+
 async function refreshMovementData(){
-  const [lots, products, warehouses, importReceipts, goodsReceipts, importDocs, users, customers] = await Promise.all([
+  const mvTb = document.getElementById("movementTableBody");
+  if(mvTb) setTbodyLoading_(mvTb, 7);
+  const [
+    lots,
+    products,
+    warehouses,
+    importReceipts,
+    goodsReceipts,
+    importDocs,
+    users,
+    customers,
+    availPack,
+    movements
+  ] = await Promise.all([
     getAll("lot"),
     getAll("product").catch(() => []),
     getAll("warehouse").catch(() => []),
@@ -49,7 +131,21 @@ async function refreshMovementData(){
     getAll("goods_receipt").catch(() => []),
     getAll("import_document").catch(() => []),
     getAll("user").catch(() => []),
-    getAll("customer").catch(() => [])
+    getAll("customer").catch(() => []),
+    typeof loadInventoryMovementAvailableMap_ === "function"
+      ? loadInventoryMovementAvailableMap_().catch(() => ({ map: {}, failed: true }))
+      : Promise.resolve({ map: {}, failed: true }),
+    (async ()=>{
+      // Movements 清單：優先只取近 N 天，避免 inventory_movement 全表下載造成卡頓
+      try{
+        const r = await callAPI({ action: "list_inventory_movement_recent", days: 90, _ts: String(Date.now()) }, { method: "POST" });
+        const rows = typeof erpParseArrayDataResponse_ === "function" ? erpParseArrayDataResponse_(r) : [];
+        if(Array.isArray(rows) && rows.length) return rows;
+        return [];
+      }catch(_e){
+        return await getAll("inventory_movement").catch(() => []);
+      }
+    })()
   ]);
   mvLots = lots || [];
   mvProducts = products || [];
@@ -76,15 +172,24 @@ async function refreshMovementData(){
     }
   });
 
-  try{
-    const core = await loadInventoryCoreData_({ needWarehouses: false });
-    mvMovements = core.movements || [];
-  }catch(_e){
-    if(typeof showToast === "function"){
-      showToast("讀取庫存異動失敗，暫沿用上次資料。", "error");
-    }
-    if(!Array.isArray(mvMovements)) mvMovements = [];
-  }
+  mvAvailByLotId_ = (availPack && availPack.map) || {};
+  mvAvailMapOk_ = !!(availPack && !availPack.failed);
+
+  // Movements 列表：預設近 90 天清單（後端支援）；若 fallback 則可能是全量
+  mvMovements = Array.isArray(movements) ? movements : [];
+}
+
+function mvMergeMovements_(rows){
+  const add = Array.isArray(rows) ? rows : [];
+  if(!add.length) return;
+  mvMovements = Array.isArray(mvMovements) ? mvMovements : [];
+  const seen = new Set(mvMovements.map(r => String(r?.movement_id || "")));
+  add.forEach(r=>{
+    const id = String(r?.movement_id || "");
+    if(!id || seen.has(id)) return;
+    mvMovements.unshift(r);
+    seen.add(id);
+  });
 }
 
 function mvWarehouseLabelById_(warehouseId){
@@ -142,11 +247,34 @@ function mvInitIssuedToDropdown_(){
 }
 
 function mvFindLot_(lotId){
-  return (mvLots || []).find(l => (l.lot_id || "") === lotId) || null;
+  const id = String(lotId || "").trim();
+  if(!id) return null;
+  return (mvLots || []).find(l => String(l.lot_id || "").trim() === id) || null;
 }
 
 function mvFindProduct_(productId){
-  return (mvProducts || []).find(p => (p.product_id || "") === productId) || null;
+  const id = String(productId || "").trim();
+  if(!id) return null;
+  return (mvProducts || []).find(p => String(p.product_id || "").trim() === id) || null;
+}
+
+function mvQaText_(qa){
+  const s = String(qa || "PENDING").toUpperCase();
+  if(s === "APPROVED") return "QA已放行";
+  if(s === "REJECTED") return "QA已退回";
+  return "待QA";
+}
+
+function mvFormatLotOptionText_(lot, available){
+  const lotId = String(lot?.lot_id || "");
+  const p = mvFindProduct_(lot?.product_id || "");
+  const pname = p ? (p.product_name || lot?.product_id || "") : (lot?.product_id || "");
+  const spec = p && String(p.spec || "").trim() ? String(p.spec).trim() : "";
+  const prodText = spec ? `${pname}（${spec}）` : pname;
+  const whText = mvWarehouseLabelById_(lot?.warehouse_id || "") || (lot?.warehouse_id || "");
+  const qaText = mvQaText_(lot?.status || "PENDING");
+  const avText = `可用：${Math.round(Number(available || 0) * 10000) / 10000}`;
+  return [lotId, prodText, whText, qaText, avText].filter(Boolean).join("│");
 }
 
 /** 顯示「產品名稱（規格）」；無主檔時退回 product_id */
@@ -231,6 +359,15 @@ function mvGroupKeyForMovement_(m){
 }
 
 function getMovementAvailableByLotId(lotId){
+  const lid = typeof invNormalizeId_ === "function" ? invNormalizeId_(lotId) : String(lotId || "").trim().toUpperCase();
+  if(!lid) return 0;
+  if(mvAvailMapOk_ && mvAvailByLotId_ && Object.prototype.hasOwnProperty.call(mvAvailByLotId_, lid)){
+    return Number(mvAvailByLotId_[lid] || 0);
+  }
+  const rawKey = String(lotId || "").trim();
+  if(mvAvailMapOk_ && rawKey && mvAvailByLotId_ && Object.prototype.hasOwnProperty.call(mvAvailByLotId_, rawKey)){
+    return Number(mvAvailByLotId_[rawKey] || 0);
+  }
   return invAvailableByLotId_(lotId, mvLots, mvMovements);
 }
 
@@ -239,6 +376,8 @@ function mvCanManualOut_(lot){
   if(!lot) return false;
   if((lot.status || "PENDING") !== "APPROVED") return false;
   if((lot.inventory_status || "ACTIVE") !== "ACTIVE") return false;
+  // 過期 Lot 不可手動扣庫
+  if(typeof invIsExpired_ === "function" && invIsExpired_(lot.expiry_date)) return false;
   return true;
 }
 
@@ -254,7 +393,17 @@ function mvUpdateMvQtyState_(){
     return;
   }
   const lot = mvFindLot_(lotId);
-  const ok = mvCanManualOut_(lot);
+  const isTransfer = mvIsTransferMode_();
+  let ok = false;
+  if(isTransfer){
+    if(lot){
+      const invOk = String(lot.inventory_status || "ACTIVE").toUpperCase() === "ACTIVE";
+      const st = String(lot.status || "PENDING").toUpperCase();
+      ok = invOk && st !== "REJECTED";
+    }
+  }else{
+    ok = mvCanManualOut_(lot);
+  }
   qtyEl.disabled = !ok;
   if(!ok) qtyEl.value = "";
   mvUpdateActionMode_();
@@ -266,12 +415,33 @@ function mvUpdateActionMode_(){
   const transferBtn = document.getElementById("mv_transfer_btn");
   const purposeEl = document.getElementById("mv_purpose");
   const issuedToEl = document.getElementById("mv_issued_to");
+  const transferAllBtn = document.getElementById("mv_transfer_all_btn");
+  const lotId = String(document.getElementById("mv_lot")?.value || "").trim();
+  const qty = Number(document.getElementById("mv_qty")?.value || 0);
 
   const isTransfer = !!toWh;
-  if(createBtn) createBtn.disabled = isTransfer;
-  if(transferBtn) transferBtn.disabled = !isTransfer;
+  if(createBtn){
+    createBtn.disabled = isTransfer;
+    createBtn.title = isTransfer
+      ? "目前為轉倉模式，請用「轉倉」"
+      : (!lotId ? "請先選擇 Lot" : (!(qty > 0) ? "請先輸入數量（>0）" : "確認扣庫"));
+  }
+  if(transferBtn){
+    transferBtn.disabled = !isTransfer;
+    transferBtn.title = !isTransfer
+      ? "目前為手動扣庫模式，請用「確認扣庫」"
+      : (!lotId ? "請先選擇 Lot" : (!(qty > 0) ? "請先輸入數量（>0）" : "轉倉"));
+  }
   if(purposeEl) purposeEl.disabled = isTransfer;
   if(issuedToEl) issuedToEl.disabled = isTransfer;
+  if(transferAllBtn){
+    transferAllBtn.disabled = !isTransfer || !lotId;
+    transferAllBtn.title = !isTransfer ? "僅轉倉模式可用" : (!lotId ? "請先選擇 Lot" : "一鍵帶入全部可用量");
+  }
+  // 模式切換時，Lot 下拉也要跟著切換（扣庫 vs 轉倉）
+  initMovementLotDropdown().catch(()=>{});
+  // 同時重畫列表（游標/禁止狀態會依模式改變）
+  try{ renderMovementTable(); }catch(_e){}
 }
 
 /** 點列表列：帶入上方「選擇 Lot」（已退回等不可扣庫者不帶入） */
@@ -283,17 +453,33 @@ function mvSelectLotFromRow(el){
     if(typeof showToast === "function") showToast("找不到 Lot 主檔", "error");
     return;
   }
-  if((lot.status || "PENDING") === "REJECTED"){
-    if(typeof showToast === "function"){
-      showToast("此批次已退回（REJECTED），不可手動扣庫。", "error");
-    }
+  const isTransfer = mvIsTransferMode_();
+  if(typeof invIsExpired_ === "function" && invIsExpired_(lot.expiry_date)){
+    if(typeof showToast === "function") showToast("此批次已過期（VOID），不可操作。", "error");
     return;
   }
-  if(!mvCanManualOut_(lot)){
-    if(typeof showToast === "function"){
-      showToast("僅 QA 已放行（APPROVED）且庫存為使用中（ACTIVE）的批次可手動扣庫。", "error");
+  if(isTransfer){
+    if(String(lot.inventory_status || "ACTIVE").toUpperCase() !== "ACTIVE"){
+      if(typeof showToast === "function") showToast("僅庫存狀態為 ACTIVE 的批次可轉倉。", "error");
+      return;
     }
-    return;
+    if((lot.status || "PENDING") === "REJECTED"){
+      if(typeof showToast === "function") showToast("此批次已退回（REJECTED），不建議轉倉；請改用報廢或其他處置。", "error");
+      return;
+    }
+  }else{
+    if((lot.status || "PENDING") === "REJECTED"){
+      if(typeof showToast === "function"){
+        showToast("此批次已退回（REJECTED），不可手動扣庫。", "error");
+      }
+      return;
+    }
+    if(!mvCanManualOut_(lot)){
+      if(typeof showToast === "function"){
+        showToast("僅 QA已放行 且庫存為使用中（ACTIVE）的批次可手動扣庫。", "error");
+      }
+      return;
+    }
   }
 
   const sel = document.getElementById("mv_lot");
@@ -305,7 +491,8 @@ function mvSelectLotFromRow(el){
   if(!found){
     const opt = document.createElement("option");
     opt.value = lotId;
-    opt.textContent = `${lotId} (${lot.product_id || ""})（由下方列表點選）`;
+    const av = getMovementAvailableByLotId(lotId);
+    opt.textContent = mvFormatLotOptionText_(lot, av) + "（由下方列表點選）";
     sel.appendChild(opt);
   }
   sel.value = lotId;
@@ -322,20 +509,43 @@ function mvSelectLotFromRow(el){
 async function initMovementLotDropdown(){
   const sel = document.getElementById("mv_lot");
   if(!sel) return;
+  const prevSelected = String(sel.value || "").trim();
 
-  // 只顯示「庫存 ACTIVE 且 QA APPROVED」的 lot
-  const lots = (mvLots || []).filter(l =>
-    (l.inventory_status || "ACTIVE") === "ACTIVE" &&
-    (l.status || "PENDING") === "APPROVED"
-  );
+  const isTransfer = mvIsTransferMode_();
+  // 扣庫模式：只顯示 ACTIVE + APPROVED
+  // 轉倉模式：顯示 ACTIVE + (PENDING/APPROVED)，仍排除 REJECTED
+  const lots = (mvLots || []).filter(l => {
+    if(String(l.inventory_status || "ACTIVE").toUpperCase() !== "ACTIVE") return false;
+    if(typeof invIsExpired_ === "function" && invIsExpired_(l.expiry_date)) return false;
+    const st = String(l.status || "PENDING").toUpperCase();
+    if(isTransfer) return st !== "REJECTED";
+    return st === "APPROVED";
+  });
 
   sel.innerHTML =
     `<option value="">請選擇 Lot</option>` +
     lots.map(l => {
-      const qa = l.status || "PENDING";
       const available = getMovementAvailableByLotId(l.lot_id);
-      return `<option value="${l.lot_id}">${l.lot_id} (${l.product_id}) QA:${termLabel(qa)} 可用:${available}</option>`;
+      const text = mvFormatLotOptionText_(l, available);
+      return `<option value="${l.lot_id}">${escapeMvHtml_(text)}</option>`;
     }).join("");
+
+  // 保留先前已選的 Lot（避免模式切換/重畫下拉時跳回「請選擇 Lot」）
+  if(prevSelected){
+    let found = false;
+    for(let i = 0; i < sel.options.length; i++){
+      if(String(sel.options[i].value || "").trim() === prevSelected){ found = true; break; }
+    }
+    if(!found){
+      const lot = mvFindLot_(prevSelected);
+      const opt = document.createElement("option");
+      opt.value = prevSelected;
+      const av = lot ? getMovementAvailableByLotId(prevSelected) : 0;
+      opt.textContent = (lot ? mvFormatLotOptionText_(lot, av) : prevSelected) + "（由下方列表點選）";
+      sel.appendChild(opt);
+    }
+    sel.value = prevSelected;
+  }
   sel.onchange = function(){ mvUpdateMvQtyState_(); };
   mvUpdateMvQtyState_();
 }
@@ -356,6 +566,9 @@ async function createMovement(triggerEl){
   // 僅允許 QA APPROVED 的批次做 Manual OUT
   if((lot.status || "PENDING") !== "APPROVED"){
     return showToast("僅 APPROVED 批次可手動扣庫", "error");
+  }
+  if(typeof invIsExpired_ === "function" && invIsExpired_(lot.expiry_date)){
+    return showToast("此批次已過期（VOID），不可手動扣庫。", "error");
   }
 
   const available = getMovementAvailableByLotId(lot_id);
@@ -388,6 +601,7 @@ async function createMovement(triggerEl){
   };
 
   await createRecord("inventory_movement", movement);
+  try{ localStorage.setItem("erp_inventory_dirty_at", String(Date.now())); }catch(_e){}
 
   await refreshMovementData();
   await initMovementLotDropdown();
@@ -419,6 +633,9 @@ async function transferMovement(triggerEl){
   if(String(lot.inventory_status || "ACTIVE").toUpperCase() !== "ACTIVE"){
     return showToast("僅庫存狀態為 ACTIVE 的批次可轉倉", "error");
   }
+  if(typeof invIsExpired_ === "function" && invIsExpired_(lot.expiry_date)){
+    return showToast("此批次已過期（VOID），不可轉倉。", "error");
+  }
 
   const fromWh = String(lot.warehouse_id || "").trim().toUpperCase();
   if(fromWh && fromWh === toWh){
@@ -428,6 +645,16 @@ async function transferMovement(triggerEl){
   const available = getMovementAvailableByLotId(lot_id);
   if(qty > available){
     return showToast("轉倉數量不可超過可用量", "error");
+  }
+  // QA gate（你確認的新規則）：
+  // - 待QA：僅允許「全部轉」（qty == available）
+  // - 部分轉：必須 QA 放行（APPROVED）
+  const qa = String(lot.status || "PENDING").toUpperCase();
+  if(qa !== "APPROVED"){
+    const isAll = Math.abs(Number(qty || 0) - Number(available || 0)) <= 1e-9;
+    if(!isAll){
+      return showToast("部分轉倉需先 QA 放行（APPROVED）。待QA僅允許全部轉倉。", "error");
+    }
   }
 
   const newLotId = generateId("LOT");
@@ -464,7 +691,7 @@ async function transferMovement(triggerEl){
       system_remark: `轉倉自 ${lot_id}（${fromWhLabel} → ${toWhLabel}）`
     });
 
-    await createRecord("inventory_movement", {
+    const outMovement = {
       movement_id: generateId("MV"),
       movement_type: "OUT",
       lot_id: lot_id,
@@ -481,9 +708,10 @@ async function transferMovement(triggerEl){
       updated_by: "",
       updated_at: "",
       system_remark: `轉倉 OUT：${lot_id} → ${newLotId}（${fromWhLabel} → ${toWhLabel}）`
-    });
+    };
+    await createRecord("inventory_movement", outMovement);
 
-    await createRecord("inventory_movement", {
+    const inMovement = {
       movement_id: generateId("MV"),
       movement_type: "IN",
       lot_id: newLotId,
@@ -500,9 +728,27 @@ async function transferMovement(triggerEl){
       updated_by: "",
       updated_at: "",
       system_remark: `轉倉 IN：${newLotId} ← ${lot_id}（${fromWhLabel} → ${toWhLabel}）`
-    });
+    };
+    await createRecord("inventory_movement", inMovement);
+
+    // 轉倉後：強制讓其他頁面下次刷新時拿到最新可用量（避免快取造成兩邊都像有量）
+    try{
+      if(typeof invalidateCache === "function"){
+        invalidateCache("inventory_movement");
+        invalidateCache("lot");
+      }
+      try{
+        localStorage.setItem("erp_inventory_dirty_at", String(Date.now()));
+      }catch(_e){}
+    }catch(_e){}
+
+    // 立即反映在畫面（先合併到記憶體，避免後端 recent/快取延遲）
+    mvMergeMovements_([outMovement, inMovement]);
+    renderMovementTable();
 
     await refreshMovementData();
+    // refresh 可能回傳不含最新列（recent 篩選/延遲），再合併一次確保看得到
+    mvMergeMovements_([outMovement, inMovement]);
     await initMovementLotDropdown();
     await mvInitWarehouseDropdown_();
     mvInitIssuedToDropdown_();
@@ -514,6 +760,11 @@ async function transferMovement(triggerEl){
     if(rmEl) rmEl.value = "";
     const whEl = document.getElementById("mv_transfer_wh");
     if(whEl) whEl.value = "";
+    const allBtn = document.getElementById("mv_transfer_all_btn");
+    if(allBtn){
+      allBtn.disabled = true;
+      allBtn.title = "請先選擇 Lot（轉倉模式）";
+    }
     showToast(`已轉倉並產生新 Lot：${newLotId}`);
   }finally{
     hideSaveHint();
@@ -526,8 +777,22 @@ function renderMovementTable(){
 
   tbody.innerHTML = "";
 
+  const kw = mvGetMovementSearchKw_();
+  const qMt = (document.getElementById("mv_filter_movement_type")?.value || "").trim().toUpperCase();
   const raw = [...(mvMovements || [])];
-  const enriched = raw.map(m => {
+  const rawFiltered = raw.filter(m => {
+    if(qMt && String(m.movement_type || "").toUpperCase() !== qMt) return false;
+    return mvMovementRowMatchesKeyword_(m, kw);
+  });
+
+  if(!rawFiltered.length){
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#64748b;padding:24px;">${
+      kw || qMt ? "沒有符合條件的異動紀錄。" : "尚無庫存異動紀錄。"
+    }</td></tr>`;
+    return;
+  }
+
+  const enriched = rawFiltered.map(m => {
     const lot = mvFindLot_(m.lot_id);
     const key = mvGroupKeyForMovement_(m);
     return { m, lot, key };
@@ -557,13 +822,30 @@ function renderMovementTable(){
   function renderDataRow(m, lot){
     const productSpec = mvFormatProductSpec_(lot, m);
     const refHint = [m.ref_type, m.ref_id, m.issued_to].filter(Boolean).join(" ");
-    const canClick = mvCanManualOut_(lot);
-    const titleLot = canClick
-      ? escapeMvAttr_(`${m.lot_id || ""}${refHint ? "｜參考：" + refHint : ""}｜點列可帶入 Lot`)
-      : escapeMvAttr_(
-          `${m.lot_id || ""}${refHint ? "｜參考：" + refHint : ""}｜不可手動扣庫` +
-          (lot && (lot.status || "") === "REJECTED" ? "（已退回 REJECTED）" : "（須為 APPROVED 且庫存 ACTIVE）")
-        );
+    const isTransfer = mvIsTransferMode_();
+    const canClick = (function(){
+      if(!lot) return false;
+      if(isTransfer){
+        if(String(lot.inventory_status || "ACTIVE").toUpperCase() !== "ACTIVE") return false;
+        const st = String(lot.status || "PENDING").toUpperCase();
+        return st !== "REJECTED";
+      }
+      return mvCanManualOut_(lot);
+    })();
+    const titleLot = (function(){
+      const base = `${m.lot_id || ""}${refHint ? "｜參考：" + refHint : ""}`;
+      if(canClick) return escapeMvAttr_(`${base}｜點列可帶入 Lot`);
+      if(isTransfer){
+        if(!lot) return escapeMvAttr_(`${base}｜找不到 Lot 主檔`);
+        if(String(lot.inventory_status || "ACTIVE").toUpperCase() !== "ACTIVE") return escapeMvAttr_(`${base}｜不可轉倉（須為庫存 ACTIVE）`);
+        if(String(lot.status || "PENDING").toUpperCase() === "REJECTED") return escapeMvAttr_(`${base}｜不可轉倉（已退回 REJECTED）`);
+        return escapeMvAttr_(`${base}｜不可轉倉`);
+      }
+      return escapeMvAttr_(
+        `${base}｜不可手動扣庫` +
+        (lot && String(lot.status || "").toUpperCase() === "REJECTED" ? "（已退回 REJECTED）" : "（須為 APPROVED 且庫存 ACTIVE）")
+      );
+    })();
     const rowCursor = canClick ? "pointer" : "not-allowed";
     const rowOp = canClick ? "1" : "0.75";
     const lotIdRaw = m.lot_id || "";

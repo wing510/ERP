@@ -13,6 +13,9 @@ let importDocReadOnly = false;
 let importProducts = [];
 let importSelectedDbItemId_ = "";
 let importSuppliers = [];
+let importLoadedSnapshot_ = ""; // 用於判斷「是否有變更」
+let importLoadedStatus_ = ""; // OPEN/CLOSED/CANCELLED（用於按鈕判斷）
+let importLoading_ = false;
 
 // `bindUppercaseInput` 已移至 `js/core/utils.js`
 
@@ -37,9 +40,35 @@ function getImportDocFormData_(){
     release_date: read("import_release_date") || "",
     inspection_no: String(read("import_inspection_no") || "").trim(),
     document_link: String(read("import_document_link") || "").trim(),
-    status: read("import_status") || "OPEN",
+    status: "OPEN",
     remark: String(read("import_remark") || "").trim()
   };
+}
+
+function importBuildSnapshot_(){
+  // 用穩定序列化比較「是否有變更」（不含 status，因為 status 由系統維護）
+  const d = getImportDocFormData_();
+  const doc = {
+    import_doc_id: d.import_doc_id,
+    import_no: d.import_no,
+    supplier_id: d.supplier_id,
+    import_date: d.import_date,
+    release_date: d.release_date,
+    inspection_no: d.inspection_no,
+    document_link: d.document_link,
+    remark: d.remark
+  };
+  const items = (importItemsDraft || []).map(it => ({
+    item_no: it.item_no,
+    product_id: it.product_id,
+    hs_code: it.hs_code || "",
+    lot_id: it.lot_id || it.invoice_no || "",
+    origin_country: it.origin_country || "",
+    declared_qty: Number(it.declared_qty || 0),
+    declared_unit: it.declared_unit || "",
+    remark: it.remark || ""
+  })).sort((a,b)=>Number(a.item_no||0) - Number(b.item_no||0));
+  return JSON.stringify({ doc, items });
 }
 
 function applyImportDocFormData_(data){
@@ -57,7 +86,7 @@ function applyImportDocFormData_(data){
   set("import_release_date", d.release_date || "");
   set("import_inspection_no", d.inspection_no || "");
   set("import_document_link", d.document_link || "");
-  set("import_status", d.status || "OPEN");
+  // 狀態由系統依收貨單自動維護；不顯示在表單
   set("import_remark", d.remark || "");
 }
 
@@ -105,39 +134,113 @@ function restoreImportLocalDraft_(){
 function updateImportButtons_(){
   const createBtn = document.getElementById("import_create_btn");
   const updateBtn = document.getElementById("import_update_btn");
+  const cancelBtn = document.getElementById("import_cancel_btn");
   const itemSaveBtn = document.getElementById("import_items_save_btn");
   if(!createBtn || !updateBtn) return;
+  // 作廢按鈕：狀態由 setImportCancelBtnState_ 統一管理（避免被這裡覆蓋而「永遠不能按」）
+  // 與其他模組一致：載入後且可編輯才可按「更新」（不強制要求先有變更）
+  updateBtn.disabled = true;
+  updateBtn.title = importEditing ? "檢查中…" : "請先載入報單";
   if(importDocReadOnly){
     createBtn.disabled = true;
+    createBtn.title = "已有收貨紀錄（僅可檢視）";
     updateBtn.disabled = true;
-    if(itemSaveBtn) itemSaveBtn.disabled = true;
+    updateBtn.title = "已有收貨紀錄（僅可檢視）";
+    if(itemSaveBtn){
+      itemSaveBtn.disabled = true;
+      itemSaveBtn.title = "已有收貨紀錄（僅可檢視）";
+    }
     updateImportFlowHint_();
+    if(cancelBtn){
+      if(importLoading_){
+        cancelBtn.disabled = true;
+        cancelBtn.title = "檢查中…";
+      }else{
+        setImportCancelBtnState_({ editing: importEditing, status: importLoadedStatus_ || "OPEN", hasReceipt: true });
+      }
+    }
     return;
   }
   if(importEditing){
     createBtn.disabled = true;
-    updateBtn.disabled = false;
-    if(itemSaveBtn) itemSaveBtn.disabled = !!importItemsReadOnly;
+    createBtn.title = "已載入報單（新建請清除）";
+    const st = String(importLoadedStatus_ || "").toUpperCase();
+    if(st === "CLOSED"){
+      updateBtn.disabled = true;
+      updateBtn.title = "此報單已結案（CLOSED），不可再修改";
+    }else if(st === "CANCELLED"){
+      updateBtn.disabled = true;
+      updateBtn.title = "此報單已作廢（CANCELLED），不可再修改";
+    }else{
+      updateBtn.disabled = false;
+      updateBtn.title = "更新此報單";
+    }
+    if(itemSaveBtn){
+      itemSaveBtn.disabled = !!importItemsReadOnly;
+      itemSaveBtn.title = importItemsReadOnly ? "明細不可修改" : "更新（寫入報單與明細）";
+    }
   }else{
     createBtn.disabled = false;
+    createBtn.title = "建立報單";
     updateBtn.disabled = true;
-    if(itemSaveBtn) itemSaveBtn.disabled = true;
+    updateBtn.title = "請先載入報單";
+    if(itemSaveBtn){
+      itemSaveBtn.disabled = true;
+      itemSaveBtn.title = "請先載入報單";
+    }
   }
   updateImportFlowHint_();
+  if(cancelBtn){
+    if(importLoading_){
+      cancelBtn.disabled = true;
+      cancelBtn.title = "檢查中…";
+    }else{
+      setImportCancelBtnState_({
+        editing: importEditing,
+        status: importLoadedStatus_ || "OPEN",
+        hasReceipt: !!importDocReadOnly
+      });
+    }
+  }
+}
+
+function setImportCancelBtnState_(opts){
+  const cancelBtn = document.getElementById("import_cancel_btn");
+  if(!cancelBtn) return;
+  const editing = !!opts?.editing;
+  const st = String(opts?.status || "").trim().toUpperCase();
+  const hasReceipt = !!opts?.hasReceipt;
+  if(!editing){
+    cancelBtn.disabled = true;
+    cancelBtn.title = "請先載入報單";
+    return;
+  }
+  if(st === "CANCELLED"){
+    cancelBtn.disabled = true;
+    cancelBtn.title = "此報單已作廢";
+    return;
+  }
+  if(hasReceipt){
+    cancelBtn.disabled = true;
+    cancelBtn.title = "此報單已有未作廢收貨單，請先作廢所有收貨單";
+    return;
+  }
+  cancelBtn.disabled = false;
+  cancelBtn.title = "作廢此報單（需先無有效收貨單）";
 }
 
 function bindImportDraftAutosave_(){
   const ids = [
     "import_doc_id","import_no","import_supplier_id","import_import_date","import_release_date",
-    "import_inspection_no","import_document_link","import_status","import_remark"
+    "import_inspection_no","import_document_link","import_remark"
   ];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if(!el) return;
     if(el.dataset.draftAutosaveBound) return;
     el.dataset.draftAutosaveBound = "1";
-    el.addEventListener("change", saveImportLocalDraft_);
-    el.addEventListener("input", saveImportLocalDraft_);
+    el.addEventListener("change", () => { saveImportLocalDraft_(); updateImportButtons_(); });
+    el.addEventListener("input", () => { saveImportLocalDraft_(); updateImportButtons_(); });
   });
 }
 
@@ -211,14 +314,10 @@ function updateImportFlowHint_(){
     return;
   }
   if(importEditing){
-    const st = (document.getElementById("import_status")?.value || "OPEN").trim().toUpperCase();
-    el.textContent =
-      "報單流程：已載入 — " +
-      (typeof termLabel === "function" ? termLabel(st) : st) +
-      " — 變更後按「更新」（主檔區或明細下方皆可，功能相同）";
+    el.textContent = "報單流程：已載入";
     return;
   }
-  el.textContent = "報單流程：新單 — 填主檔與明細後按明細下方「建立」寫入";
+  el.textContent = "報單流程：新單 — 填主檔與明細後按下方「建立」寫入";
 }
 
 function setImportItemsReadOnly_(readOnly){
@@ -238,8 +337,19 @@ function formatImportProductDisplay_(productId, productName, productSpec){
   const name = String(productName || id || "").trim();
   const spec = String(productSpec || "").trim();
   if(!name && !id) return "";
-  if(spec) return `${name} (${id} / ${spec})`;
-  return id ? `${name} (${id})` : name;
+  // 對齊其他模組：產品名稱（規格）；不把 product_id 混在同一段顯示字串
+  if(spec) return `${name}（${spec}）`;
+  return name || id;
+}
+
+function normalizeImportItemProductMeta_(it, product){
+  const id = String(it?.product_id || "").trim();
+  const p = product || {};
+  const pn = String(it?.product_name || "").trim();
+  const ps = String(it?.product_spec || "").trim();
+  const name = (!pn || pn === id) ? String(p.product_name || id || "").trim() : pn;
+  const spec = (!ps) ? String(p.spec || "").trim() : ps;
+  return { name, spec };
 }
 
 async function hasImportReceipts_(importDocId){
@@ -275,7 +385,7 @@ async function importInit(){
 
   // 重新打開頁面時一律空白表單，不自動帶入上次草稿（避免誤以為是「最後一筆」）
   resetImportForm();
-  setImportReceiptState_("收貨狀態：未載入報單", "warn");
+  setImportReceiptState_("收貨狀態：未載入 — 請先載入報單", "warn");
   importDocumentsCache = docList;
   renderImportDocuments(docList);
 
@@ -294,7 +404,7 @@ function buildImportDocPayload_(){
   const release_date = document.getElementById("import_release_date")?.value || "";
   const inspection_no = (document.getElementById("import_inspection_no")?.value || "").trim();
   const document_link = (document.getElementById("import_document_link")?.value || "").trim();
-  const status = document.getElementById("import_status")?.value || "OPEN";
+  const status = "OPEN"; // 狀態由系統依收貨單自動維護
   const remark = (document.getElementById("import_remark")?.value || "").trim();
 
   if(!import_doc_id) throw new Error("報單ID 必填");
@@ -306,7 +416,8 @@ function buildImportDocPayload_(){
   const items = importItemsDraft.map((it, idx)=>({
     import_item_id: `IMPI-${import_doc_id}-${String(idx+1).padStart(3,"0")}`,
     import_doc_id,
-    item_no: String(it.item_no != null ? it.item_no : idx + 1),
+    // 項次以「目前列表順序」重新編號，避免刪除後再新增造成重複
+    item_no: String(idx + 1),
     product_id: it.product_id,
     hs_code: it.hs_code || "",
     declared_qty: String(it.declared_qty),
@@ -375,7 +486,8 @@ async function saveImportDocument(triggerEl){
     // 一鍵寫入（主檔+明細），用 POST 避免 URL 過長
     const res = await callAPI({
       action: "save_import_document",
-      ...doc,
+      // 狀態由系統自動維護：更新時保留原狀態；新建時固定 OPEN
+      ...({ ...doc, status: (header?.status || doc.status || "OPEN") }),
       created_by: getCurrentUser(),
       created_at: nowIso16(),
       updated_by: getCurrentUser(),
@@ -397,10 +509,16 @@ async function saveImportDocument(triggerEl){
     }
 
     await renderImportDocuments();
+    // 成功後：更新狀態快照
+    importLoadedStatus_ = String((header?.status || doc.status || "OPEN") || "OPEN").toUpperCase();
+    importLoadedSnapshot_ = importBuildSnapshot_();
+    updateImportButtons_();
     const n = res.items_created ?? items.length;
     showToast(wasNew ? `報單已建立（明細 ${n} 筆）` : `報單已更新（明細 ${n} 筆）`);
   }catch(err){
-    showToast(err?.message || "更新失敗", "error");
+    if (typeof showToast === "function" && !err?.erpApiToastShown) {
+      showToast(err?.erpUserMessage || err?.message || "更新失敗", "error");
+    }
     throw err;
   }finally{
     updateImportButtons_();
@@ -436,7 +554,7 @@ function initImportDropdownsWithData_(suppliers, products){
       prodList.map(p=>{
         const name = String(p.product_name || "").trim();
         const spec = String(p.spec || "").trim();
-        const label = name ? (spec ? `${name} / ${spec}` : name) : (p.product_id || "");
+        const label = spec ? `${name}（${spec}）` : (name || (p.product_id || ""));
         return `<option value="${p.product_id}" data-unit="${p.unit || ""}" data-spec="${(p.spec || "").replace(/"/g, "&quot;")}">${label}</option>`;
       }).join("");
   }
@@ -520,13 +638,14 @@ function renderImportItemsDraft(){
   // 項次自動產生（1,2,3...）；順序：產品名稱、稅則號列、批號、原產地、數量、單位、備註、操作
   importItemsDraft.forEach((it, idx) => {
     const p = importProducts.find(x => x.product_id === it.product_id) || {};
+    const meta = normalizeImportItemProductMeta_(it, p);
     const productDisplay = formatImportProductDisplay_(
       it.product_id,
-      it.product_name || p.product_name || it.product_id,
-      it.product_spec || p.spec || ""
+      meta.name,
+      meta.spec
     );
     const lotId = it.lot_id || it.invoice_no || "";
-    const itemNo = it.item_no != null ? it.item_no : (idx + 1);
+    const itemNo = idx + 1;
     const safeId = String(it.draft_id || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const rowClick =
       importItemsReadOnly || isImportItemDraftRow_(it) ? "" : `onclick="selectImportItemDbRow_('${safeId}')"`;
@@ -544,6 +663,7 @@ function renderImportItemsDraft(){
       </tr>
     `;
   });
+  updateImportButtons_();
 }
 
 function addImportItemDraft(){
@@ -552,8 +672,10 @@ function addImportItemDraft(){
   }
   const productSelect = document.getElementById("import_item_product_id");
   const product_id = productSelect?.value || "";
-  const product_name = productSelect?.selectedOptions?.[0]?.text?.split(" - ")?.[1] || product_id;
-  const product_spec = productSelect?.selectedOptions?.[0]?.getAttribute("data-spec") || "";
+  // 下拉選單文字本來就不是 "id - name"；用主檔資料避免解析錯誤導致只存到代碼
+  const p = importProducts.find(x => x.product_id === product_id) || {};
+  const product_name = String(p.product_name || "").trim() || product_id;
+  const product_spec = String(p.spec || "").trim();
   const hs_code = (document.getElementById("import_item_hs_code")?.value || "").trim();
   const lot_id = (document.getElementById("import_item_lot_id")?.value || "").trim();
   const origin_country = (document.getElementById("import_item_origin_country")?.value || "").trim();
@@ -566,12 +688,8 @@ function addImportItemDraft(){
   if(!declared_qty || declared_qty <= 0) return showToast("數量需大於 0","error");
   if(!declared_unit) return showToast("找不到產品單位，請先確認產品主檔","error");
 
-  // 項次自動產生：新品的項次 = 目前筆數 + 1
-  const item_no = importItemsDraft.length + 1;
-
   importItemsDraft.push({
     draft_id: "DRAFT-" + Date.now() + "-" + Math.floor(Math.random()*1000),
-    item_no,
     product_id,
     product_name,
     product_spec,
@@ -595,6 +713,7 @@ function addImportItemDraft(){
 
   renderImportItemsDraft();
   saveImportLocalDraft_();
+  updateImportButtons_();
 }
 
 function removeImportItemDraft(draftId){
@@ -605,6 +724,7 @@ function removeImportItemDraft(draftId){
   importItemsDraft = importItemsDraft.filter(it => it.draft_id !== draftId);
   renderImportItemsDraft();
   saveImportLocalDraft_();
+  updateImportButtons_();
 }
 
 function resetImportForm(clearLocalDraft = false){
@@ -629,17 +749,20 @@ function resetImportForm(clearLocalDraft = false){
   const linkEl = document.getElementById("import_document_link");
   if(inspEl) inspEl.value = "";
   if(linkEl) linkEl.value = "";
-  document.getElementById("import_status").value = "OPEN";
+  // import_status 已移除
   document.getElementById("import_remark").value = "";
 
   updateImportButtons_();
+  setImportCancelBtnState_({ editing: false });
 
   if(clearLocalDraft){
     clearImportLocalDraft_();
   }else{
     saveImportLocalDraft_();
   }
-  setImportReceiptState_("收貨狀態：未載入報單", "warn");
+  setImportReceiptState_("收貨狀態：未載入 — 請先載入報單", "warn");
+  importLoadedSnapshot_ = importBuildSnapshot_();
+  importLoadedStatus_ = "";
 }
 
 async function createImportDocument(triggerEl){
@@ -652,9 +775,52 @@ async function updateImportDocument(triggerEl){
   await saveImportDocument(triggerEl);
 }
 
+async function cancelImportDocument(triggerEl){
+  if(!importEditing) return showToast("請先載入一張報單再作廢","error");
+  const import_doc_id = (document.getElementById("import_doc_id")?.value || "").trim().toUpperCase();
+  if(!import_doc_id) return showToast("報單ID 缺失","error");
+
+  showSaveHint(triggerEl || document.getElementById("importItemsCommitGroup"));
+  try{
+    const header = await getOne("import_document","import_doc_id",import_doc_id).catch(()=>null);
+    if(!header) return showToast("找不到報單","error");
+    const st = String(header.status || "").toUpperCase();
+    if(st === "CANCELLED") return showToast("此報單已作廢","error");
+
+    const hasReceipt = await hasImportReceipts_(import_doc_id);
+    if(hasReceipt){
+      return showToast("此報單已有未作廢收貨紀錄，請先至「收貨入庫」作廢所有收貨單後再作廢報單。","error");
+    }
+
+    const note = prompt("作廢原因（可留空）") ?? "";
+    if(!confirm(`確定作廢此報單？\n- 報單ID：${import_doc_id}\n\n限制：需先作廢所有收貨單。`)) return;
+
+    const prevRemark = String(header.remark || "").trim();
+    const nextRemark = String(note).trim()
+      ? (prevRemark ? `${prevRemark}\n[作廢 ${nowIso16()} ${getCurrentUser()}] ${String(note).trim()}` : `[作廢 ${nowIso16()} ${getCurrentUser()}] ${String(note).trim()}`)
+      : prevRemark;
+
+    await updateRecord("import_document","import_doc_id",import_doc_id,{
+      status: "CANCELLED",
+      ...(nextRemark ? { remark: nextRemark } : {}),
+      updated_by: getCurrentUser(),
+      updated_at: nowIso16()
+    });
+
+    if(typeof invalidateCache === "function") invalidateCache("import_document");
+    await renderImportDocuments();
+    await loadImportDocument(import_doc_id);
+    showToast("報單已作廢（CANCELLED）");
+  } finally {
+    hideSaveHint();
+  }
+}
+
 async function loadImportDocument(importDocId){
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
-  setImportReceiptState_("收貨狀態：檢查中", "warn");
+  importLoading_ = true;
+  updateImportButtons_();
+  setImportReceiptState_("收貨狀態：檢查中…", "warn");
   // 若有快取且含此報單，直接使用，只再拉明細（少打 1 次 list_import_document）
   let doc = importDocumentsCache && importDocumentsCache.find(d => d.import_doc_id === importDocId);
   if(!doc){
@@ -679,7 +845,7 @@ async function loadImportDocument(importDocId){
   const linkEl = document.getElementById("import_document_link");
   if(inspEl) inspEl.value = doc.inspection_no || "";
   if(linkEl) linkEl.value = doc.document_link || "";
-  document.getElementById("import_status").value = doc.status || "OPEN";
+  // import_status 已移除
   document.getElementById("import_remark").value = doc.remark || "";
 
   // 只拉明細（報單主檔已用快取或 getOne）；產品名稱由產品主檔解析
@@ -709,8 +875,27 @@ async function loadImportDocument(importDocId){
   const locked = await hasImportReceipts_(importDocId);
   setImportDocReadOnly_(locked);
   setImportItemsReadOnly_(locked);
+  setImportCancelBtnState_({ editing: true, status: doc.status || "OPEN", hasReceipt: locked });
+  importLoadedSnapshot_ = importBuildSnapshot_();
+  importLoadedStatus_ = String(doc.status || "OPEN").toUpperCase();
+  // 若舊資料/舊流程未同步狀態，載入時自動修正：有收貨→CLOSED；無收貨→OPEN（不改 CANCELLED）
+  try{
+    const ds = String(doc.status || "").toUpperCase();
+    if(ds !== "CANCELLED"){
+      const desired = locked ? "CLOSED" : "OPEN";
+      if(ds !== desired){
+        await updateRecord("import_document","import_doc_id",importDocId,{
+          status: desired,
+          updated_by: getCurrentUser(),
+          updated_at: nowIso16()
+        });
+        doc.status = desired;
+        importLoadedStatus_ = desired;
+      }
+    }
+  }catch(_e){}
   setImportReceiptState_(
-    locked ? "收貨狀態：已收貨（整張報單不可修改）" : "收貨狀態：未收貨（可編輯）",
+    locked ? "收貨狀態：已載入 — 已收貨（僅可檢視）" : "收貨狀態：已載入 — 未收貨（可編輯）",
     locked ? "error" : "ok"
   );
   if(locked){
@@ -720,6 +905,8 @@ async function loadImportDocument(importDocId){
   renderImportItemsDraft();
   updateImportFlowHint_();
   saveImportLocalDraft_();
+  importLoading_ = false;
+  updateImportButtons_();
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
 }
 
@@ -747,6 +934,9 @@ async function createImportReceiptAndLots(){
 
   const doc = await getOne("import_document","import_doc_id",import_doc_id).catch(()=>null);
   if(!doc) return showToast("找不到此報單主檔，請先至明細區按「建立」寫入報單","error");
+  if(String(doc.status || "").toUpperCase() === "CANCELLED"){
+    return showToast("此報單已作廢（CANCELLED），不能建立收貨單","error");
+  }
   const docNo = doc?.import_no || "";
 
   // 保底：若報單明細尚未寫入（或有人誤刪），先同步一份到 import_item
@@ -854,27 +1044,36 @@ async function createImportReceiptAndLots(){
     await createRecord("import_receipt_item", receiptItem);
   }
 
+  // 狀態同步：只要有未作廢收貨單 → 報單狀態寫回 CLOSED
+  await updateRecord("import_document","import_doc_id",import_doc_id,{
+    status: "CLOSED",
+    updated_by: getCurrentUser(),
+    updated_at: nowIso16()
+  });
+
   showToast("收貨單建立成功，已產生批次（PENDING）");
   resetImportReceiptForm();
 }
 
 async function renderImportDocuments(list=null){
-  if(!list){
-    list = await getAll("import_document");
-    importDocumentsCache = list;
-  } else {
-    importDocumentsCache = list;
-  }
-
   const tbody = document.getElementById("importTableBody");
   if(!tbody) return;
 
-  const listToShow = Array.isArray(list) ? list : [];
+  let listResolved = list;
+  if(!listResolved){
+    setTbodyLoading_(tbody, 8);
+    listResolved = await getAll("import_document");
+    importDocumentsCache = listResolved;
+  } else {
+    importDocumentsCache = listResolved;
+  }
+
+  const listToShow = Array.isArray(listResolved) ? listResolved : [];
   const supMap = {};
   (importSuppliers || []).forEach(s => { if(s && s.supplier_id) supMap[s.supplier_id] = s; });
   tbody.innerHTML = "";
   if (!listToShow.length) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#64748b;padding:24px;">尚無進口報單。請先至「產品」「供應商」建立主檔，再在上方建立報單。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;padding:24px;">尚無進口報單。請先至「產品」「供應商」建立主檔，再在上方建立報單。</td></tr>';
     return;
   }
   listToShow.forEach(doc => {
@@ -885,7 +1084,7 @@ async function renderImportDocuments(list=null){
       <button class="btn-secondary" onclick="gotoReceive('IMPORT','${doc.import_doc_id}')">收貨</button>
     `;
     const docLink = doc.document_link || "";
-    const linkCell = docLink ? `<a href="${docLink}" target="_blank" rel="noopener">連結</a>` : "";
+    const linkCell = docLink ? `<a href="${docLink}" target="_blank" rel="noopener">文件</a>` : "";
     tbody.innerHTML += `
       <tr>
         <td>${doc.import_doc_id || ""}</td>
@@ -893,7 +1092,6 @@ async function renderImportDocuments(list=null){
         <td>${doc.import_date || ""}</td>
         <td>${doc.release_date || ""}</td>
         <td>${supplierNameOnly}</td>
-        <td>${doc.inspection_no || ""}</td>
         <td>${termLabel(doc.status)}</td>
         <td>${linkCell}</td>
         <td>${btn}</td>
@@ -909,6 +1107,7 @@ async function sortImportDocuments(field){
 }
 
 async function searchImportDocuments(){
+  setTbodyLoading_("importTableBody", 8);
   const kw = (document.getElementById("search_import_keyword")?.value || "").trim().toLowerCase();
   const status = document.getElementById("search_import_status")?.value || "";
 
@@ -923,8 +1122,7 @@ async function searchImportDocuments(){
       (d.import_no || "").toLowerCase().includes(kw) ||
       (d.declaration_no || "").toLowerCase().includes(kw) ||
       (d.supplier_id || "").toLowerCase().includes(kw) ||
-      (supName && supName.includes(kw)) ||
-      String(d.inspection_no || "").toLowerCase().includes(kw);
+      (supName && supName.includes(kw));
     return matchKw && (!status || d.status === status);
   });
   renderImportDocuments(result);

@@ -5,7 +5,8 @@
       Goods Receipt 收貨入庫
       <button type="button" class="btn-sheet" onclick="openSheetLink('goods_receipt')" title="收貨主檔（goods_receipt）">PO Sheet</button>
       <button type="button" class="btn-sheet btn-sheet-alt" onclick="openSheetLink('import_receipt')" title="進口收貨（import_receipt）">Import Sheet</button>
-      <span id="rcvReceiptState" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">收庫狀態：未選擇來源</span>
+      <span id="rcvReceiptState" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">收庫流程：未載入 — 請先選擇來源類型與單號</span>
+      <span id="rcvLotState" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">批次狀態：未產生</span>
     </span>
     <span data-help="receiveHeader"></span>
   </div>
@@ -21,10 +22,6 @@
         </select>
       </div>
       <div class="form-group">
-        <label id="rcv_source_label">選擇 PO *</label>
-        <select id="rcv_source_id"></select>
-      </div>
-      <div class="form-group">
         <label>收貨單ID</label>
         <input type="text" id="rcv_receipt_id" readonly placeholder="自動產生">
       </div>
@@ -34,7 +31,12 @@
       </div>
       <div class="form-group">
         <label>倉別</label>
-        <select id="rcv_warehouse" style="min-width:220px;"></select>
+        <select id="rcv_warehouse" style="min-width:220px;width:100%;"></select>
+      </div>
+
+      <div class="form-group full-width">
+        <label id="rcv_source_label">選擇 PO *</label>
+        <select id="rcv_source_id" style="min-width:100%;max-width:100%;"></select>
       </div>
       <div class="form-group full-width">
         <label>備註</label>
@@ -45,17 +47,11 @@
     <div class="button-group">
       <button class="btn-secondary" id="rcv_reset_btn" type="button">清除</button>
       <button class="btn-secondary" id="rcv_log_btn" type="button">Log</button>
-      <span style="display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:8px;">
-        <select id="rcv_void_receipt_id" style="min-width:220px;">
-          <option value="">請先選擇 PO／報單</option>
-        </select>
-        <button class="btn-secondary" id="rcv_void_btn" type="button" title="作廢已建立的收貨單（會沖銷 IN、Lot 標示 VOID，並回寫 PO/進口已收）">作廢收貨單</button>
-      </span>
     </div>
   </div>
 </div>
 
-<!-- ===== 收貨明細：品項、產品、剩餘可收(自動)、本次收貨數量、單位 ===== -->
+<!-- ===== 收貨明細：項次、產品、剩餘可收(自動)、本次收貨數量、單位 ===== -->
 <div class="card">
   <div class="card-header card-header-flex">
     <span>
@@ -66,12 +62,13 @@
     <span data-help="receiveLines"></span>
   </div>
   <div class="card-body">
-    <div class="table-wrapper" style="height:220px;">
+    <div class="table-wrapper table-rcv-lines" style="height:220px;">
       <table class="data-table">
         <thead>
           <tr>
-            <th>品項</th>
+            <th>項次</th>
             <th>產品（規格）</th>
+            <th>倉別</th>
             <th>數量</th>
             <th>已收</th>
             <th>剩餘</th>
@@ -87,6 +84,65 @@
     <div class="button-group" style="margin-top:10px;">
       <button class="btn-primary" id="rcv_post_btn" type="button">產生批次</button>
       <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
+    </div>
+
+    <!-- 已收列表：與本張來源單收貨流程同一卡片，摺疊載入 -->
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid #eee;">
+      <details id="rcvPostedPanel">
+        <summary style="cursor:pointer;color:#2563eb;font-size:12px;font-weight:600;user-select:none;list-style-position:outside;line-height:1.5;">
+          已收列表（點開載入）
+          <span style="color:#94a3b8;font-weight:500;margin-left:10px;">作廢僅限狀態「未取消」之收貨單；若該筆產生的 Lot 已被出庫、加工或調整扣減，導致可用量不足以沖銷入庫，則無法作廢整張單。</span>
+        </summary>
+        <div style="margin-top:10px;">
+          <div class="table-wrapper" style="max-height:220px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>收貨單</th>
+                  <th>收貨日期</th>
+                  <th>倉別</th>
+                  <th>明細</th>
+                  <th>總量</th>
+                  <th>狀態</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="rcvPostedBody">
+                <tr><td colspan="7" style="text-align:center;color:#64748b;padding:18px;">點開後載入</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<style>
+.rcv-void-modal { position:fixed; inset:0; z-index:9000; display:none; align-items:center; justify-content:center; padding:16px; }
+.rcv-void-modal.rcv-void-modal-open { display:flex; }
+.rcv-void-modal-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.4); }
+.rcv-void-modal-dialog { position:relative; background:#fff; border-radius:10px; box-shadow:0 8px 32px rgba(0,0,0,0.2); width:100%; max-width:440px; padding:20px 22px; }
+.rcv-void-modal-dialog .form-group { margin-bottom:14px; }
+.rcv-void-modal-dialog label { display:block; font-size:13px; margin-bottom:6px; color:#334155; }
+.rcv-void-modal-dialog select, .rcv-void-modal-dialog textarea { width:100%; box-sizing:border-box; border:1px solid #ddd; border-radius:6px; padding:8px 10px; font-size:13px; }
+</style>
+<div id="rcvVoidModal" class="rcv-void-modal" role="dialog" aria-modal="true" aria-labelledby="rcvVoidModalTitle">
+  <div class="rcv-void-modal-overlay" onclick="rcvCloseVoidModal()"></div>
+  <div class="rcv-void-modal-dialog">
+    <h3 id="rcvVoidModalTitle" style="margin:0 0 8px;font-size:17px;">作廢收貨單</h3>
+    <p id="rcvVoidModalReceiptLabel" style="margin:0 0 16px;color:#475569;font-size:13px;line-height:1.45;"></p>
+    <div class="form-group">
+      <label for="rcv_void_reason_code">作廢原因 *</label>
+      <select id="rcv_void_reason_code"></select>
+    </div>
+    <div class="form-group">
+      <label for="rcv_void_reason_note">補充說明</label>
+      <textarea id="rcv_void_reason_note" rows="3" placeholder="選「其他」時請簡述"></textarea>
+    </div>
+    <div class="button-group" style="margin-top:16px;margin-bottom:0;">
+      <button type="button" class="btn-primary" id="rcv_void_modal_confirm">確認作廢</button>
+      <button type="button" class="btn-secondary" onclick="rcvCloseVoidModal()">取消</button>
     </div>
   </div>
 </div>

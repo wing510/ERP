@@ -7,7 +7,7 @@
 let procInputs = [];
 let procOutputs = [];
 let procLots = [];
-let procMovements = [];
+let procMovements = []; // legacy：已不再載入整表 inventory_movement；保留變數以免舊碼引用報錯
 let procProducts = [];
 let procSuppliers = [];
 let procWarehouses = [];
@@ -17,6 +17,7 @@ let procGoodsReceiptIdToPoId = {};
 let procImportDocIdToImportNo = {};
 let procLoadedInputsForHint = [];
 let procLoadedOutputsForHint = [];
+let procLoadedStatus_ = "";
 let procRelInputsByOutputLotId = {};
 let procAvailableByLotId = {};
 let procReceiveInFlight = false;
@@ -55,7 +56,12 @@ function parseIsoNoTzAsLocalKey_(s){
 
 function disableButtonsByOnclick_(onclickText, disabled){
   const sel = `button[onclick="${onclickText}"]`;
-  document.querySelectorAll(sel).forEach(btn => { btn.disabled = !!disabled; });
+  document.querySelectorAll(sel).forEach(btn => {
+    btn.disabled = !!disabled;
+    if(disabled){
+      if(!btn.getAttribute("title")) btn.setAttribute("title", "處理中…");
+    }
+  });
 }
 
 function setProcActionInlineHint_(onclickText, text){
@@ -99,18 +105,31 @@ function formatProcSupplierDisplay_(supplierId){
 function setProcStatusHint_(text){
   const el = document.getElementById("procStatusHint");
   if(!el) return;
-  el.textContent = text || "加工狀態：未載入加工單";
+  const finalText = text || "加工流程：新單 — 填主檔後按下方「建立」";
+  el.textContent = finalText;
   // 比照 import：warn 用棕色，其餘用灰色（避免過度搶眼）
-  const t = String(text || "");
-  const isWarn = t.includes("未載入") || t.includes("載入中") || t.includes("未送加工") || t.includes("待回收") || t.includes("部分回收");
+  const t = String(finalText || "");
+  // 對齊「銷售狀態」：新單維持灰色；需要提醒/阻擋的狀態才用棕色
+  const isWarn = t.includes("未載入") || t.includes("載入中") || t.includes("處理中") || t.includes("待回收") || t.includes("部分回收");
+  const isError = t.includes("已取消");
+  el.style.color = isError ? "#991b1b" : (isWarn ? "#92400e" : "#64748b");
+}
+
+function setProcInvHint_(text){
+  const el = document.getElementById("procInvHint");
+  if(!el) return;
+  const finalText = text || "庫存狀態：未載入 — 請先建立或載入加工單";
+  el.textContent = finalText;
+  const t = String(finalText || "");
+  const isWarn = t.includes("未載入") || t.includes("載入中") || t.includes("處理中") || t.includes("已扣庫") || t.includes("部分入庫");
   const isError = t.includes("已取消");
   el.style.color = isError ? "#991b1b" : (isWarn ? "#92400e" : "#64748b");
 }
 
 function deriveProcStatusHint_(po, inputs, outputs){
-  if(!po) return "加工狀態：未載入加工單";
+  if(!po) return "加工流程：新單 — 填主檔後按下方「建立」";
   const status = String(po.status || "").trim().toUpperCase();
-  if(status === "CANCELLED") return "加工狀態：已取消";
+  if(status === "CANCELLED") return "加工流程：已取消（僅可檢視）";
 
   const inCount = Array.isArray(inputs) ? inputs.length : 0;
   // 已作廢回收不應計入「已回收批數」
@@ -119,16 +138,30 @@ function deriveProcStatusHint_(po, inputs, outputs){
     : 0;
 
   if(inCount === 0){
-    return "加工狀態：未送加工（尚未扣庫）";
+    return "加工流程：已載入 — 未送加工（尚未扣庫）";
   }
   if(outCount === 0){
-    return "加工狀態：已送加工（待回收）";
+    return "加工流程：已載入 — 已送加工（待回收）";
   }
   if(status === "POSTED"){
-    return "加工狀態：加工已回收（已結案）";
+    return "加工流程：已載入 — 已結案（加工已回收）";
   }
   // OPEN + outputs>0 → 部分回收
-  return `加工狀態：部分回收（已回收 ${outCount} 批）`;
+  return `加工流程：已載入 — 部分回收（已回收 ${outCount} 批）`;
+}
+
+function deriveProcInvHint_(po, inputs, outputs){
+  if(!po) return "庫存狀態：未載入 — 請先建立或載入加工單";
+  const status = String(po.status || "").trim().toUpperCase();
+  if(status === "CANCELLED") return "庫存狀態：已取消（僅可檢視）";
+  const inCount = Array.isArray(inputs) ? inputs.length : 0;
+  const outCount = Array.isArray(outputs)
+    ? outputs.filter(x => String(x.status || "").toUpperCase() !== "CANCELLED").length
+    : 0;
+  if(inCount === 0) return "庫存狀態：已載入 — 未扣庫（尚未送加工）";
+  if(outCount === 0) return "庫存狀態：已載入 — 已扣庫（送加工）";
+  if(status === "POSTED") return "庫存狀態：已載入 — 已入庫（回收完成）";
+  return `庫存狀態：已載入 — 部分入庫（已回收 ${outCount} 批）`;
 }
 
 function formatProcProductDisplay_(productId){
@@ -145,6 +178,67 @@ function escapeHtml_(s){
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/** 加工單列表「類型」欄：代碼 → 中文（與 proc_type 選項一致） */
+function procProcessTypeLabel_(t){
+  const u = String(t || "").trim().toUpperCase();
+  const map = {
+    PROCESS: "加工",
+    PACKING: "包裝",
+    REPACK: "重新包裝",
+    REWORK: "重工",
+    SPLIT: "拆批",
+    MERGE: "併批"
+  };
+  if(map[u]) return map[u];
+  const raw = String(t || "").trim();
+  return raw || "—";
+}
+
+/** 加工單列表「加工廠」：優先顯示供應商中文名，並保留代號 */
+function procSupplierListCell_(supplierId, supMap){
+  const id = String(supplierId || "").trim();
+  if(!id) return "—";
+  const s = (supMap && (supMap[id] || supMap[id.toUpperCase()])) || null;
+  const name = String(s?.supplier_name || "").trim();
+  if(name) return `${name}（${id}）`;
+  return id;
+}
+
+/** 從其他模組快速跳到 Lots，並帶入關鍵字（例如 lot_id） */
+function procOpenLots_(keyword){
+  const kw = String(keyword || "").trim();
+  if(typeof navigate !== "function") return;
+  navigate("lots");
+  const t0 = Date.now();
+  const timer = setInterval(function(){
+    // 等 module 載入、DOM 出現
+    const el = document.getElementById("search_lots_keyword");
+    if(el){
+      el.value = kw;
+      try{
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }catch(_e){
+        // 舊瀏覽器 fallback
+        try{ if(typeof renderLots === "function") renderLots(); }catch(_e2){}
+      }
+      clearInterval(timer);
+      return;
+    }
+    // 最多等 5 秒，避免無限輪詢
+    if(Date.now() - t0 > 5000){
+      clearInterval(timer);
+    }
+  }, 50);
+}
+
+function procOutputStatusLabel_(status){
+  const s = String(status || "").trim().toUpperCase();
+  // 相容舊資料：早期回收 output.status 可能是 PENDING（其實代表已建立）
+  if(s === "PENDING" || s === "CREATED") return "CREATED（已建立回收批次）";
+  if(s === "CANCELLED") return "CANCELLED（已作廢）";
+  return (typeof termLabel === "function" ? termLabel(s) : s) || s;
 }
 
 function renderProcLoadedInputsTable_(inputs){
@@ -194,10 +288,23 @@ async function voidProcessInput(processInputId){
       return showToast("此加工單已取消，不能回沖投料。", "error");
     }
 
-    const inputsAll = await getAll("process_order_input").catch(()=>[]);
-    const outputsAll = await getAll("process_order_output").catch(()=>[]);
-    const mvAll = await getAll("inventory_movement").catch(()=>[]);
-    const shipItems = await getAll("shipment_item").catch(()=>[]);
+    const [inputsAll, outputsAll, mvAll] = await Promise.all([
+      getAll("process_order_input").catch(()=>[]),
+      getAll("process_order_output").catch(()=>[]),
+      // 用 ref 篩選取得該加工單 movements（刷新，避免 cache 過舊）
+      (async ()=>{
+        try{
+          const r = await callAPI({
+            action: "list_inventory_movement_by_ref",
+            ref_type: "PROCESS_ORDER",
+            ref_id: procId
+          }, { method: "GET" });
+          return (r && r.data) ? r.data : [];
+        }catch(_e){
+          return await getAll("inventory_movement", { refresh: true }).catch(()=>[]);
+        }
+      })(),
+    ]);
 
     const input = (inputsAll || []).find(x => String(x.process_input_id || "") === inId);
     if(!input) return showToast("找不到此投料明細","error");
@@ -214,6 +321,29 @@ async function voidProcessInput(processInputId){
 
     const lotId = String(input.lot_id || "");
     if(!lotId) return showToast("此投料明細缺少 Lot ID，無法回沖", "error");
+
+    // 下游出貨檢查：只需要本 lot 的出貨明細（優先走後端 by lot）
+    let shipItems = [];
+    try{
+      const r = await callAPI({ action: "list_shipment_item_by_lot", lot_id: lotId });
+      shipItems = (r && r.data) ? r.data : [];
+    }catch(_e){
+      // fallback：先用近期出貨的 shipment_item（降低全表機率），最後才全表
+      try{
+        const r = await callAPI({ action: "list_shipment_recent", days: 365, _ts: String(Date.now()) }, { method: "POST" });
+        const ships = (r && r.data) ? r.data : [];
+        const ids = (ships || []).map(s => String(s.shipment_id || "").trim()).filter(Boolean);
+        if(ids.length){
+          const rr = await callAPI({ action: "list_shipment_item_by_shipments", shipment_ids_json: JSON.stringify(ids) }, { method: "POST" });
+          const rows = (rr && rr.data) ? rr.data : [];
+          shipItems = Array.isArray(rows) ? rows : [];
+        }else{
+          shipItems = [];
+        }
+      }catch(_e2){
+        shipItems = await getAll("shipment_item").catch(()=>[]);
+      }
+    }
 
     const srcMv = (mvAll || []).filter(m =>
       String(m.ref_type || "") === "PROCESS_ORDER" &&
@@ -320,7 +450,7 @@ function renderProcLoadedOutputsTable_(outputs){
         <td>${escapeHtml_(formatProcProductDisplay_(productId))}</td>
         <td>${escapeHtml_(qty)}</td>
         <td>${escapeHtml_(unit)}</td>
-        <td>${escapeHtml_(termLabel(status))}</td>
+        <td>${escapeHtml_(procOutputStatusLabel_(status))}</td>
         <td>
           <button class="btn-secondary" ${canVoid ? "" : "disabled"} onclick="${canVoid ? `voidProcessOutput('${safeOutId}')` : "return false;"}">作廢本筆回收</button>
         </td>
@@ -364,122 +494,13 @@ async function voidProcessOutput(processOutputId){
       return;
     }
 
-    // 下游使用檢查（只檢查此產出 lot）
-    const mvAll = await getAll("inventory_movement").catch(()=>[]);
-    const relAll = await getAll("lot_relation").catch(()=>[]);
-    const shipItems = await getAll("shipment_item").catch(()=>[]);
-    const blockReasons = [];
-    (mvAll || []).forEach(m => {
-      if(String(m.lot_id || "") !== lotId) return;
-      const sameOrder = String(m.ref_type || "") === "PROCESS_ORDER" && String(m.ref_id || "").toUpperCase() === procId;
-      const isReversal = String(m.remark || "").includes("REVERSAL");
-      if(!sameOrder && !isReversal){
-        const mt = m.movement_type || "UNKNOWN";
-        const rt = m.ref_type || "";
-        const rid = m.ref_id || "";
-        blockReasons.push(`產出 Lot ${lotId} 已被下游使用：庫存異動 ${mt}${rt || rid ? `（ref:${rt}:${rid}）` : ""}。`);
-      }
-    });
-    (relAll || []).forEach(r => {
-      const from = String(r.from_lot_id || "");
-      if(from !== lotId) return;
-      const sameOrder = String(r.ref_type || "") === "PROCESS_ORDER" && String(r.ref_id || "").toUpperCase() === procId;
-      if(!sameOrder){
-        blockReasons.push(`產出 Lot ${lotId} 已被後續追溯關聯使用（lot_relation）。`);
-      }
-    });
-    (shipItems || []).forEach(s => {
-      if(String(s.lot_id || "") === lotId){
-        blockReasons.push(`產出 Lot ${lotId} 已被出貨使用（出貨單：${s.shipment_id || ""}）。`);
-      }
-    });
-    const uniqReasons = Array.from(new Set(blockReasons));
-    if(uniqReasons.length){
-      showProcBlockNotice_("作廢回收被阻擋", uniqReasons);
-      return showToast("作廢失敗：有下游使用紀錄，請先展開明細。", "error");
-    }
-
-    // 回沖 PROCESS_IN：用 ADJUST 避免 lot gating 規則卡住
-    await createRecord("inventory_movement", {
-      movement_id: generateId("MV"),
-      movement_type: "ADJUST",
-      lot_id: lotId,
-      product_id: out.product_id || "",
-      qty: String(-Math.abs(qty)),
-      unit: out.unit || "",
-      ref_type: "PROCESS_ORDER",
-      ref_id: procId,
-      remark: "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: "",
-      system_remark: `REVERSAL(PROCESS_IN) of ${outId} (${procId})`,
-    });
-
-    await updateRecord("process_order_output","process_output_id",outId,{
-      status: "CANCELLED",
-      remark: ((out.remark || "").trim() ? (out.remark + " | ") : "") + "回收已作廢"
-    });
-
-    // 將此產出 lot 標記為作廢（避免後續誤用；可用量也會因回沖歸零）
-    const lotsAll = await getAll("lot").catch(()=>[]);
-    const lot = (lotsAll || []).find(l => String(l.lot_id || "") === lotId);
-    if(lot){
-      await updateRecord("lot","lot_id",lotId,{
-        inventory_status: "VOID",
-        updated_by: getCurrentUser(),
-        updated_at: nowIso16(),
-        remark: ((lot.remark || "").trim() ? (lot.remark + " | ") : "") + "回收作廢"
-      });
-    }
-
-    // 重新計算加工單狀態：若作廢後回收不足，從 POSTED 回到 OPEN
-    const inputsAll = await getAll("process_order_input").catch(()=>[]);
-    const outputsAll2 = await getAll("process_order_output").catch(()=>[]);
-    const inputs = (inputsAll || []).filter(x => String(x.process_order_id || "").toUpperCase() === procId);
-    const outputs = (outputsAll2 || []).filter(x => String(x.process_order_id || "").toUpperCase() === procId);
-    const activeOutputs = outputs.filter(x => String(x.status || "").toUpperCase() !== "CANCELLED");
-
-    let nextStatus = String(po.status || "").toUpperCase() || "OPEN";
-    try{
-      const baseUnits = new Set();
-      let canConvert = true;
-      function getProductBaseUnit_(product){
-        const p = product || {};
-        const cfg = typeof getProductUomConfig === "function" ? getProductUomConfig(p) : null;
-        return normalizeUnit(cfg?.base_unit || p.unit || "");
-      }
-      function convertRowsToBaseTotal_(rows, qtyField){
-        return (rows || []).reduce((sum, r) => {
-          const productId = String(r.product_id || "");
-          const product = (procProducts || []).find(p => String(p.product_id || "") === productId);
-          const q = num(r[qtyField]);
-          const u = String(r.unit || "");
-          if(!product){ canConvert = false; return sum; }
-          const converted = convertToBase(product, q, u);
-          const baseUnit = getProductBaseUnit_(product);
-          if(baseUnit) baseUnits.add(baseUnit);
-          if(converted == null){ canConvert = false; return sum; }
-          return sum + converted;
-        }, 0);
-      }
-      const issuedBase = convertRowsToBaseTotal_(inputs, "issue_qty");
-      const receivedBase = convertRowsToBaseTotal_(activeOutputs, "receive_qty");
-      if(!canConvert || baseUnits.size !== 1){
-        nextStatus = inputs.length ? "OPEN" : "OPEN";
-      }else{
-        nextStatus = (receivedBase + 1e-9 >= issuedBase) ? "POSTED" : "OPEN";
-      }
-    }catch(_e){
-      nextStatus = inputs.length ? "OPEN" : "OPEN";
-    }
-
-    await updateRecord("process_order","process_order_id",procId,{
-      status: nextStatus,
+    await callAPI({
+      action: "void_process_output_bundle",
+      process_order_id: procId,
+      process_output_id: outId,
       updated_by: getCurrentUser(),
       updated_at: nowIso16()
-    });
+    }, { method: "POST" });
 
     clearProcOutputEditor_();
     updateLossHint();
@@ -546,14 +567,14 @@ function renderProcLotPicker_(lots){
     const lotId = String(l.lot_id || "");
     const productText = formatProcProductDisplay_(l.product_id || "");
     const whText = procWarehouseLabelByLot_(l) || (l.warehouse_id ? String(l.warehouse_id) : "");
-    const createdAt = String(l.created_at || "");
+    const expiry = String(l.expiry_date || "") || "—";
     tbody.innerHTML += `
       <tr style="cursor:pointer;" onclick="pickProcInputLot('${lotId.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}')">
         <td>${lotId}</td>
         <td>${productText}</td>
         <td>${whText || "—"}</td>
         <td>${av}</td>
-        <td>${createdAt}</td>
+        <td>${expiry}</td>
         <td><button type="button" class="btn-secondary">帶入</button></td>
       </tr>
     `;
@@ -582,6 +603,8 @@ function getProcEligibleLots_(){
   return (procLots || []).filter(l => {
     if((l.inventory_status || "ACTIVE") !== "ACTIVE") return false;
     if((l.status || "PENDING") !== "APPROVED") return false;
+    // 過期 Lot 不可投料
+    if(typeof invIsExpired_ === "function" && invIsExpired_(l.expiry_date)) return false;
     // 已送加工扣完/無庫存（可用量<=0）不應出現在可選清單
     const av = procGetAvailable(l.lot_id);
     return Number(av) > 0;
@@ -680,15 +703,41 @@ async function outsourceInit(){
     outProdEl.addEventListener("change", updateLossHint);
   }
   resetProcessForm();
+  bindAutoSearchToolbar_([
+    ["proc_search_keyword", "input"],
+    ["proc_search_status", "change"]
+  ], () => renderProcessOrders());
   await renderProcessOrders();
 }
 
+function resetProcListSearch(){
+  const kw = document.getElementById("proc_search_keyword");
+  const st = document.getElementById("proc_search_status");
+  if(kw) kw.value = "";
+  if(st) st.value = "";
+  renderProcessOrders();
+}
+
+/**
+ * 送加工前強制更新 lot 與依 lot 彙總可用量（不打整張 inventory_movement）
+ */
+async function procRefreshLotsAndAvailability_(){
+  const [lots, availPack] = await Promise.all([
+    getAll("lot", { refresh: true }).catch(() => []),
+    typeof loadInventoryMovementAvailableMap_ === "function"
+      ? loadInventoryMovementAvailableMap_()
+      : Promise.resolve({ map: {}, failed: true })
+  ]);
+  procLots = lots || [];
+  procAvailableByLotId = (availPack && availPack.map) || {};
+}
+
 async function loadProcMasterData(){
-  const [products, suppliersRaw, lots, movements, warehouses, importReceipts, goodsReceipts, importDocs] = await Promise.all([
+  const [products, suppliersRaw, lots, avail, warehouses, importReceipts, goodsReceipts, importDocs] = await Promise.all([
     getAll("product"),
     getAll("supplier"),
     getAll("lot"),
-    getAll("inventory_movement").catch(() => []),
+    loadInventoryMovementAvailableMap_().catch(() => ({ map:{}, failed:true })),
     getAll("warehouse").catch(() => []),
     getAll("import_receipt").catch(() => []),
     getAll("goods_receipt").catch(() => []),
@@ -697,14 +746,8 @@ async function loadProcMasterData(){
   procProducts = products || [];
   procSuppliers = (suppliersRaw || []).filter(s => s.status === "ACTIVE");
   procLots = lots || [];
-  procMovements = movements || [];
   procWarehouses = (warehouses || []).filter(w => String(w.status || "ACTIVE").toUpperCase() === "ACTIVE");
-  procAvailableByLotId = {};
-  (procMovements || []).forEach(m => {
-    const lotId = String(m?.lot_id || "");
-    if(!lotId) return;
-    procAvailableByLotId[lotId] = (procAvailableByLotId[lotId] || 0) + Number(m.qty || 0);
-  });
+  procAvailableByLotId = avail?.map || {};
   procImportReceiptIdToDocId = {};
   (importReceipts || []).forEach(r => {
     if(r && r.import_receipt_id){
@@ -748,10 +791,8 @@ function procGetAvailable(lotId){
   if(!id) return 0;
   const hit = procAvailableByLotId?.[id];
   if(hit != null) return Number(hit || 0);
-  // fallback（理論上不會用到）
-  return (procMovements || [])
-    .filter(m => String(m.lot_id || "") === id)
-    .reduce((sum, m) => sum + Number(m.qty || 0), 0);
+  const lot = (procLots || []).find(l => String(l.lot_id || "") === id) || null;
+  return Number(lot?.qty || 0);
 }
 
 function initProcDropdowns(){
@@ -768,6 +809,18 @@ function initProcDropdowns(){
 
   renderProcLotPicker_(getProcEligibleLots_());
 
+  const whSel = document.getElementById("proc_output_warehouse");
+  if(whSel){
+    whSel.innerHTML =
+      `<option value="">（自動：跟第一筆投料倉別）</option>` +
+      (procWarehouses || []).map(w => {
+        const id = String(w.warehouse_id || "").trim();
+        if(!id) return "";
+        const label = procWarehouseLabelById_(id) || id;
+        return `<option value="${id}">${label}</option>`;
+      }).join("");
+  }
+
   const outSel = document.getElementById("proc_output_product");
   if(outSel){
     const activeProducts = (procProducts || []).filter(p => p.status === "ACTIVE");
@@ -776,20 +829,43 @@ function initProcDropdowns(){
       activeProducts.map(p => {
         const name = String(p.product_name || "").trim();
         const spec = String(p.spec || "").trim();
-        const label = name ? (spec ? `${name} / ${spec}` : name) : (p.product_id || "");
+        const label = spec ? `${name}（${spec}）` : (name || (p.product_id || ""));
         return `<option value="${p.product_id}" data-unit="${p.unit || ""}">${label}</option>`;
       }).join("");
   }
 }
 
+function procDeriveDefaultReceiveWarehouseId_(inputs){
+  const rows = Array.isArray(inputs) ? inputs : [];
+  const lotId = String(rows[0]?.lot_id || "").trim();
+  if(!lotId) return "";
+  const lot = (procLots || []).find(l => String(l.lot_id || "") === lotId) || null;
+  const wid = String(lot?.warehouse_id || "").trim().toUpperCase();
+  return wid || "";
+}
+
+function procApplyDefaultReceiveWarehouse_(inputs){
+  const el = document.getElementById("proc_output_warehouse");
+  if(!el) return;
+  // 使用者若已手動選擇就不覆蓋
+  if(String(el.value || "").trim()) return;
+  const wid = procDeriveDefaultReceiveWarehouseId_(inputs);
+  if(!wid) return;
+  // 若下拉沒有該值（例如倉庫停用或尚未載入），就保持空白（仍走自動）
+  const has = Array.from(el.options || []).some(o => String(o.value || "").toUpperCase() === wid);
+  if(has) el.value = wid;
+}
+
 function resetProcessForm(){
   clearProcBlockNotice_();
   procEditing = false;
+  procLoadedStatus_ = "";
   procInputs = [];
   procOutputs = [];
   procSelectedDbInputId = "";
   procSelectedDbOutputId = "";
-  setProcStatusHint_("加工狀態：未載入加工單");
+  setProcStatusHint_("加工流程：新單 — 填主檔後按下方「建立」");
+  setProcInvHint_("庫存狀態：未載入 — 請先建立或載入加工單");
   renderProcInputs();
   renderProcOutputs();
 
@@ -840,6 +916,8 @@ function resetProcessForm(){
   if(outUnit) outUnit.value = "";
   const outRm = document.getElementById("proc_output_remark");
   if(outRm) outRm.value = "";
+  const outWh = document.getElementById("proc_output_warehouse");
+  if(outWh) outWh.value = "";
   const allowLoss = document.getElementById("proc_close_allow_loss");
   if(allowLoss) allowLoss.checked = false;
   updateLossHint();
@@ -864,6 +942,7 @@ function onSelectProcInputLot(){
   }
   document.getElementById("proc_input_unit").value = lot.unit || "";
   document.getElementById("proc_input_available").value = String(procGetAvailable(lotId));
+  setProcButtons_();
 }
 
 function pickProcInputLot(lotId){
@@ -878,6 +957,7 @@ function pickProcInputLot(lotId){
   }
   onSelectProcInputLot();
   closeProcLotPicker();
+  setProcButtons_();
 }
 
 function onSelectProcOutputProduct(){
@@ -885,6 +965,7 @@ function onSelectProcOutputProduct(){
   const opt = sel?.selectedOptions?.[0];
   if(!opt) return;
   document.getElementById("proc_output_unit").value = opt.getAttribute("data-unit") || "";
+  setProcButtons_();
 }
 
 function beginEditProcInputDraft_(draftId){
@@ -946,6 +1027,7 @@ function addProcOutputDraft(){
   procEditingOutputDraftId = "";
   renderProcOutputs();
   updateLossHint();
+  setProcButtons_();
 }
 
 function removeProcOutputDraft(draftId){
@@ -953,6 +1035,7 @@ function removeProcOutputDraft(draftId){
   if(procEditingOutputDraftId === draftId) procEditingOutputDraftId = "";
   renderProcOutputs();
   updateLossHint();
+  setProcButtons_();
 }
 
 async function updateSelectedProcInputRemark(){
@@ -975,6 +1058,7 @@ async function updateSelectedProcInputRemark(){
     setProcActionInlineHint_("updateSelectedProcInputRemark()", "");
     setProcRowBusy_("input", inId, "");
   }
+  setProcButtons_();
 }
 
 async function updateSelectedProcOutputRemark(){
@@ -1020,12 +1104,13 @@ function renderProcOutputs(){
   procOutputs.forEach((it, idx) => {
     const isDraft = isDraftRow_(it);
     const isDb = isDbRow_(it);
-    let statusText = isDraft
-      ? "草稿"
-      : (isDb ? termLabel(it.status || "PENDING") : "");
-    // 追溯顯示：回收列補一行「投料來源」
-    const traceLots = isDb ? (procRelInputsByOutputLotId?.[String(it.lot_id || "")] || []) : [];
-    const traceText = traceLots.length ? `投料：${traceLots.slice(0,3).join(", ")}${traceLots.length > 3 ? "…" : ""}` : "";
+    let statusText = "—";
+    if(isDraft){
+      statusText = "草稿";
+    }else if(isDb){
+      // 狀態改回與後端 process_order_output.status 一致
+      statusText = procOutputStatusLabel_(it.status || "");
+    }
     let actionHtml = "";
     if(isDraft){
       actionHtml =
@@ -1038,7 +1123,10 @@ function renderProcOutputs(){
       const busyText = procRowBusy.output[outId] || "";
       const isBusy = !!busyText;
       const safeOutId = outId.replace(/\\/g,"\\\\").replace(/'/g,"\\'");
+      const lotId = String(it.lot_id || "");
+      const safeLotId = lotId.replace(/\\/g,"\\\\").replace(/'/g,"\\'");
       actionHtml =
+        `<button class="btn-secondary" ${(!lotId ? "disabled" : "")} onclick="event.stopPropagation(); ${!lotId ? "return false;" : `procOpenLots_('${safeLotId}')`}">Lots</button> ` +
         `<button class="btn-secondary" ${(disabled || isBusy) ? "disabled" : ""} onclick="event.stopPropagation(); ${(disabled || isBusy) ? "return false;" : `voidProcessOutput('${safeOutId}')`}">作廢回收</button>` +
         (busyText ? ` <span style="font-size:12px;color:#64748b;">${busyText}</span>` : "");
     }
@@ -1053,7 +1141,6 @@ function renderProcOutputs(){
         <td>${it.unit}</td>
         <td>
           ${statusText}
-          ${traceText ? `<div style="font-size:12px;color:#64748b;margin-top:2px;">${traceText}</div>` : ""}
         </td>
         <td>${actionHtml}</td>
       </tr>
@@ -1113,6 +1200,7 @@ function addProcInputDraft(){
 
   renderProcInputs();
   updateLossHint();
+  setProcButtons_();
 }
 
 function removeProcInputDraft(draftId){
@@ -1120,6 +1208,7 @@ function removeProcInputDraft(draftId){
   if(procEditingInputDraftId === draftId) procEditingInputDraftId = "";
   renderProcInputs();
   updateLossHint();
+  setProcButtons_();
 }
 
 function renderProcInputs(){
@@ -1260,7 +1349,8 @@ function getProcOutputForm_(){
   const outProduct = document.getElementById("proc_output_product")?.value || "";
   const outQty = num(document.getElementById("proc_output_qty")?.value || 0);
   const outUnit = document.getElementById("proc_output_unit")?.value || "";
-  return { outProduct, outQty, outUnit };
+  const outWarehouseId = (document.getElementById("proc_output_warehouse")?.value || "").trim().toUpperCase();
+  return { outProduct, outQty, outUnit, outWarehouseId };
 }
 
 function clearProcOutputEditor_(){
@@ -1268,11 +1358,142 @@ function clearProcOutputEditor_(){
   const outQtyEl = document.getElementById("proc_output_qty");
   const outUnitEl = document.getElementById("proc_output_unit");
   const outRmEl = document.getElementById("proc_output_remark");
+  const outWhEl = document.getElementById("proc_output_warehouse");
   if(outSelEl) outSelEl.value = "";
   if(outQtyEl) outQtyEl.value = "";
   if(outUnitEl) outUnitEl.value = "";
   if(outRmEl) outRmEl.value = "";
+  if(outWhEl) outWhEl.value = "";
   procSelectedDbOutputId = "";
+}
+
+function setProcButtons_(){
+  const createBtn = document.getElementById("proc_create_btn");
+  const updHdrBtn = document.getElementById("proc_update_hdr_btn");
+  const cancelBtn = document.getElementById("proc_cancel_btn");
+  const issueBtn = document.getElementById("proc_issue_btn");
+  const receiveBtn = document.getElementById("proc_receive_btn");
+  const addInBtn = document.getElementById("proc_add_input_btn");
+  const updInRemarkBtn = document.getElementById("proc_update_in_remark_btn");
+  const addOutBtn = document.getElementById("proc_add_output_btn");
+  const updOutRemarkBtn = document.getElementById("proc_update_out_remark_btn");
+
+  const procId = (document.getElementById("proc_id")?.value || "").trim().toUpperCase();
+  const editing = !!procEditing;
+  const inFlight = !!procIssueInFlight || !!procReceiveInFlight;
+
+  const draftInputs = (procInputs || []).filter(x => x && x._mode === "DRAFT");
+  const draftOutputs = (procOutputs || []).filter(x => x && x._mode === "DRAFT");
+
+  const st = String(procLoadedStatus_ || "").toUpperCase();
+  const ended = st === "POSTED" || st === "CANCELLED";
+
+  if(createBtn){
+    createBtn.disabled = inFlight || editing;
+    createBtn.title = inFlight ? "處理中…" : (editing ? "已載入加工單，若要新建請先清除" : "建立加工單");
+  }
+  if(updHdrBtn){
+    updHdrBtn.disabled = inFlight || !editing || ended;
+    updHdrBtn.title =
+      inFlight ? "處理中…" :
+      (!editing ? "請先載入加工單" :
+      (st === "POSTED" ? "已結案（POSTED），不可修改" :
+      (st === "CANCELLED" ? "已取消（CANCELLED），不可修改" :
+      "更新備註/預計日期")));
+  }
+  if(cancelBtn){
+    cancelBtn.disabled = inFlight || !editing || ended;
+    cancelBtn.title =
+      inFlight ? "處理中…" :
+      (!editing ? "請先載入加工單" :
+      (st === "POSTED" ? "已結案（POSTED），不可取消" :
+      (st === "CANCELLED" ? "已取消（CANCELLED）" :
+      "取消加工單（回沖）")));
+  }
+  if(issueBtn){
+    const can = !inFlight && procId && draftInputs.length > 0 && st !== "CANCELLED" && st !== "POSTED";
+    issueBtn.disabled = !can;
+    issueBtn.title =
+      inFlight ? "處理中…" :
+      (!procId ? "請先建立或載入加工單" :
+      (st === "CANCELLED" ? "此加工單已取消，不能送加工" :
+      (st === "POSTED" ? "此加工單已完成，不能送加工" :
+      (draftInputs.length === 0 ? "請至少新增 1 筆投料" : "送加工（扣庫）"))));
+  }
+  if(receiveBtn){
+    const can = !inFlight && procId && (draftOutputs.length > 0 || !!document.getElementById("proc_output_product")?.value) && st !== "CANCELLED" && st !== "POSTED";
+    receiveBtn.disabled = !can;
+    receiveBtn.title =
+      inFlight ? "處理中…" :
+      (!procId ? "請先建立或載入加工單" :
+      (st === "CANCELLED" ? "此加工單已取消，不能回收" :
+      (st === "POSTED" ? "此加工單已完成，不能回收" :
+      "回收加工品（建立回收批次）")));
+  }
+
+  // ===== 投料：新增/更新備註 =====
+  if(addInBtn){
+    const lotId = String(document.getElementById("proc_input_lot")?.value || "").trim();
+    const qty = Number(document.getElementById("proc_input_qty")?.value || 0);
+    const unit = String(document.getElementById("proc_input_unit")?.value || "").trim();
+    const can =
+      !inFlight &&
+      editing &&
+      !ended &&
+      !!lotId &&
+      (qty > 0) &&
+      !!unit;
+    addInBtn.disabled = !can;
+    addInBtn.title =
+      inFlight ? "處理中…" :
+      (!editing ? "請先建立或載入加工單" :
+      (ended ? `此加工單已結束（${st}），不可新增投料` :
+      (!lotId ? "請先選擇 Lot" :
+      (!(qty > 0) ? "請先輸入投料數量（>0）" :
+      (!unit ? "Lot 單位缺失" :
+      "新增投料")))));
+  }
+  if(updInRemarkBtn){
+    const can = !inFlight && !!procId && !!String(procSelectedDbInputId || "").trim();
+    updInRemarkBtn.disabled = !can;
+    updInRemarkBtn.title =
+      inFlight ? "處理中…" :
+      (!procId ? "請先載入加工單" :
+      (!String(procSelectedDbInputId || "").trim() ? "請先在投料列表點選一筆（已送出）" :
+      "更新本筆投料備註"));
+  }
+
+  // ===== 回收：新增/更新備註 =====
+  if(addOutBtn){
+    const prod = String(document.getElementById("proc_output_product")?.value || "").trim();
+    const qty = Number(document.getElementById("proc_output_qty")?.value || 0);
+    const unit = String(document.getElementById("proc_output_unit")?.value || "").trim();
+    const can =
+      !inFlight &&
+      editing &&
+      !ended &&
+      !!prod &&
+      (qty > 0) &&
+      !!unit;
+    addOutBtn.disabled = !can;
+    addOutBtn.title =
+      inFlight ? "處理中…" :
+      (!editing ? "請先建立或載入加工單" :
+      (ended ? `此加工單已結束（${st}），不可新增產出` :
+      (!prod ? "請先選擇產出產品" :
+      (!(qty > 0) ? "請先輸入回收數量（>0）" :
+      (!unit ? "產出單位缺失" :
+      "新增產出")))));
+  }
+  if(updOutRemarkBtn){
+    const can = !inFlight && !!procId && !!String(procSelectedDbOutputId || "").trim();
+    updOutRemarkBtn.disabled = !can;
+    updOutRemarkBtn.title =
+      inFlight ? "處理中…" :
+      (!procId ? "請先載入加工單" :
+      (!String(procSelectedDbOutputId || "").trim() ? "請先在回收列表點選一筆（已回收）" :
+      "更新本筆回收備註"));
+  }
 }
 
 async function createProcessOrderOnly(triggerEl){
@@ -1307,6 +1528,7 @@ async function createProcessOrderOnly(triggerEl){
     await loadProcessOrder(process_order_id);
     showToast("加工單已建立（OPEN）");
   } finally { hideSaveHint(); }
+  setProcButtons_();
 }
 
 async function issueProcessOrder(){
@@ -1320,9 +1542,11 @@ async function issueProcessOrder(){
   if(draftInputs.length === 0) return showToast("請至少新增 1 筆投料","error");
 
   procIssueInFlight = true;
-  setProcStatusHint_("加工狀態：送加工處理中...");
+  setProcStatusHint_("加工流程：處理中 — 送加工");
+  setProcInvHint_("庫存狀態：處理中 — 扣庫中…");
   setProcActionInlineHint_("issueProcessOrder()", "儲存中，請稍等…");
   disableButtonsByOnclick_("issueProcessOrder()", true);
+  setProcButtons_();
   try {
     const po = await getOne("process_order","process_order_id",process_order_id).catch(()=>null);
     if(!po) return showToast("找不到加工單，請先建立。","error");
@@ -1371,9 +1595,8 @@ async function issueProcessOrder(){
       return showToast("單位換算檢查未通過，請展開下方明細。", "error");
     }
 
-    // 重新抓最新 movements/lots，避免多人操作造成超扣
-    procLots = await getAll("lot");
-    procMovements = await getAll("inventory_movement").catch(()=>[]);
+    // 重新抓最新 lots + 依 lot 彙總可用量（避免整張 inventory_movement）
+    await procRefreshLotsAndAvailability_();
     for(const it of draftInputs){
       const lot = procLots.find(l => l.lot_id === it.lot_id);
       if(!lot) return showToast("找不到投料 Lot：" + it.lot_id, "error");
@@ -1382,46 +1605,25 @@ async function issueProcessOrder(){
       if(it.issue_qty > av) return showToast("投料超過可用量：" + it.lot_id, "error");
     }
 
-    for(let idx=0; idx<draftInputs.length; idx++){
-      const it = draftInputs[idx];
-      const seq = existedCount + idx + 1;
-      const inputId = `PIN-${process_order_id}-${String(seq).padStart(3,"0")}`;
-      await createRecord("process_order_input", {
-        process_input_id: inputId,
-        process_order_id,
-        lot_id: it.lot_id,
-        product_id: it.product_id,
-        issue_qty: String(it.issue_qty),
-        unit: it.unit,
-        remark: it.remark || "",
-        created_by: getCurrentUser(),
-        created_at: nowIso16()
-      });
-      await createRecord("inventory_movement", {
-        movement_id: generateId("MV"),
-        movement_type: "PROCESS_OUT",
-        lot_id: it.lot_id,
-        product_id: it.product_id,
-        qty: String(-Math.abs(it.issue_qty)),
-        unit: it.unit,
-        ref_type: "PROCESS_ORDER",
-        ref_id: process_order_id,
-        remark: "",
-        created_by: getCurrentUser(),
-        created_at: nowIso16(),
-        updated_by: "",
-        updated_at: "",
-        system_remark: `Process OUT: ${process_order_id} (${inputId})`,
-      });
-    }
+    const payloadInputs = draftInputs.map(it => ({
+      lot_id: it.lot_id,
+      product_id: it.product_id,
+      issue_qty: String(it.issue_qty),
+      unit: it.unit,
+      remark: it.remark || ""
+    }));
+
+    await callAPI({
+      action: "issue_process_order_bundle",
+      process_order_id: process_order_id,
+      expected_existed_inputs_count: String(existedCount),
+      inputs_json: JSON.stringify(payloadInputs),
+      created_by: getCurrentUser(),
+      created_at: nowIso16()
+    }, { method: "POST" });
 
     invalidateProcCaches_();
-    await updateRecord("process_order","process_order_id",process_order_id,{
-      status: "OPEN",
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16()
-    });
-    setProcStatusHint_(existedCount > 0 ? "加工狀態：已追加送加工（待回收）" : "加工狀態：已送加工（待回收）");
+    setProcStatusHint_(existedCount > 0 ? "加工流程：已追加送加工（待回收）" : "加工流程：已送加工（待回收）");
     procInputs = [];
     renderProcInputs();
     updateLossHint();
@@ -1433,6 +1635,7 @@ async function issueProcessOrder(){
     setProcActionInlineHint_("issueProcessOrder()", "");
     procIssueInFlight = false;
     disableButtonsByOnclick_("issueProcessOrder()", false);
+    setProcButtons_();
   }
 }
 
@@ -1444,129 +1647,21 @@ async function retractProcessIssue(){
 
   showSaveHint();
   try{
-    const po = await getOne("process_order","process_order_id",procId).catch(()=>null);
-    if(!po) return showToast("找不到加工單","error");
-    if((po.status || "").toUpperCase() === "CANCELLED"){
-      return showToast("此加工單已取消，不能撤回送加工。", "error");
-    }
-
-    const inputsAll = await getAll("process_order_input").catch(()=>[]);
-    const outputsAll = await getAll("process_order_output").catch(()=>[]);
-    const inputs = (inputsAll || []).filter(x => String(x.process_order_id || "").toUpperCase() === procId);
-    const outputs = (outputsAll || []).filter(x => String(x.process_order_id || "").toUpperCase() === procId);
-    const activeOutputs = outputs.filter(x => String(x.status || "").toUpperCase() !== "CANCELLED");
-
-    if(activeOutputs.length > 0){
-      showProcBlockNotice_("撤回送加工被阻擋", ["此加工單已有回收紀錄（未作廢），不可撤回送加工。請改用「作廢本筆回收」逐筆回沖，或整單取消。"]);
-      return showToast("撤回失敗：已有回收紀錄（未作廢）。", "error");
-    }
-    if(inputs.length === 0){
-      return showToast("此加工單尚未送加工（無投料明細），不需撤回。","error");
-    }
-
-    const mvAll = await getAll("inventory_movement").catch(()=>[]);
-    const shipItems = await getAll("shipment_item").catch(()=>[]);
-
-    // 找出本加工單的 PROCESS_OUT movements（送加工扣庫）
-    const srcMv = (mvAll || []).filter(m =>
-      String(m.ref_type || "") === "PROCESS_ORDER" &&
-      String(m.ref_id || "").toUpperCase() === procId &&
-      String(m.movement_type || "").toUpperCase() === "PROCESS_OUT"
-    );
-    if(srcMv.length === 0){
-      showProcBlockNotice_("撤回送加工被阻擋", ["找不到本加工單的送加工扣庫異動（PROCESS_OUT），無法撤回。"]);
-      return showToast("撤回失敗：缺少送加工異動。", "error");
-    }
-    const alreadyReversed = (mvAll || []).some(m =>
-      String(m.ref_type || "") === "PROCESS_ORDER" &&
-      String(m.ref_id || "").toUpperCase() === procId &&
-      String(m.remark || "").includes("REVERSAL(PROCESS_OUT)")
-    );
-    if(alreadyReversed){
-      return showToast("此加工單已撤回過送加工（已有回沖紀錄），避免重複回沖。","error");
-    }
-
-    // 下游使用檢查：投料 lot 在送加工後是否又被其他單據使用
-    const issueAtByLot = {};
-    srcMv.forEach(m => {
-      const lotId = String(m.lot_id || "");
-      if(!lotId) return;
-      const t = parseIsoNoTzAsLocalKey_(m.created_at);
-      if(!issueAtByLot[lotId] || t < issueAtByLot[lotId]) issueAtByLot[lotId] = t;
-    });
-    const inputLotIds = Array.from(new Set(inputs.map(x => String(x.lot_id || "")).filter(Boolean)));
-    const blockReasons = [];
-
-    // shipment_item 只要用到投料 lot，就視為下游使用（不看時間，因為出貨一定是後續動作）
-    (shipItems || []).forEach(s => {
-      const lotId = String(s.lot_id || "");
-      if(inputLotIds.includes(lotId)){
-        blockReasons.push(`投料 Lot ${lotId} 已被出貨使用（出貨單：${s.shipment_id || ""}），不可撤回送加工。`);
-      }
-    });
-
-    (mvAll || []).forEach(m => {
-      const lotId = String(m.lot_id || "");
-      if(!inputLotIds.includes(lotId)) return;
-      const issuedAt = issueAtByLot[lotId];
-      if(!issuedAt) return;
-      const createdAt = parseIsoNoTzAsLocalKey_(m.created_at);
-      // 只看「送加工之後」的異動
-      if(!(createdAt && createdAt > issuedAt)) return;
-      const sameOrder = String(m.ref_type || "") === "PROCESS_ORDER" && String(m.ref_id || "").toUpperCase() === procId;
-      const isReversal = String(m.remark || "").includes("REVERSAL");
-      if(!sameOrder && !isReversal){
-        blockReasons.push(`投料 Lot ${lotId} 在送加工後已有下游庫存異動：${m.movement_type || "UNKNOWN"}（ref:${m.ref_type || ""}:${m.ref_id || ""}）。`);
-      }
-    });
-
-    const uniq = Array.from(new Set(blockReasons));
-    if(uniq.length){
-      showProcBlockNotice_("撤回送加工被阻擋", uniq);
-      return showToast("撤回失敗：投料 Lot 已有下游使用紀錄，請先展開明細。", "error");
-    }
-
-    // 回沖 PROCESS_OUT：用 ADJUST 避免 lot gating
-    for(const m of srcMv){
-      const qty = Number(m.qty || 0);
-      if(!qty) continue;
-      await createRecord("inventory_movement", {
-        movement_id: generateId("MV"),
-        movement_type: "ADJUST",
-        lot_id: m.lot_id || "",
-        product_id: m.product_id || "",
-        qty: String(-qty),
-        unit: m.unit || "",
-        ref_type: "PROCESS_ORDER",
-        ref_id: procId,
-        remark: "",
-        created_by: getCurrentUser(),
-        created_at: nowIso16(),
-        updated_by: "",
-        updated_at: "",
-        system_remark: `REVERSAL(PROCESS_OUT) of ${m.movement_id || ""} (${procId})`,
-      });
-    }
-
-    // 刪除投料明細（讓狀態提示回到「未送加工」）
-    for(const it of inputs){
-      if(it && it.process_input_id){
-        await deleteRecord("process_order_input","process_input_id",it.process_input_id);
-      }
-    }
-
-    await updateRecord("process_order","process_order_id",procId,{
-      status: "OPEN",
+    await callAPI({
+      action: "retract_process_issue_bundle",
+      process_order_id: procId,
       updated_by: getCurrentUser(),
       updated_at: nowIso16()
-    });
+    }, { method: "POST" });
 
+    invalidateProcCaches_();
     await loadProcMasterData();
     await renderProcessOrders();
     await loadProcessOrder(procId);
     showToast("已撤回送加工（投料扣庫已回沖）");
   } finally {
     hideSaveHint();
+    setProcButtons_();
   }
 }
 
@@ -1576,7 +1671,7 @@ async function receiveProcessOutput(){
   }
   clearProcBlockNotice_();
   const { process_order_id } = getProcHeaderForm_();
-  const { outProduct, outQty, outUnit } = getProcOutputForm_();
+  const { outProduct, outQty, outUnit, outWarehouseId } = getProcOutputForm_();
   if(!process_order_id) return showToast("請先建立或載入加工單","error");
   const pendingOutputs = (procOutputs || []).filter(x => x && x._mode === "DRAFT");
   if(pendingOutputs.length === 0){
@@ -1594,11 +1689,13 @@ async function receiveProcessOutput(){
   }
 
   procReceiveInFlight = true;
-  setProcStatusHint_("加工狀態：回收處理中...");
+  setProcStatusHint_("加工流程：處理中 — 回收");
+  setProcInvHint_("庫存狀態：處理中 — 入庫中…");
   setProcActionInlineHint_("receiveProcessOutput()", "儲存中，請稍等…");
   document.querySelectorAll('button[onclick="receiveProcessOutput()"]').forEach(btn => {
     btn.disabled = true;
   });
+  setProcButtons_();
   try {
     const po = await getOne("process_order","process_order_id",process_order_id).catch(()=>null);
     if(!po) return showToast("找不到加工單，請先建立。","error");
@@ -1662,15 +1759,9 @@ async function receiveProcessOutput(){
     }
     const baseUnit = Array.from(baseUnits)[0] || "";
     let runningReceivedBase = receivedTotalBase;
-    const createdLots = [];
+    const payloadOutputs = [];
     for(let i=0; i<pendingOutputs.length; i++){
       const out = pendingOutputs[i];
-      const outSeq = outputs.length + i + 1;
-      const outLotId = generateId("LOT");
-      const outLotType = procProducts.find(p => p.product_id === out.product_id)?.type || "WIP";
-      const in0 = (inputs && inputs[0]) ? inputs[0] : null;
-      const inLot0 = in0 ? (procLots || []).find(l => String(l.lot_id||"") === String(in0.lot_id||"")) : null;
-      const whId = String(inLot0?.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN";
       const outProduct = (procProducts || []).find(p => String(p.product_id || "") === String(out.product_id || ""));
       const outBaseQty = outProduct ? convertToBase(outProduct, num(out.receive_qty), String(out.unit || "")) : null;
       if(outBaseQty == null){
@@ -1678,74 +1769,14 @@ async function receiveProcessOutput(){
       }
       runningReceivedBase += outBaseQty;
       const lossAfter = issuedTotalBase - runningReceivedBase;
-      await createRecord("lot", {
-        lot_id: outLotId,
-        product_id: out.product_id,
-        warehouse_id: whId,
-        source_type: "PROCESS",
-        source_id: process_order_id,
-        qty: String(out.receive_qty),
-        unit: out.unit,
-        type: outLotType,
-        status: "PENDING",
-        inventory_status: "ACTIVE",
-        received_date: nowIso16(),
-        manufacture_date: "",
-        expiry_date: "",
-        created_by: getCurrentUser(),
-        created_at: nowIso16(),
-        updated_by: "",
-        updated_at: "",
-        remark: out.remark || "",
-        system_remark: `Process OUT lot from ${process_order_id}`
-      });
-      await createRecord("inventory_movement", {
-        movement_id: generateId("MV"),
-        movement_type: "PROCESS_IN",
-        lot_id: outLotId,
-        product_id: out.product_id,
-        warehouse_id: whId,
-        qty: String(Math.abs(out.receive_qty)),
-        unit: out.unit,
-        ref_type: "PROCESS_ORDER",
-        ref_id: process_order_id,
-        remark: "",
-        created_by: getCurrentUser(),
-        created_at: nowIso16(),
-        updated_by: "",
-        updated_at: "",
-        system_remark: `Process IN: ${process_order_id}`,
-      });
-      await createRecord("process_order_output", {
-        process_output_id: `POUT-${process_order_id}-${String(outSeq).padStart(3,"0")}`,
-        process_order_id,
-        lot_id: outLotId,
+      payloadOutputs.push({
         product_id: out.product_id,
         receive_qty: String(out.receive_qty),
         unit: out.unit,
-        loss_base_qty_after: String(Math.round(lossAfter * 10000) / 10000),
-        loss_base_unit: baseUnit,
-        status: "PENDING",
         remark: out.remark || "",
-        created_by: getCurrentUser(),
-        created_at: nowIso16()
+        loss_base_qty_after: String(Math.round(lossAfter * 10000) / 10000),
+        loss_base_unit: baseUnit
       });
-      for(let idx=0; idx<inputs.length; idx++){
-        const it = inputs[idx];
-        await createRecord("lot_relation", {
-          relation_id: `REL-${process_order_id}-${String(outSeq).padStart(3,"0")}-${String(idx+1).padStart(3,"0")}`,
-          relation_type: "INPUT",
-          from_lot_id: it.lot_id,
-          to_lot_id: outLotId,
-          qty: String(it.issue_qty),
-          unit: it.unit,
-          ref_type: "PROCESS_ORDER",
-          ref_id: process_order_id,
-          created_by: getCurrentUser(),
-          created_at: nowIso16()
-        });
-      }
-      createdLots.push(outLotId);
     }
 
     const nextTotalBase = receivedTotalBase + newReceiveTotalBase;
@@ -1753,21 +1784,32 @@ async function receiveProcessOutput(){
     const nextStatus = allowLossClose
       ? "POSTED"
       : (nextTotalBase + 1e-9 >= issuedTotalBase ? "POSTED" : "OPEN");
-    await updateRecord("process_order","process_order_id",process_order_id,{
-      status: nextStatus,
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16()
-    });
-    setProcStatusHint_(nextStatus === "POSTED" ? "加工狀態：加工已回收（已結案）" : "加工狀態：部分回收");
+
+    const res = await callAPI({
+      action: "receive_process_output_bundle",
+      process_order_id: process_order_id,
+      expected_existed_outputs_count: String(outputs.length),
+      next_status: nextStatus,
+      allow_loss_close: allowLossClose ? "1" : "0",
+      ...(outWarehouseId ? { warehouse_id: outWarehouseId } : {}),
+      outputs_json: JSON.stringify(payloadOutputs),
+      created_by: getCurrentUser(),
+      created_at: nowIso16()
+    }, { method: "POST" });
+
+    const createdLots = Array.isArray(res?.created_lots) ? res.created_lots : [];
+    setProcStatusHint_(nextStatus === "POSTED" ? "加工流程：加工已回收（已結案）" : "加工流程：部分回收");
 
     const outQtyEl = document.getElementById("proc_output_qty");
     const outSelEl = document.getElementById("proc_output_product");
     const outUnitEl = document.getElementById("proc_output_unit");
     const outRmEl = document.getElementById("proc_output_remark");
+    const outWhEl = document.getElementById("proc_output_warehouse");
     if(outQtyEl) outQtyEl.value = "";
     if(outSelEl) outSelEl.value = "";
     if(outUnitEl) outUnitEl.value = "";
     if(outRmEl) outRmEl.value = "";
+    if(outWhEl) outWhEl.value = "";
     procOutputs = [];
     renderProcOutputs();
     updateLossHint();
@@ -1783,6 +1825,7 @@ async function receiveProcessOutput(){
     document.querySelectorAll('button[onclick="receiveProcessOutput()"]').forEach(btn => {
       btn.disabled = false;
     });
+    setProcButtons_();
   }
 }
 
@@ -1794,90 +1837,15 @@ async function cancelProcessOrder(triggerEl){
 
   showSaveHint(triggerEl);
   try{
-    const po = await getOne("process_order","process_order_id",id).catch(()=>null);
-    if(!po) return showToast("找不到加工單","error");
-    if((po.status || "").toUpperCase() === "CANCELLED"){
-      return showToast("此加工單已取消", "error");
-    }
-
-    // 若產出 Lot 已被下游使用，禁止取消（避免回沖造成追溯斷裂）
-    const outputsAll = await getAll("process_order_output").catch(()=>[]);
-    const outputLots = (outputsAll || []).filter(x => x.process_order_id === id).map(x => x.lot_id).filter(Boolean);
-    if(outputLots.length > 0){
-      const mvAll = await getAll("inventory_movement").catch(()=>[]);
-      const relAll = await getAll("lot_relation").catch(()=>[]);
-      const shipItems = await getAll("shipment_item").catch(()=>[]);
-      const blockReasons = [];
-      (mvAll || []).forEach(m => {
-        const lotId = String(m.lot_id || "");
-        if(!outputLots.includes(lotId)) return;
-        const sameOrder = String(m.ref_type || "") === "PROCESS_ORDER" && String(m.ref_id || "") === id;
-        const isReversal = String(m.remark || "").includes("REVERSAL");
-        if(!sameOrder && !isReversal){
-          const mt = m.movement_type || "UNKNOWN";
-          const rt = m.ref_type || "";
-          const rid = m.ref_id || "";
-          blockReasons.push(`產出 Lot ${lotId} 已被下游使用：庫存異動 ${mt}${rt || rid ? `（ref:${rt}:${rid}）` : ""}。`);
-        }
-      });
-      (relAll || []).forEach(r => {
-        const from = String(r.from_lot_id || "");
-        if(!outputLots.includes(from)) return;
-        const sameOrder = String(r.ref_type || "") === "PROCESS_ORDER" && String(r.ref_id || "") === id;
-        if(!sameOrder){
-          blockReasons.push(`產出 Lot ${from} 已被後續追溯關聯使用（lot_relation）。`);
-        }
-      });
-      (shipItems || []).forEach(s => {
-        const lotId = String(s.lot_id || "");
-        if(outputLots.includes(lotId)){
-          blockReasons.push(`產出 Lot ${lotId} 已被出貨使用（出貨單：${s.shipment_id || ""}）。`);
-        }
-      });
-      const uniqReasons = Array.from(new Set(blockReasons));
-      if(uniqReasons.length){
-        showProcBlockNotice_("取消加工單被阻擋", uniqReasons);
-        return showToast("取消失敗：有下游使用紀錄，請先展開明細。", "error");
-      }
-    }
-
-    const allMv = await getAll("inventory_movement").catch(()=>[]);
-    const srcMv = (allMv || []).filter(m => m.ref_type === "PROCESS_ORDER" && m.ref_id === id);
-    const reversed = srcMv.filter(m => String(m.system_remark || m.remark || "").includes("REVERSAL"));
-    if(reversed.length > 0){
-      return showToast("此加工單已有回沖紀錄，避免重複回沖。", "error");
-    }
-
-    for(const m of srcMv){
-      const qty = Number(m.qty || 0);
-      if(!qty) continue;
-      await createRecord("inventory_movement", {
-        movement_id: generateId("MV"),
-        // 回沖用 ADJUST：避免被 OUT/PROCESS_OUT/SHIP_OUT 的 lot gating 規則卡住
-        movement_type: "ADJUST",
-        lot_id: m.lot_id || "",
-        product_id: m.product_id || "",
-        qty: String(-qty),
-        unit: m.unit || "",
-        ref_type: "PROCESS_ORDER",
-        ref_id: id,
-        remark: "",
-        created_by: getCurrentUser(),
-        created_at: nowIso16(),
-        updated_by: "",
-        updated_at: "",
-        system_remark: `REVERSAL(${m.movement_type || ""}) of ${m.movement_id || ""} (${id})`,
-      });
-    }
-
-    await updateRecord("process_order","process_order_id",id,{
-      status: "CANCELLED",
+    await callAPI({
+      action: "cancel_process_order_bundle",
+      process_order_id: id,
       updated_by: getCurrentUser(),
-      updated_at: nowIso16(),
-      remark: ((po.remark || "").trim() ? (po.remark + " | ") : "") + "已取消並回沖"
-    });
-    setProcStatusHint_("加工狀態：已取消");
+      updated_at: nowIso16()
+    }, { method: "POST" });
 
+    setProcStatusHint_("加工流程：已取消");
+    invalidateProcCaches_();
     await loadProcMasterData();
     await renderProcessOrders();
     await loadProcessOrder(id);
@@ -1892,7 +1860,7 @@ async function loadProcessOrder(processOrderId){
   try{
     showToast(`載入中：${id} ...`);
   }catch(_e){}
-  setProcStatusHint_(`加工狀態：載入中（${id}）...`);
+  setProcStatusHint_(`加工流程：載入中 — ${id}`);
   try{
     const s1 = document.getElementById("procLoadedSummary");
     const s2 = document.getElementById("procLoadedInputs");
@@ -1910,6 +1878,7 @@ async function loadProcessOrder(processOrderId){
   if(!po) return showToast("找不到加工單","error");
 
   procEditing = true;
+  procLoadedStatus_ = String(po.status || "OPEN").toUpperCase();
   procInputs = [];
   procOutputs = [];
   clearProcOutputEditor_();
@@ -1941,14 +1910,39 @@ async function loadProcessOrder(processOrderId){
   if(planEl) planEl.value = po.planned_date || "";
   const rmEl = document.getElementById("proc_remark");
   if(rmEl) rmEl.value = po.remark || "";
+  setProcButtons_();
 
-  const inputsAll = await getAll("process_order_input").catch(()=>[]);
-  const outputsAll = await getAll("process_order_output").catch(()=>[]);
-  const relAll = await getAll("lot_relation").catch(()=>[]);
-
-  const inputs = (inputsAll || []).filter(x => x.process_order_id === id);
-  const outputs = (outputsAll || []).filter(x => x.process_order_id === id);
-  const rels = (relAll || []).filter(x => x.ref_type === "PROCESS_ORDER" && x.ref_id === id);
+  // 優先用後端 by id/ref 直接取子表，避免前端全表下載後再 filter（若後端未更新，fallback 舊邏輯）
+  let inputs = [];
+  let outputs = [];
+  let rels = [];
+  try{
+    const [rIn, rOut, rRel] = await Promise.all([
+      callAPI({ action: "list_process_order_input_by_order", process_order_id: id }),
+      callAPI({ action: "list_process_order_output_by_order", process_order_id: id }),
+      callAPI({ action: "list_lot_relation_by_ref", ref_type: "PROCESS_ORDER", ref_id: id })
+    ]);
+    inputs = (rIn && rIn.data) ? rIn.data : [];
+    outputs = (rOut && rOut.data) ? rOut.data : [];
+    rels = (rRel && rRel.data) ? rRel.data : [];
+  }catch(_e){
+    const [inputsAll, outputsAll, relAll] = await Promise.all([
+      getAll("process_order_input").catch(()=>[]),
+      getAll("process_order_output").catch(()=>[]),
+      // fallback：盡量縮小範圍（優先用 by ref，失敗才全表）
+      (async ()=>{
+        try{
+          const r = await callAPI({ action: "list_lot_relation_by_ref", ref_type: "PROCESS_ORDER", ref_id: id });
+          return (r && r.data) ? r.data : [];
+        }catch(_e2){
+          return await getAll("lot_relation").catch(()=>[]);
+        }
+      })()
+    ]);
+    inputs = (inputsAll || []).filter(x => x.process_order_id === id);
+    outputs = (outputsAll || []).filter(x => x.process_order_id === id);
+    rels = (relAll || []).filter(x => x.ref_type === "PROCESS_ORDER" && x.ref_id === id);
+  }
 
   // 追溯顯示：彙整「每個產出 lot」對應哪些投料 lot（依目前 lot_relation INPUT）
   procRelInputsByOutputLotId = {};
@@ -1967,6 +1961,8 @@ async function loadProcessOrder(processOrderId){
   // 供損耗提示使用（草稿清空後仍可計算）
   procLoadedInputsForHint = inputs || [];
   procLoadedOutputsForHint = outputs || [];
+  // 回收入庫倉庫：預設跟第一筆投料倉別（可由使用者改選）
+  procApplyDefaultReceiveWarehouse_(inputs);
 
   // 一套明細表：載入後直接把正式明細帶到上方表格（操作會變成回沖/作廢）
   procInputs = (inputs || []).map(x => ({
@@ -1994,6 +1990,7 @@ async function loadProcessOrder(processOrderId){
   // 不鎖投料；由 Lot 可用量過濾 + 超投檢查控管
 
   setProcStatusHint_(deriveProcStatusHint_(po, inputs, outputs));
+  setProcInvHint_(deriveProcInvHint_(po, inputs, outputs));
 
   const summaryEl = document.getElementById("procLoadedSummary");
   if(summaryEl){
@@ -2015,8 +2012,7 @@ async function loadProcessOrder(processOrderId){
     inEl.textContent = inputs.length
       ? inputs.map(x => {
           const prod = formatProcProductDisplay_(x.product_id) || (x.product_id || "");
-          const idText = x.product_id ? ` (${x.product_id})` : "";
-          return `- ${x.process_input_id || ""} | ${x.lot_id} | ${prod}${idText} | qty:${x.issue_qty} ${x.unit} | ${x.remark||""}`;
+          return `- ${x.process_input_id || ""} | ${x.lot_id} | ${prod} | qty:${x.issue_qty} ${x.unit} | ${x.remark||""}`;
         }).join("\n")
       : "(無)";
   }
@@ -2025,11 +2021,10 @@ async function loadProcessOrder(processOrderId){
     outEl.textContent = outputs.length
       ? outputs.map(x => {
           const prod = formatProcProductDisplay_(x.product_id) || (x.product_id || "");
-          const idText = x.product_id ? ` (${x.product_id})` : "";
           const lossText = (x.loss_base_qty_after != null && x.loss_base_unit)
             ? ` | loss_after:${x.loss_base_qty_after} ${x.loss_base_unit}`
             : "";
-          return `- ${x.process_output_id || ""} | ${x.lot_id} | ${prod}${idText} | qty:${x.receive_qty} ${x.unit} | status:${termLabel(x.status)}${lossText} | ${x.remark||""}`;
+          return `- ${x.process_output_id || ""} | ${x.lot_id} | ${prod} | qty:${x.receive_qty} ${x.unit} | status:${termLabel(x.status)}${lossText} | ${x.remark||""}`;
         }).join("\n")
       : "(無)";
   }
@@ -2077,22 +2072,52 @@ async function renderProcessOrders(){
   const tbody = document.getElementById("procTableBody");
   if(!tbody) return;
 
+  setTbodyLoading_(tbody, 7);
   const list = await getAll("process_order").catch(()=>[]);
-  const sorted = [...list].sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||""));
+  const kw = (document.getElementById("proc_search_keyword")?.value || "").trim().toLowerCase();
+  const qSt = (document.getElementById("proc_search_status")?.value || "").trim().toUpperCase();
+  const supMap = {};
+  (procSuppliers || []).forEach(s => {
+    if(!s || s.supplier_id == null || s.supplier_id === "") return;
+    const sid = String(s.supplier_id).trim();
+    supMap[sid] = s;
+    supMap[sid.toUpperCase()] = s;
+  });
+  const filtered = (list || []).filter(p => {
+    if(qSt && String(p.status || "").toUpperCase() !== qSt) return false;
+    if(!kw) return true;
+    const sn = String(supMap[p.supplier_id]?.supplier_name || "").toLowerCase();
+    const ptZh = procProcessTypeLabel_(p.process_type);
+    const hay = [
+      p.process_order_id,
+      p.process_type,
+      ptZh,
+      p.source_type,
+      p.supplier_id,
+      sn
+    ].map(x => String(x || "").toLowerCase()).join(" ");
+    return hay.includes(kw);
+  });
+  const sorted = [...filtered].sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||""));
 
   tbody.innerHTML = "";
+  if(!sorted.length){
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#64748b;padding:24px;">${kw || qSt ? "沒有符合條件的加工單。" : "尚無加工單。請於上方建立或載入。"}</td></tr>`;
+    return;
+  }
   sorted.forEach(p => {
+    const poId = String(p.process_order_id || "").replace(/'/g, "\\'");
     tbody.innerHTML += `
       <tr>
-        <td>${p.process_order_id || ""}</td>
-        <td>${p.process_type || ""}</td>
-        <td>${p.source_type || ""}</td>
-        <td>${p.supplier_id || ""}</td>
-        <td>${termLabel(p.status)}</td>
-        <td>${p.created_at || ""}</td>
+        <td>${escapeHtml_(p.process_order_id || "")}</td>
+        <td>${escapeHtml_(procProcessTypeLabel_(p.process_type))}</td>
+        <td>${escapeHtml_(p.source_type || "")}</td>
+        <td>${escapeHtml_(procSupplierListCell_(p.supplier_id, supMap))}</td>
+        <td>${escapeHtml_(termLabel(p.status))}</td>
+        <td>${escapeHtml_(p.created_at || "")}</td>
         <td>
-          <button class="btn-edit" onclick="loadProcessOrder('${p.process_order_id || ""}')">載入</button>
-          <button class="btn-secondary" onclick="openLogs('process_order','${p.process_order_id || ""}','process')">Logs</button>
+          <button class="btn-edit" onclick="loadProcessOrder('${poId}')">載入</button>
+          <button class="btn-secondary" onclick="openLogs('process_order','${poId}','process')">Logs</button>
         </td>
       </tr>
     `;

@@ -4,7 +4,8 @@
     <div>
       Lots 批次管理
       <button type="button" class="btn-sheet" onclick="openSheetLink('lot')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
-      <span id="lotsHeaderHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">狀態：載入中…</span>
+      <span id="lotsHeaderHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">批次狀態：載入中…</span>
+      <span id="lotsQaHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">QA概況：載入中…</span>
     </div>
     <span data-help="lotsMain"></span>
   </div>
@@ -14,7 +15,7 @@
     <!-- 🔍 搜尋區 -->
     <div class="search-toolbar" style="margin-bottom:20px;">
 
-      <input type="text" id="search_lots_keyword" placeholder="關鍵字（Lot／產品／規格／報單／PO／收貨單…）" title="關鍵字：Lot ID、產品代碼／名稱／規格、報單ID／報單號、採購單、收貨單、備註等" style="min-width:280px;">
+      <input type="text" id="search_lots_keyword" class="search-keyword-wide" placeholder="關鍵字（Lot／倉別／產品／規格／報單／PO／收貨…）" title="比對：Lot ID、倉別 ID／名稱、產品代碼／名稱／規格、報單／採購／收貨單號、備註等">
 
       <select id="search_inventory_status">
         <option value="">全部庫存狀態</option>
@@ -25,9 +26,9 @@
 
       <select id="search_inspection_status">
         <option value="">全部品檢狀態</option>
-        <option value="PENDING">PENDING（待 QA）</option>
-        <option value="APPROVED">APPROVED（合格放行）</option>
-        <option value="REJECTED">REJECTED（QA 退回）</option>
+        <option value="PENDING">PENDING（待QA）</option>
+        <option value="APPROVED">APPROVED（QA已放行）</option>
+        <option value="REJECTED">REJECTED（QA已退回）</option>
       </select>
       <button class="btn-secondary" onclick="resetLotsSearch()">重設</button>
 

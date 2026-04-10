@@ -4,8 +4,8 @@
     <span>
       採購單資料編輯
       <button type="button" class="btn-sheet" onclick="openSheetLink('purchase_order')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
-      <span id="poFlowHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">採購流程：新單 — 填主檔與明細後按明細下方「建立」開單</span>
-      <span id="poReceiptState" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">收貨狀態：未載入採購單</span>
+      <span id="poFlowHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">採購流程：新單 — 填主檔與明細後按下方「建立」開單</span>
+      <span id="poReceiptState" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">收貨狀態：未載入 — 請先載入採購單</span>
     </span>
     <span data-help="purchaseHeader"></span>
   </div>
@@ -34,15 +34,6 @@
       </div>
 
       <div class="form-group">
-        <label>狀態 *</label>
-        <select id="po_status" onchange="updatePOFlowHint_()">
-          <option value="OPEN">OPEN（開單中）</option>
-          <option value="PARTIAL">PARTIAL（部分收貨）</option>
-          <option value="CLOSED">CLOSED（已結案）</option>
-        </select>
-      </div>
-
-      <div class="form-group">
         <label>文件連結</label>
         <input type="text" id="po_document_link" placeholder="URL 或檔案連結">
       </div>
@@ -56,6 +47,7 @@
 
     <div class="button-group">
       <button class="btn-secondary" id="po_update_btn" onclick="updatePurchaseOrder(this)">更新</button>
+      <button class="btn-secondary" id="po_cancel_btn" onclick="cancelPurchaseOrder(this)">作廢</button>
       <button class="btn-secondary" onclick="resetPOForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('purchase_order', document.getElementById('po_id')?.value || '', 'inbound')">Log</button>
     </div>
@@ -106,7 +98,7 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th>項次</th>
             <th>產品（規格）</th>
             <th>數量</th>
             <th>單位</th>
@@ -137,7 +129,7 @@
   </div>
   <div class="card-body">
     <div class="search-toolbar">
-      <input type="text" id="search_po_keyword" placeholder="關鍵字（採購單號／供應商ID）" style="min-width:240px;" title="比對採購單號、供應商ID">
+      <input type="text" id="search_po_keyword" placeholder="關鍵字（採購單號／供應商）" style="min-width:260px;" title="比對採購單號、供應商ID、供應商名稱">
       <select id="search_po_status">
         <option value="">全部狀態</option>
         <option value="OPEN">OPEN（開單中）</option>

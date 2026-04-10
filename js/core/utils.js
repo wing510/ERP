@@ -48,9 +48,9 @@ function generateShortId(prefix){
    QA / 批次 / 異動 名詞：雙語或白話（新手友善）
 ========================================================= */
 var TERM_LABELS = {
-  PENDING: "PENDING（待 QA）",
-  APPROVED: "APPROVED（已放行）",
-  REJECTED: "REJECTED（QA 退回）",
+  PENDING: "PENDING（待QA）",
+  APPROVED: "APPROVED（QA已放行）",
+  REJECTED: "REJECTED（QA已退回）",
   ACTIVE: "ACTIVE（使用中）",
   INACTIVE: "INACTIVE（停用）",
   CLOSED: "CLOSED（已關閉）",
@@ -146,6 +146,20 @@ function scrollToEditorTop(){
       window.scrollTo(0,0);
     }catch(_e2){}
   }
+}
+
+/* =========================================================
+   UX：資料表 tbody 載入中（與收貨「已收列表」同風格）
+========================================================= */
+
+function setTbodyLoading_(tbodyOrId, colspan, message){
+  const tbody = typeof tbodyOrId === "string" ? document.getElementById(tbodyOrId) : tbodyOrId;
+  if(!tbody) return;
+  const n = Math.max(1, Number(colspan) || 1);
+  const msg = message == null || message === "" ? "載入中…" : String(message);
+  const esc = msg.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  tbody.innerHTML =
+    `<tr><td colspan="${n}" style="text-align:center;color:#64748b;padding:18px;">${esc}</td></tr>`;
 }
 
 /* =========================================================

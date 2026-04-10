@@ -4,7 +4,8 @@
     <span>
       委外加工單
       <button type="button" class="btn-sheet" onclick="openSheetLink('process_order')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
-      <span id="procStatusHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">加工狀態：未載入加工單</span>
+      <span id="procStatusHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">加工流程：新單 — 填主檔後按下方「建立」</span>
+      <span id="procInvHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">庫存狀態：未載入 — 請先建立或載入加工單</span>
     </span>
     <span style="display:flex;align-items:center;gap:10px;">
       <span data-help="outsourceHeader"></span>
@@ -57,9 +58,9 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-primary" onclick="createProcessOrderOnly(this)">1) 建立加工單</button>
-      <button class="btn-secondary" onclick="updateProcessOrderHeader(this)">更新備註/預計日期</button>
-      <button class="btn-secondary" onclick="cancelProcessOrder(this)">取消加工單（回沖）</button>
+      <button class="btn-primary" id="proc_create_btn" onclick="createProcessOrderOnly(this)">1) 建立加工單</button>
+      <button class="btn-secondary" id="proc_update_hdr_btn" onclick="updateProcessOrderHeader(this)">更新備註/預計日期</button>
+      <button class="btn-secondary" id="proc_cancel_btn" onclick="cancelProcessOrder(this)">取消加工單（回沖）</button>
       <button class="btn-secondary" onclick="resetProcessForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('process_order', document.getElementById('proc_id')?.value || '', 'process')">Log</button>
     </div>
@@ -113,9 +114,9 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-primary" onclick="addProcInputDraft()">新增投料</button>
+      <button class="btn-primary" id="proc_add_input_btn" onclick="addProcInputDraft()">新增投料</button>
       <button type="button" id="proc_pick_lot_btn" class="btn-secondary" onclick="openProcLotPicker()">選擇 Lot</button>
-      <button class="btn-secondary" onclick="updateSelectedProcInputRemark(this)">更新本筆備註</button>
+      <button class="btn-secondary" id="proc_update_in_remark_btn" onclick="updateSelectedProcInputRemark(this)">更新本筆備註</button>
     </div>
 
     <br>
@@ -124,7 +125,7 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th>項次</th>
             <th>Lot</th>
             <th>產品（規格）</th>
             <th>倉別</th>
@@ -139,7 +140,7 @@
     </div>
 
     <div class="button-group" style="margin-top:10px;">
-      <button class="btn-primary" onclick="issueProcessOrder()">2) 送加工（扣庫）</button>
+      <button class="btn-primary" id="proc_issue_btn" onclick="issueProcessOrder()">2) 送加工（扣庫）</button>
       <button class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
     </div>
   </div>
@@ -166,7 +167,7 @@
             <th>產品名稱</th>
             <th>倉別</th>
             <th>可用量</th>
-            <th>建立時間</th>
+            <th>效期</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -204,6 +205,11 @@
         <input type="text" id="proc_loss_hint" readonly>
       </div>
 
+      <div class="form-group">
+        <label>回收入庫倉庫</label>
+        <select id="proc_output_warehouse"></select>
+      </div>
+
       <div class="form-group full-width">
         <label>備註</label>
         <input type="text" id="proc_output_remark">
@@ -211,8 +217,8 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-primary" onclick="addProcOutputDraft()">新增產出</button>
-      <button class="btn-secondary" onclick="updateSelectedProcOutputRemark(this)">更新本筆備註</button>
+      <button class="btn-primary" id="proc_add_output_btn" onclick="addProcOutputDraft()">新增產出</button>
+      <button class="btn-secondary" id="proc_update_out_remark_btn" onclick="updateSelectedProcOutputRemark(this)">更新本筆備註</button>
     </div>
 
     <div style="margin-top:10px;color:#475569;font-size:13px;">
@@ -227,7 +233,7 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th>項次</th>
             <th>產出產品（規格）</th>
             <th>回收數量</th>
             <th>單位</th>
@@ -240,7 +246,7 @@
     </div>
 
     <div class="button-group" style="margin-top:10px;">
-      <button class="btn-primary" onclick="receiveProcessOutput()">3) 回收加工品</button>
+      <button class="btn-primary" id="proc_receive_btn" onclick="receiveProcessOutput()">3) 回收加工品</button>
       <button class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
     </div>
   </div>
@@ -253,6 +259,16 @@
     <span data-help="outsourceList"></span>
   </div>
   <div class="card-body">
+    <div class="search-toolbar" style="margin-bottom:12px;">
+      <input type="text" id="proc_search_keyword" placeholder="關鍵字（加工單ID／類型／來源／加工廠）" style="min-width:280px;" title="比對加工單ID、加工類型、來源類別、加工廠ID／名稱">
+      <select id="proc_search_status">
+        <option value="">全部狀態</option>
+        <option value="OPEN">OPEN（開單中）</option>
+        <option value="POSTED">POSTED（已結案）</option>
+        <option value="CANCELLED">CANCELLED（已取消）</option>
+      </select>
+      <button type="button" class="btn-secondary" onclick="resetProcListSearch()">重設</button>
+    </div>
     <div class="table-wrapper">
       <table class="data-table">
         <thead>

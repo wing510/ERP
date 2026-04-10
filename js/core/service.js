@@ -1,10 +1,138 @@
 /*********************************
  * ERP Service Layer v3
  * Google Sheet Backend Edition
+ * API_BASE 預設值僅定義於 js/core/config.js（請先載入 config.js）
  *********************************/
 
-const API_BASE =
-  "https://script.google.com/macros/s/AKfycbw4Pg6XTXqdqSdjzY8Vcy2p3qkP3yIOqZqo0PrZjvg2D1dR1-XCUhlFAsy8vIm1pb67/exec"
+const API_BASE = (function () {
+  try {
+    var cfg = window.__ERP_CONFIG__;
+    if (cfg && typeof cfg.API_BASE === "string" && cfg.API_BASE.trim()) {
+      return cfg.API_BASE.trim();
+    }
+  } catch (_e) {}
+  return "";
+})();
+
+/**
+ * 將 callAPI 錯誤轉成繁中說明＋操作建議（供 Toast；可含換行）
+ */
+function formatCallApiUserMessage_(err) {
+  const msg = String(err && err.message != null ? err.message : err || "");
+  const name = String(err && err.name ? err.name : "");
+  const httpStatus = err && err.httpStatus != null ? err.httpStatus : null;
+  const backendErrors = err && Array.isArray(err.backendErrors) ? err.backendErrors : null;
+
+  if (err && err.apiBaseMissing) {
+    return (
+      "未設定 API 網址（API_BASE）。\n\n" +
+      "建議：確認 index.html 已載入 js/core/config.js，且順序在 service.js 之前；或於載入 config 前設定 window.__ERP_CONFIG__.API_BASE。"
+    );
+  }
+
+  if (backendErrors && backendErrors.length) {
+    return (
+      "後端回報：" +
+      backendErrors.join("；") +
+      "\n\n建議：依訊息修正資料或必填欄位後再試；若為權限或規則問題請聯絡管理員。"
+    );
+  }
+
+  if (name === "TypeError" && /fetch|Failed to fetch|Load failed|NetworkError/i.test(msg)) {
+    return (
+      "無法連線至後端。\n\n" +
+      "建議：確認網路正常；公司／校園網路請確認未封鎖 Google；並至設定檔檢查 API_BASE 是否為正確的 Apps Script 部署網址。"
+    );
+  }
+
+  if (name === "SyntaxError" || /JSON|Unexpected token/i.test(msg)) {
+    return (
+      "無法解讀伺服器回傳內容（可能不是預期的 JSON）。\n\n" +
+      "建議：稍後再試；若持續發生請聯絡管理員檢查 Apps Script 部署與執行記錄。"
+    );
+  }
+
+  if (httpStatus === 404) {
+    return (
+      "找不到 API 部署網址（HTTP 404）。\n\n" +
+      "建議：至 js/core/config.js 確認 API_BASE 與 Google Apps Script「部署」取得的網址一致（含 /exec）。"
+    );
+  }
+  if (httpStatus === 401 || httpStatus === 403) {
+    return (
+      "無權限存取 API（HTTP " +
+      httpStatus +
+      "）。\n\n" +
+      "建議：確認部署為「具有連結的使用者」或依貴司政策調整存取權；必要時重新部署 Web App。"
+    );
+  }
+  if (httpStatus != null && httpStatus >= 500) {
+    return (
+      "伺服器暫時無法處理（HTTP " +
+      httpStatus +
+      "）。\n\n" +
+      "建議：稍後再試；Apps Script 冷啟動時可能需多等幾秒。"
+    );
+  }
+  if (httpStatus != null && httpStatus >= 400) {
+    return (
+      "無法完成請求（HTTP " +
+      httpStatus +
+      "）。\n\n" +
+      "建議：重新整理頁面後再操作；若仍失敗請聯絡管理員。"
+    );
+  }
+
+  if (/^HTTP\s+\d+/i.test(msg)) {
+    return "無法與後端通訊。\n\n建議：重新整理頁面或稍後再試；並以 F12 主控台查看細節。";
+  }
+
+  if (msg && msg.length <= 200) {
+    return msg + "\n\n建議：若為欄位或資料問題請修正後重試；否則請聯絡管理員並保留此訊息。";
+  }
+
+  return "操作失敗。\n\n建議：按 F12 開啟主控台查看錯誤細節，或稍後重試。";
+}
+
+/* =========================================================
+   PERF（前端載入耗時統計，預設關閉）
+   - enable: localStorage.erp_perf = "1" 或呼叫 enableErpPerf(true)
+========================================================= */
+const ERP_PERF = {
+  enabled: false,
+  max: 80,
+  events: [] // { t, action, ms, ok }
+};
+try{
+  ERP_PERF.enabled = (localStorage.getItem("erp_perf") === "1");
+}catch(_e){}
+
+function enableErpPerf(on){
+  ERP_PERF.enabled = !!on;
+  try{ localStorage.setItem("erp_perf", ERP_PERF.enabled ? "1" : "0"); }catch(_e){}
+  if(typeof showToast === "function"){
+    showToast(ERP_PERF.enabled ? "已開啟：載入耗時統計（請開 Console 查看）" : "已關閉：載入耗時統計");
+  }
+}
+
+function erpPerfDump(){
+  try{
+    const rows = (ERP_PERF.events || []).slice(-ERP_PERF.max).map(e => ({
+      time: e.t,
+      action: e.action,
+      ms: e.ms,
+      ok: e.ok
+    }));
+    console.table(rows);
+    return rows;
+  }catch(_e){
+    return [];
+  }
+}
+try{
+  window.enableErpPerf = enableErpPerf;
+  window.erpPerfDump = erpPerfDump;
+}catch(_e){}
 
 /* =========================================================
    CURRENT USER (暫時固定)
@@ -56,7 +184,19 @@ function showSaveHint(target) {
   if (!btnGroup) return;
   const buttons = btnGroup.querySelectorAll("button");
   buttons.forEach(function (btn) {
+    // 記錄原狀態，避免 hideSaveHint() 把「本來就 disabled」的按鈕誤打開
+    if (btn.dataset && btn.dataset.saveHintPrevDisabled == null) {
+      btn.dataset.saveHintPrevDisabled = btn.disabled ? "1" : "0";
+    }
+    if (btn.dataset && btn.dataset.saveHintPrevTitle == null) {
+      btn.dataset.saveHintPrevTitle = btn.getAttribute("title") || "";
+    }
+    if (btn.dataset) btn.dataset.saveHintDisabled = "1";
     btn.disabled = true;
+    // disabled 必須有 title：避免使用者不知道原因
+    if (!btn.getAttribute("title")) {
+      btn.setAttribute("title", "儲存中，請稍等…");
+    }
   });
   const span = document.createElement("span");
   span.id = SAVE_HINT_ID;
@@ -71,7 +211,19 @@ function hideSaveHint() {
     const groups = content.querySelectorAll(".button-group");
     groups.forEach(function (grp) {
       grp.querySelectorAll("button").forEach(function (btn) {
-        btn.disabled = false;
+        const ds = btn.dataset || {};
+        if (ds.saveHintDisabled === "1") {
+          btn.disabled = ds.saveHintPrevDisabled === "1";
+          // 還原 title（只還原 showSaveHint 暫存的）
+          if (ds.saveHintPrevTitle != null) {
+            const t = String(ds.saveHintPrevTitle || "");
+            if (t) btn.setAttribute("title", t);
+            else btn.removeAttribute("title");
+          }
+          try { delete ds.saveHintDisabled; } catch (_e) {}
+          try { delete ds.saveHintPrevDisabled; } catch (_e2) {}
+          try { delete ds.saveHintPrevTitle; } catch (_e3) {}
+        }
       });
     });
   }
@@ -79,10 +231,115 @@ function hideSaveHint() {
   if (el && el.parentNode) el.remove();
 }
 
+/* =========================================================
+   UX：偵測 disabled 按鈕缺少 title（全站檢查）
+========================================================= */
+
+function warnDisabledButtonsMissingTitle_(root){
+  const container = root || document.getElementById("content") || document;
+  if(!container || !container.querySelectorAll) return;
+  const btns = container.querySelectorAll("button");
+  btns.forEach(function(btn){
+    if(!btn) return;
+    if(btn.disabled && !btn.getAttribute("title")){
+      try{
+        const id = btn.id ? ("#" + btn.id) : "(no id)";
+        const text = String(btn.textContent || "").trim().slice(0, 40);
+        console.warn("[ERP] disabled button missing title:", id, text);
+      }catch(_e){}
+    }
+  });
+}
+
+function initDisabledButtonTitleGuard_(){
+  const content = document.getElementById("content");
+  if(!content) return;
+  warnDisabledButtonsMissingTitle_(content);
+  if(typeof MutationObserver === "undefined") return;
+  try{
+    const obs = new MutationObserver(function(muts){
+      for(const m of muts){
+        if(m.type === "attributes" && m.attributeName === "disabled"){
+          const el = m.target;
+          if(el && el.tagName === "BUTTON" && el.disabled && !el.getAttribute("title")){
+            try{
+              const id = el.id ? ("#" + el.id) : "(no id)";
+              const text = String(el.textContent || "").trim().slice(0, 40);
+              console.warn("[ERP] disabled button missing title:", id, text);
+            }catch(_e){}
+          }
+        }else if(m.type === "childList"){
+          (m.addedNodes || []).forEach(function(n){
+            if(n && n.nodeType === 1){
+              if(n.tagName === "BUTTON"){
+                if(n.disabled && !n.getAttribute("title")){
+                  try{
+                    const id = n.id ? ("#" + n.id) : "(no id)";
+                    const text = String(n.textContent || "").trim().slice(0, 40);
+                    console.warn("[ERP] disabled button missing title:", id, text);
+                  }catch(_e){}
+                }
+              }else{
+                warnDisabledButtonsMissingTitle_(n);
+              }
+            }
+          });
+        }
+      }
+    });
+    obs.observe(content, { subtree:true, childList:true, attributes:true, attributeFilter:["disabled"] });
+  }catch(_e){}
+}
+
+try{
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", initDisabledButtonTitleGuard_);
+  }else{
+    initDisabledButtonTitleGuard_();
+  }
+}catch(_e){}
+
+/**
+ * 解析後端「陣列在 data」的 JSON；相容舊版 jsonSuccess 誤把陣列展開成 0,1,2… 頂層鍵（前端讀不到 r.data）。
+ */
+function erpParseArrayDataResponse_(r) {
+  if (!r || typeof r !== "object") return [];
+  if (Array.isArray(r.data)) return r.data;
+  if (Array.isArray(r)) return r;
+  const keys = Object.keys(r)
+    .filter(function (k) {
+      return /^\d+$/.test(k);
+    })
+    .sort(function (a, b) {
+      return Number(a) - Number(b);
+    });
+  if (keys.length) {
+    return keys
+      .map(function (k) {
+        return r[k];
+      })
+      .filter(Boolean);
+  }
+  return [];
+}
+
 async function callAPI(params, options = {}){
 
   const method = String(options?.method || "GET").toUpperCase();
+  const actionName = String(params?.action || "");
+  const t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+  const timeoutMs = Number(options?.timeout_ms || 60000);
+  const ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+  const timer = (ctrl && timeoutMs > 0)
+    ? setTimeout(function(){ try{ ctrl.abort(); }catch(_e){} }, timeoutMs)
+    : null;
   try{
+    if (!API_BASE) {
+      const e = new Error("API_BASE missing");
+      e.apiBaseMissing = true;
+      throw e;
+    }
+
     // URLSearchParams 會把 undefined 變成字串 "undefined" 送出，導致試算表寫入錯誤
     const clean = {};
     Object.keys(params || {}).forEach(function (k) {
@@ -98,56 +355,146 @@ async function callAPI(params, options = {}){
             headers: {
               "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"
             },
-            body: payload
+            body: payload,
+            ...(ctrl ? { signal: ctrl.signal } : {})
           })
-        : await fetch(`${API_BASE}?${payload.toString()}`);
+        : await fetch(`${API_BASE}?${payload.toString()}`, ctrl ? { signal: ctrl.signal } : undefined);
 
     if(!response.ok){
-      throw new Error("HTTP Error: " + response.status);
+      const e = new Error("HTTP " + response.status);
+      e.httpStatus = response.status;
+      throw e;
     }
 
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch (parseErr) {
+      const e = new Error(parseErr && parseErr.message ? parseErr.message : "JSON parse error");
+      e.name = (parseErr && parseErr.name) || "SyntaxError";
+      throw e;
+    }
 
     if(!result.success){
-      throw new Error(result.errors?.join(", ") || "API error");
+      const raw = result.errors;
+      const backendErrors = Array.isArray(raw)
+        ? raw.filter(function (x) {
+            return x != null && String(x).trim() !== "";
+          }).map(function (x) {
+            return String(x);
+          })
+        : raw != null && String(raw).trim() !== ""
+          ? [String(raw)]
+          : [];
+      const e = new Error(backendErrors.length ? backendErrors.join(", ") : "API error");
+      e.backendErrors = backendErrors;
+      throw e;
     }
 
     return result;
 
   } catch(err){
     console.error("API ERROR:", err);
+    if(ERP_PERF.enabled){
+      const t1 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+      const ms = Math.round((t1 - t0) * 10) / 10;
+      const evt = { t: nowIso16(), action: actionName || "(no action)", ms, ok: false };
+      ERP_PERF.events.push(evt);
+      if(ERP_PERF.events.length > ERP_PERF.max) ERP_PERF.events.splice(0, ERP_PERF.events.length - ERP_PERF.max);
+      try{ console.warn("[ERP PERF] failed", evt); }catch(_e){}
+    }
     try{
       if(typeof showToast === "function"){
-        const msg = err?.message || "操作失敗";
-        showToast(msg, "error");
+        const userMsg = formatCallApiUserMessage_(err);
+        try {
+          err.erpUserMessage = userMsg;
+          err.erpApiToastShown = true;
+        } catch (_e2) {}
+        showToast(userMsg, "error");
       }
     }catch(_e){}
     throw err;
-  } finally {}
+  } finally {
+    try{ if(timer) clearTimeout(timer); }catch(_e3){}
+    // 成功情況：寫入 perf event
+    if(ERP_PERF.enabled){
+      const last = ERP_PERF.events[ERP_PERF.events.length - 1] || null;
+      // 若 catch 已記錄失敗事件，就不要再記一筆成功事件
+      if(!(last && last.action === (actionName || "(no action)") && last.ok === false && String(last.t || "") === nowIso16())){
+        const t1 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        const ms = Math.round((t1 - t0) * 10) / 10;
+        const evt = { t: nowIso16(), action: actionName || "(no action)", ms, ok: true };
+        ERP_PERF.events.push(evt);
+        if(ERP_PERF.events.length > ERP_PERF.max) ERP_PERF.events.splice(0, ERP_PERF.events.length - ERP_PERF.max);
+        try{
+          if(ms >= 1200) console.warn("[ERP PERF] slow", evt);
+        }catch(_e){}
+      }
+    }
+  }
 }
 
 /* =========================================================
-   GET ALL（短期快取，寫入時失效，加快選單切換）
+   GET ALL（分層 TTL 快取，寫入時 invalidate；可強制 refresh）
 ========================================================= */
 
 const API_CACHE = {};
-const API_CACHE_TTL_MS = 2 * 60 * 1000; // 2 分鐘
+/** 未列出的表使用預設 TTL */
+const API_CACHE_DEFAULT_TTL_MS = 3 * 60 * 1000; // 3 分鐘
+/** 主檔變動少、可較久快取（仍會在 create/update/delete 時失效） */
+const API_CACHE_TTL_BY_TYPE = {
+  product: 10 * 60 * 1000,
+  supplier: 10 * 60 * 1000,
+  customer: 10 * 60 * 1000,
+  warehouse: 10 * 60 * 1000,
+  user: 10 * 60 * 1000,
+  /** 量大且部分流程可能繞過 invalidate，縮短 TTL */
+  inventory_movement: 90 * 1000,
+  logs: 60 * 1000
+};
+
+function getCacheTtlMs_(typeKey) {
+  const k = String(typeKey || "").toLowerCase();
+  const t = API_CACHE_TTL_BY_TYPE[k];
+  return typeof t === "number" && t > 0 ? t : API_CACHE_DEFAULT_TTL_MS;
+}
 
 function invalidateCache(type) {
   if (type) delete API_CACHE[type];
   else Object.keys(API_CACHE).forEach(k => delete API_CACHE[k]);
 }
 
-async function getAll(type) {
+/**
+ * @param {string} type
+ * @param {{ refresh?: boolean }} [options] refresh=true 時略過快取並重新請求
+ */
+async function getAll(type, options) {
   const key = String(type || "").toLowerCase();
+  const refresh = options && options.refresh === true;
+  const ttl = getCacheTtlMs_(key);
   const now = Date.now();
-  const hit = API_CACHE[key];
-  if (hit && (now - hit.at) < API_CACHE_TTL_MS) return hit.data;
+  if (refresh) delete API_CACHE[key];
 
-  const result = await callAPI({ action: `list_${type}` });
-  const data = result.data;
-  API_CACHE[key] = { data, at: now };
-  return data;
+  const hit = API_CACHE[key];
+  if (!refresh && hit && hit.data && (now - hit.at) < ttl) return hit.data;
+  if (!refresh && hit && hit.promise) return await hit.promise;
+
+  const fetchId = Symbol();
+  const p = (async () => {
+    const result = await callAPI({ action: `list_${type}` });
+    const data = result.data;
+    const cur = API_CACHE[key];
+    if (!cur || cur.fetchId !== fetchId) return data;
+    API_CACHE[key] = { data, at: Date.now(), fetchId };
+    return data;
+  })();
+  API_CACHE[key] = { promise: p, at: now, fetchId };
+  try {
+    return await p;
+  } finally {
+    const cur = API_CACHE[key];
+    if (cur && cur.promise === p && !cur.data) delete API_CACHE[key];
+  }
 }
 
 /* =========================================================

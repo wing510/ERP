@@ -19,6 +19,19 @@ async function warehousesInit(){
   await renderWarehouses();
 }
 
+function setWarehouseButtons_(){
+  const createBtn = document.getElementById("wh_create_btn");
+  const updateBtn = document.getElementById("wh_update_btn");
+  if(createBtn){
+    createBtn.disabled = !!whEditing;
+    createBtn.title = whEditing ? "已載入倉庫，請用更新" : "建立新倉庫";
+  }
+  if(updateBtn){
+    updateBtn.disabled = !whEditing;
+    updateBtn.title = whEditing ? "更新此倉庫" : "請先載入倉庫";
+  }
+}
+
 function clearWarehouseForm(){
   whEditing = false;
   const idEl = document.getElementById("wh_id");
@@ -33,6 +46,7 @@ function clearWarehouseForm(){
   if(addrEl) addrEl.value = "";
   const rmEl = document.getElementById("wh_remark");
   if(rmEl) rmEl.value = "";
+  setWarehouseButtons_();
 }
 
 async function createWarehouse(triggerEl){
@@ -69,6 +83,7 @@ async function createWarehouse(triggerEl){
   }finally{
     hideSaveHint();
   }
+  setWarehouseButtons_();
 }
 
 async function loadWarehouse(id){
@@ -89,6 +104,7 @@ async function loadWarehouse(id){
   const rmEl = document.getElementById("wh_remark");
   if(rmEl) rmEl.value = row.remark || "";
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
+  setWarehouseButtons_();
 }
 
 async function updateWarehouse(triggerEl){
@@ -117,12 +133,17 @@ async function updateWarehouse(triggerEl){
   }finally{
     hideSaveHint();
   }
+  setWarehouseButtons_();
 }
 
 async function renderWarehouses(list=null){
   const tbody = document.getElementById("whTableBody");
   if(!tbody) return;
-  const rows = list || (await getAll("warehouse").catch(()=>[]));
+  let rows = list;
+  if(rows == null){
+    setTbodyLoading_(tbody, 5);
+    rows = await getAll("warehouse").catch(()=>[]);
+  }
   const sorted = [...(rows || [])].sort((a,b)=>String(b.updated_at||"").localeCompare(String(a.updated_at||"")));
   tbody.innerHTML = "";
   if(sorted.length === 0){
@@ -144,6 +165,7 @@ async function renderWarehouses(list=null){
 }
 
 async function searchWarehouses(){
+  setTbodyLoading_("whTableBody", 5);
   const kw = (document.getElementById("search_wh_keyword")?.value || "").trim().toLowerCase();
   const status = (document.getElementById("search_wh_status")?.value || "").trim().toUpperCase();
   const list = await getAll("warehouse").catch(()=>[]);

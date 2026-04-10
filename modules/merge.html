@@ -68,7 +68,7 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-primary" onclick="addMergeDraft()">新增來源</button>
+      <button class="btn-primary" id="merge_add_btn" onclick="addMergeDraft()">新增來源</button>
     </div>
 
     <br>
@@ -77,7 +77,7 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th>項次</th>
             <th>來源 Lot</th>
             <th>產品</th>
             <th>數量</th>
@@ -91,7 +91,7 @@
     </div>
 
     <div class="button-group" id="mergePostButtonGroup" style="margin-top:10px;">
-      <button class="btn-primary" onclick="postMerge(this)">確認合批（過帳）</button>
+      <button class="btn-primary" id="merge_post_btn" onclick="postMerge(this)">確認合批（過帳）</button>
       <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
     </div>
   </div>

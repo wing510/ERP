@@ -5,7 +5,7 @@
  *********************************/
 
 let lotsCache = [];
-let movementsCache = [];
+let movementsCache = []; // legacy: 保留變數以避免其他函式引用報錯
 /** 產品主檔完整列，供列表「產品(規格)」與搜尋規格 */
 let productsCache = [];
 /** product_id -> product_name，供列表與 Modal 顯示 */
@@ -19,9 +19,21 @@ let goodsReceiptIdToPoId = {};
 let importDocIdToImportNo = {};
 let lotsQaTriggerEl_ = null;
 let lotsWarehouses_ = [];
+let lotsAvailableByLotId_ = {};
 
 function setLotsHeaderHint_(text, type = ""){
   const el = document.getElementById("lotsHeaderHint");
+  if(!el) return;
+  el.textContent = text || "";
+  el.style.color =
+    type === "ok" ? "#166534" :
+    type === "warn" ? "#92400e" :
+    type === "error" ? "#991b1b" :
+    "#64748b";
+}
+
+function setLotsQaHint_(text, type = ""){
+  const el = document.getElementById("lotsQaHint");
   if(!el) return;
   el.textContent = text || "";
   el.style.color =
@@ -36,13 +48,23 @@ function escapeLotsHtml_(s){
 }
 
 async function lotsInit(){
-  setLotsHeaderHint_("狀態：載入中…", "warn");
+  setLotsHeaderHint_("批次狀態：載入中…", "warn");
+  setLotsQaHint_("QA概況：載入中…", "warn");
   await loadLotsAndMovements();
   bindAutoSearchToolbar_([
     ["search_lots_keyword", "input"],
     ["search_inventory_status", "change"],
     ["search_inspection_status", "change"]
   ], () => renderLots());
+  // 其他模組跳轉帶入關鍵字（例如：收貨入庫建立批次後帶入收貨單ID）
+  try{
+    const kw = window.__ERP_PREFILL_LOTS_KEYWORD__;
+    if(kw){
+      const el = document.getElementById("search_lots_keyword");
+      if(el) el.value = String(kw);
+      delete window.__ERP_PREFILL_LOTS_KEYWORD__;
+    }
+  }catch(_e){}
   await renderLots();
 }
 
@@ -60,6 +82,8 @@ async function refreshLotsData(){
 }
 
 async function loadLotsAndMovements(){
+  const lotsTb = document.getElementById("lotsTableBody");
+  if(lotsTb) setTbodyLoading_(lotsTb, 11);
   const [lots, products, warehouses, importReceipts, goodsReceipts, importDocs] = await Promise.all([
     getAll("lot"),
     getAll("product").catch(() => []),
@@ -96,16 +120,16 @@ async function loadLotsAndMovements(){
   });
 
   try{
-    const core = await loadInventoryCoreData_({ needWarehouses: false });
-    movementsCache = core.movements || [];
+    const core = await loadInventoryCoreData_({ needWarehouses: false, needMovementDetails: false });
+    lotsAvailableByLotId_ = core.movementAvailableByLotId || {};
     movementLoadFailed = !!core.movementLoadFailed;
     if(movementLoadFailed){
       if(typeof showToast === "function"){
         showToast("讀取庫存異動失敗，可用量顯示 --。請重新整理頁面或稍後再試。", "error");
       }
-      setLotsHeaderHint_("狀態：庫存異動讀取失敗（可用量顯示 --）", "error");
+      setLotsHeaderHint_("批次狀態：讀取庫存異動失敗（可用量顯示 --）", "error");
     }else{
-      setLotsHeaderHint_(lotsCache.length ? `狀態：已載入（${lotsCache.length} 筆批次）` : "狀態：已載入（0 筆）", "ok");
+      setLotsHeaderHint_(lotsCache.length ? `批次狀態：已載入 — ${lotsCache.length} 筆` : "批次狀態：已載入 — 0 筆", "ok");
     }
   }catch(_e){
     movementLoadFailed = true;
@@ -113,13 +137,36 @@ async function loadLotsAndMovements(){
     if(typeof showToast === "function"){
       showToast("讀取庫存異動失敗，可用量顯示 --。請重新整理頁面或稍後再試。", "error");
     }
-    movementsCache = [];
-    setLotsHeaderHint_("狀態：庫存異動讀取失敗（可用量顯示 --）", "error");
+    lotsAvailableByLotId_ = {};
+    setLotsHeaderHint_("批次狀態：讀取庫存異動失敗（可用量顯示 --）", "error");
+  }
+
+  // QA 概況：以目前快取清單為基礎
+  {
+    const rows = Array.isArray(lotsCache) ? lotsCache : [];
+    const c = { PENDING: 0, APPROVED: 0, REJECTED: 0, OTHER: 0 };
+    rows.forEach(l => {
+      const s = String(l?.status || "PENDING").toUpperCase();
+      if(s === "PENDING") c.PENDING++;
+      else if(s === "APPROVED") c.APPROVED++;
+      else if(s === "REJECTED") c.REJECTED++;
+      else c.OTHER++;
+    });
+    const base = `QA概況：待QA ${c.PENDING}｜QA已放行 ${c.APPROVED}｜QA已退回 ${c.REJECTED}`;
+    setLotsQaHint_(rows.length ? (c.OTHER ? `${base}｜其他 ${c.OTHER}` : base) : "QA概況：0 筆", "ok");
   }
 }
 
 function getLotsAvailableByLotId(lotId){
-  return invAvailableByLotId_(lotId, lotsCache, movementsCache);
+  const id = String(lotId || "");
+  if(!id) return 0;
+  const hit = lotsAvailableByLotId_?.[id];
+  if(hit != null) return Number(hit || 0);
+  // 彙總成功時：缺 map entry 視為 0（避免「缺資料」被誤判為有庫存）
+  if(!movementLoadFailed) return 0;
+  // 彙總失敗時：才用 lot.qty 作為估算顯示
+  const lot = (lotsCache || []).find(l => String(l.lot_id || "") === id) || null;
+  return Number(lot?.qty || 0);
 }
 
 function lotsWarehouseLabelById_(warehouseId){
@@ -159,6 +206,29 @@ function getLotById(lotId){
   return (lotsCache || []).find(l => (l.lot_id || "") === lotId) || null;
 }
 
+function isTransferDerivedLot_(lot){
+  const sr = String(lot?.system_remark || "");
+  // 轉倉時 system_remark 會寫「轉倉自 XXX（A → B）」
+  return sr.includes("轉倉自 ");
+}
+
+function getTransferSourceLotId_(lot){
+  const sr = String(lot?.system_remark || "");
+  // 例：轉倉自 LOT-XXXX（A → B）
+  const m = sr.match(/轉倉自\s*([^\s（]+)\s*（/);
+  return m ? String(m[1] || "").trim() : "";
+}
+
+function getTransferChildrenLots_(sourceLotId){
+  const id = String(sourceLotId || "").trim();
+  if(!id) return [];
+  return (lotsCache || []).filter(l => {
+    if(!l) return false;
+    if(!isTransferDerivedLot_(l)) return false;
+    return String(l.system_remark || "").includes(`轉倉自 ${id}`);
+  });
+}
+
 /** 列表顯示「產品名稱（規格）」；無主檔時退回 product_id */
 function lotsFormatProductSpec_(lot){
   const pid = lot.product_id || "";
@@ -184,7 +254,7 @@ function showQaApproveConfirm(lotId){
   batch.innerHTML = "批號：<strong>" + String(lot.lot_id || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</strong><br>產品：" + String(productName || lot.product_id || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "<br>數量：" + (lot.qty != null ? lot.qty : "") + (lot.unit ? " " + lot.unit : "");
   impact.innerHTML = "√ 可以出貨<br>√ 可以進行加工<br>√ 可以銷售";
   primary.textContent = "確認放行";
-  primary.onclick = function(){ closeLotsQaConfirm(); doApproveLot(lotId, lotsQaTriggerEl_ || primary); };
+  primary.onclick = function(){ doApproveLot(lotId, lotsQaTriggerEl_ || primary); };
   modal.dataset.lotId = lotId;
   modal.dataset.action = "approve";
   modal.style.display = "flex";
@@ -204,7 +274,7 @@ function showQaRejectConfirm(lotId){
   batch.innerHTML = "批號：<strong>" + String(lot.lot_id || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</strong><br>產品：" + String(productName || lot.product_id || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "<br>數量：" + (lot.qty != null ? lot.qty : "") + (lot.unit ? " " + lot.unit : "");
   impact.textContent = "此批次將不可用於出貨、加工、銷售。";
   primary.textContent = "確認退回";
-  primary.onclick = function(){ closeLotsQaConfirm(); doRejectLot(lotId, lotsQaTriggerEl_ || primary); };
+  primary.onclick = function(){ doRejectLot(lotId, lotsQaTriggerEl_ || primary); };
   modal.dataset.lotId = lotId;
   modal.dataset.action = "reject";
   modal.style.display = "flex";
@@ -213,33 +283,87 @@ function showQaRejectConfirm(lotId){
 async function doApproveLot(lotId, triggerEl){
   const note = prompt("QA 放行備註（可留空）") ?? "";
   showSaveHint(triggerEl || document.getElementById("qaConfirmPrimary"));
+  let ok = false;
   try {
+  const lot0 = getLotById(lotId) || null;
   await updateRecord("lot","lot_id",lotId,{
     status: "APPROVED",
     updated_by: getCurrentUser(),
     updated_at: nowIso16(),
     ...(note ? { remark: note } : {})
   });
+
+  // 轉倉衍生 Lot：QA 狀態需一致（可從來源放行；也允許從衍生 Lot 放行）
+  const sourceId = (lot0 && isTransferDerivedLot_(lot0)) ? getTransferSourceLotId_(lot0) : "";
+  const rootId = sourceId || lotId;
+  if(sourceId){
+    await updateRecord("lot","lot_id",sourceId,{
+      status: "APPROVED",
+      updated_by: getCurrentUser(),
+      updated_at: nowIso16()
+    });
+  }
+  const children = getTransferChildrenLots_(rootId);
+  for(const c of children){
+    if(!c?.lot_id) continue;
+    await updateRecord("lot","lot_id",c.lot_id,{
+      status: "APPROVED",
+      updated_by: getCurrentUser(),
+      updated_at: nowIso16()
+    });
+  }
+
   await loadLotsAndMovements();
   await renderLots();
   showToast("已放行（APPROVED）");
-  } finally { hideSaveHint(); }
+  ok = true;
+  } finally {
+    hideSaveHint();
+    if(ok) closeLotsQaConfirm();
+  }
 }
 
 async function doRejectLot(lotId, triggerEl){
   const note = prompt("QA 退回備註（可留空）") ?? "";
   showSaveHint(triggerEl || document.getElementById("qaConfirmPrimary"));
+  let ok = false;
   try {
+  const lot0 = getLotById(lotId) || null;
   await updateRecord("lot","lot_id",lotId,{
     status: "REJECTED",
     updated_by: getCurrentUser(),
     updated_at: nowIso16(),
     ...(note ? { remark: note } : {})
   });
+
+  // 轉倉衍生 Lot：QA 狀態需一致（可從來源退回；也允許從衍生 Lot 退回）
+  const sourceId = (lot0 && isTransferDerivedLot_(lot0)) ? getTransferSourceLotId_(lot0) : "";
+  const rootId = sourceId || lotId;
+  if(sourceId){
+    await updateRecord("lot","lot_id",sourceId,{
+      status: "REJECTED",
+      updated_by: getCurrentUser(),
+      updated_at: nowIso16()
+    });
+  }
+  const children = getTransferChildrenLots_(rootId);
+  for(const c of children){
+    if(!c?.lot_id) continue;
+    await updateRecord("lot","lot_id",c.lot_id,{
+      status: "REJECTED",
+      updated_by: getCurrentUser(),
+      updated_at: nowIso16()
+    });
+  }
+
   await loadLotsAndMovements();
   await renderLots();
   showToast("已退回（REJECTED）");
-  } finally { hideSaveHint(); }
+  ok = true;
+  } finally {
+    hideSaveHint();
+    if(ok) closeLotsQaConfirm();
+  }
 }
 
 function approveLot(lotId, triggerEl){ lotsQaTriggerEl_ = triggerEl || null; showQaApproveConfirm(lotId); }
@@ -331,8 +455,8 @@ function lotInventoryStatusBadge_(status){
 function lotQaStatusLabel_(status){
   const s = String(status || "").toUpperCase();
   if(s === "PENDING") return "待QA";
-  if(s === "APPROVED") return "合格放行";
-  if(s === "REJECTED") return "QA退回";
+  if(s === "APPROVED") return "QA已放行";
+  if(s === "REJECTED") return "QA已退回";
   return termLabel(s || "");
 }
 
@@ -404,6 +528,8 @@ async function renderLots(){
       const pObj = (productsCache || []).find(x => (x.product_id || "") === l.product_id);
       const pspec = pObj ? String(pObj.spec || "").toLowerCase() : "";
       const ptype = pObj ? String(pObj.type || "").toLowerCase() : "";
+      const whId = String(l.warehouse_id || "").toLowerCase();
+      const whLabel = String(lotsWarehouseLabelById_(l.warehouse_id) || "").toLowerCase();
       const hay = [
         l.lot_id,
         l.remark,
@@ -415,7 +541,9 @@ async function renderLots(){
         l.source_type,
         docId,
         poId,
-        impNo
+        impNo,
+        whId,
+        whLabel
       ].filter(Boolean).join(" ").toLowerCase();
       if(!hay.includes(qKw)) return false;
     }
@@ -424,14 +552,16 @@ async function renderLots(){
     return true;
   });
 
+  // 最新在上：群組鍵 / 收貨單ID / Lot ID 皆採「由新到舊」
+  //（Lot ID 與多數單據 ID 皆含日期時間，字串排序即可反映新舊）
   const sorted = [...list].sort((a,b)=>{
     const ak = getLotBusinessGroupKey_(a);
     const bk = getLotBusinessGroupKey_(b);
-    if(ak !== bk) return ak.localeCompare(bk);
+    if(ak !== bk) return bk.localeCompare(ak);
     const aIr = String(a.source_id || "");
     const bIr = String(b.source_id || "");
-    if(aIr !== bIr) return aIr.localeCompare(bIr);
-    return String(a.lot_id || "").localeCompare(String(b.lot_id || ""));
+    if(aIr !== bIr) return bIr.localeCompare(aIr);
+    return String(b.lot_id || "").localeCompare(String(a.lot_id || ""));
   });
 
   const byBiz = {};
@@ -468,7 +598,7 @@ async function renderLots(){
     const rkeys = Object.keys(byReceipt).sort((a, b) => {
       if(a === "__EMPTY__") return 1;
       if(b === "__EMPTY__") return -1;
-      return a.localeCompare(b);
+      return b.localeCompare(a);
     });
 
     rkeys.forEach(rk => {

@@ -48,6 +48,19 @@ async function productsInit(){
   clearForm();
 }
 
+function setProductButtons_(){
+  const createBtn = document.getElementById("p_create_btn");
+  const updateBtn = document.getElementById("p_update_btn");
+  if(createBtn){
+    createBtn.disabled = !!editingMode;
+    createBtn.title = editingMode ? "已載入產品，請用更新" : "建立新產品";
+  }
+  if(updateBtn){
+    updateBtn.disabled = !editingMode;
+    updateBtn.title = editingMode ? "更新此產品" : "請先載入產品";
+  }
+}
+
 function isProductMultiUnitEnabled_(){
   return !!document.getElementById("p_multi_unit_details")?.open;
 }
@@ -282,6 +295,7 @@ async function createProduct(triggerEl){
 
   showToast("產品建立成功");
   } finally { hideSaveHint(); }
+  setProductButtons_();
 }
 
 /* ===== 更新 ===== */
@@ -356,6 +370,7 @@ async function updateProduct(triggerEl){
 
   showToast("產品更新成功");
   } finally { hideSaveHint(); }
+  setProductButtons_();
 }
 
 /* ===== 清除表單 ===== */
@@ -375,6 +390,7 @@ function clearForm(){
   p_status.value = "ACTIVE";
   p_type.value = "RM";
   p_id.value = generateShortId("P");
+  setProductButtons_();
 }
 
 /* ===== 載入產品 ===== */
@@ -403,10 +419,12 @@ async function loadProduct(id){
 
   p_id.disabled = true;
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
+  setProductButtons_();
 }
 
 /* ===== 搜尋 ===== */
 async function searchProducts(){
+  setTbodyLoading_("productTableBody", 7);
 
   const kw = (document.getElementById("search_product_keyword")?.value || "").trim().toLowerCase();
   const type = document.getElementById("search_type")?.value || "";
@@ -442,6 +460,7 @@ async function resetSearch(){
 
 /* ===== 排序 ===== */
 async function sortProducts(field){
+  setTbodyLoading_("productTableBody", 7);
   const list = await getAll("product");
   const sorted = applySorting(list, field, productSort);
   renderProducts(sorted);
@@ -450,12 +469,13 @@ async function sortProducts(field){
 /* ===== Render ===== */
 async function renderProducts(list=null){
 
-  if(!list){
-    list = await getAll("product");
-  }
-
   const tbody=document.getElementById("productTableBody");
   if(!tbody) return;
+
+  if(!list){
+    setTbodyLoading_(tbody, 7);
+    list = await getAll("product");
+  }
 
   tbody.innerHTML="";
   if(!list.length){

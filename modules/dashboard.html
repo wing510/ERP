@@ -19,19 +19,19 @@
   <div class="card-body">
     <div class="dashboard-kpi-grid">
       <button type="button" class="dashboard-kpi dashboard-kpi-warn" onclick="navigate('lots');" title="前往 Lots 放行">
-        <span class="dashboard-kpi-label">待 QA 放行</span>
+        <span class="dashboard-kpi-label">待QA放行</span>
         <span class="dashboard-kpi-value" id="db_pending_qa">—</span>
         <span class="dashboard-kpi-hint">品檢 PENDING</span>
       </button>
       <button type="button" class="dashboard-kpi" onclick="navigate('lots');" title="前往 Lots">
         <span class="dashboard-kpi-label">可出貨批次</span>
         <span class="dashboard-kpi-value" id="db_shippable_lots">—</span>
-        <span class="dashboard-kpi-hint">QA 已放行 · 庫存 ACTIVE · 可用量 &gt; 0</span>
+        <span class="dashboard-kpi-hint">QA已放行 · 庫存 ACTIVE · 可用量 &gt; 0</span>
       </button>
       <button type="button" class="dashboard-kpi dashboard-kpi-danger" onclick="navigate('lots');" title="前往 Lots 檢視效期">
         <span class="dashboard-kpi-label">已過期批次</span>
         <span class="dashboard-kpi-value" id="db_expired_lots">—</span>
-        <span class="dashboard-kpi-hint">有效日 &lt; 今天</span>
+        <span class="dashboard-kpi-hint">有效日 &lt; 今天 · 可用量 &gt; 0</span>
       </button>
       <button type="button" class="dashboard-kpi dashboard-kpi-accent" onclick="navigate('lots');" title="前往 Lots">
         <span class="dashboard-kpi-label">效期 30 天內</span>
@@ -55,7 +55,7 @@
       <div class="dashboard-doc-block">
         <div class="dashboard-doc-title">採購 PO</div>
         <div class="dashboard-doc-row"><span>進行中（OPEN／PARTIAL）</span><strong id="db_po_open">—</strong></div>
-        <div class="dashboard-doc-row"><span>已結案</span><span id="db_po_closed">—</span></div>
+        <div class="dashboard-doc-row"><span>已結案／取消</span><span id="db_po_closed">—</span></div>
         <button type="button" class="btn-secondary btn-sm" onclick="navigate('purchase');">開啟採購</button>
       </div>
       <div class="dashboard-doc-block">
@@ -73,29 +73,69 @@
       <div class="dashboard-doc-block">
         <div class="dashboard-doc-title">出貨 Shipment</div>
         <div class="dashboard-doc-row"><span>未過帳（OPEN）</span><strong id="db_ship_open">—</strong></div>
-        <div class="dashboard-doc-row"><span>已過帳</span><span id="db_ship_posted">—</span></div>
+        <div class="dashboard-doc-row"><span>已過帳／取消</span><span id="db_ship_posted">—</span></div>
         <button type="button" class="btn-secondary btn-sm" onclick="navigate('shipping');">開啟出貨</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- 簡易流程圖 -->
+<!-- 操作流程圖（複雜版） -->
 <div class="card" style="margin-bottom:16px;">
   <div class="card-header card-header-flex">
-    <span>操作流程圖（簡易）</span>
+    <span>操作流程圖（複雜版）</span>
   </div>
   <div class="card-body">
-    <div class="dashboard-flow">
-      <a href="#" onclick="navigate('products');return false;" class="dashboard-flow-node">主檔建立<br><small>產品／供應商／客戶</small></a>
-      <span class="dashboard-flow-arrow">→</span>
-      <a href="#" onclick="navigate('purchase');return false;" class="dashboard-flow-node">採購/進口單據<br><small>PO 或 進口報單</small></a>
-      <span class="dashboard-flow-arrow">→</span>
-      <a href="#" onclick="navigate('receive');return false;" class="dashboard-flow-node">收貨入庫<br><small>產生 Lot 批次</small></a>
-      <span class="dashboard-flow-arrow">→</span>
-      <a href="#" onclick="navigate('lots');return false;" class="dashboard-flow-node">Lots / QA<br><small>放行、補登日期</small></a>
-      <span class="dashboard-flow-arrow">→</span>
-      <a href="#" onclick="navigate('shipping');return false;" class="dashboard-flow-node">出貨或加工<br><small>扣庫/流向追溯</small></a>
+    <div class="dashboard-flow-complex">
+      <div class="dashboard-flow-row">
+        <a href="#" onclick="navigate('products');return false;" class="dashboard-flow-node">
+          主檔建立<br><small>產品／供應商／客戶／倉庫</small>
+        </a>
+        <span class="dashboard-flow-arrow">→</span>
+        <a href="#" onclick="navigate('purchase');return false;" class="dashboard-flow-node">
+          採購流程<br><small>建立 PO（OPEN）</small>
+        </a>
+        <span class="dashboard-flow-arrow">／</span>
+        <a href="#" onclick="navigate('import');return false;" class="dashboard-flow-node">
+          報單流程<br><small>建立進口報單（OPEN）</small>
+        </a>
+        <span class="dashboard-flow-arrow">→</span>
+        <a href="#" onclick="navigate('receive');return false;" class="dashboard-flow-node">
+          收庫流程<br><small>收貨入庫 → 產生 Lot（待QA）</small>
+        </a>
+        <span class="dashboard-flow-arrow">→</span>
+        <a href="#" onclick="navigate('lots');return false;" class="dashboard-flow-node">
+          批次管理<br><small>Lots / QA 放行（可出貨）</small>
+        </a>
+      </div>
+
+      <div class="dashboard-flow-row" style="margin-top:10px;">
+        <a href="#" onclick="navigate('sales');return false;" class="dashboard-flow-node">
+          銷售流程<br><small>建立 SO（可出貨）</small>
+        </a>
+        <span class="dashboard-flow-arrow">→</span>
+        <a href="#" onclick="navigate('shipping');return false;" class="dashboard-flow-node">
+          出貨流程<br><small>FEFO 自動分配 Lot → 過帳扣庫</small>
+        </a>
+        <span class="dashboard-flow-arrow">→</span>
+        <a href="#" onclick="navigate('warehouse-stock');return false;" class="dashboard-flow-node">
+          倉庫庫存<br><small>依倉別查看可用量與效期</small>
+        </a>
+      </div>
+
+      <div class="dashboard-flow-row" style="margin-top:10px;">
+        <a href="#" onclick="navigate('outsource');return false;" class="dashboard-flow-node">
+          委外加工流程<br><small>投料扣庫 → 回收入庫</small>
+        </a>
+        <span class="dashboard-flow-arrow">→</span>
+        <a href="#" onclick="navigate('movements');return false;" class="dashboard-flow-node">
+          庫存異動<br><small>調整／報廢／轉倉</small>
+        </a>
+        <span class="dashboard-flow-arrow">→</span>
+        <a href="#" onclick="navigate('lots');return false;" class="dashboard-flow-node">
+          追溯/稽核<br><small>Lots 查看追溯 / Log</small>
+        </a>
+      </div>
     </div>
   </div>
 </div>
@@ -175,6 +215,17 @@
   .dashboard-doc-row strong { color: #0f172a; font-size: 18px; }
   .dashboard-doc-block .btn-sm { margin-top: 10px; width: 100%; }
   .dashboard-flow {
+    display:flex;
+    align-items:center;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .dashboard-flow-complex{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .dashboard-flow-row{
     display:flex;
     align-items:center;
     flex-wrap:wrap;

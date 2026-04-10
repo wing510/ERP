@@ -55,7 +55,7 @@
     </div>
 
     <div class="button-group">
-      <button class="btn-primary" onclick="addSplitDraft()">新增</button>
+      <button class="btn-primary" id="split_add_btn" onclick="addSplitDraft()">新增</button>
       <button class="btn-secondary" onclick="resetSplit()">清除</button>
     </div>
 
@@ -65,7 +65,7 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th>項次</th>
             <th>新 Lot</th>
             <th>數量</th>
             <th>單位</th>
@@ -78,7 +78,7 @@
     </div>
 
     <div class="button-group" id="splitPostButtonGroup" style="margin-top:10px;">
-      <button class="btn-primary" onclick="postSplit(this)">確認拆批（過帳）</button>
+      <button class="btn-primary" id="split_post_btn" onclick="postSplit(this)">確認拆批（過帳）</button>
       <button type="button" class="btn-secondary" onclick="scrollToEditorTop()">回到上方</button>
     </div>
   </div>

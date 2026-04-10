@@ -8,50 +8,97 @@ let soItemsDraft = [];
 let soProducts = [];
 let soCustomers = [];
 let soUsers = [];
+/** 主檔狀態由系統維護（出貨 bundle 回寫），前端僅顯示與鎖定用 */
+let soLoadedStatus_ = "OPEN";
 /** 委外同款：由「編輯」帶回表單後，再按「新增品項」重新加入（新 draft_id）；已出貨量暫存於此 */
 let soEditingShippedQtyHold = 0;
 /** 點選已存檔列（so_item_id）供「更新本筆備註」 */
 let soSelectedDbItemId_ = "";
 
-function isSOFormLocked_(){
-  if(!soEditing) return false;
-  const st = (document.getElementById("so_status")?.value || "OPEN").trim().toUpperCase();
-  return st === "SHIPPED" || st === "CANCELLED";
+async function hasSOShipments_(soId){
+  const id = String(soId || "").trim().toUpperCase();
+  if(!id) return false;
+  // 只要有「未作廢」出貨單（不論 POSTED/OPEN），就視為已有出貨紀錄
+  try{
+    const r = await callAPI({ action: "list_shipment_by_so", so_id: id }, { method: "GET" });
+    const ships = (r && r.data) ? r.data : [];
+    return (ships || []).some(s => String(s?.status || "").toUpperCase() !== "CANCELLED");
+  }catch(_e){
+    const all = await getAll("shipment").catch(()=>[]);
+    return (all || [])
+      .filter(s => String(s?.so_id || "").trim().toUpperCase() === id)
+      .some(s => String(s?.status || "").toUpperCase() !== "CANCELLED");
+  }
 }
 
-function onSOStatusChange_(){
-  setSOButtons_();
+function isSOFormLocked_(){
+  if(!soEditing) return false;
+  const st = String(soLoadedStatus_ || "OPEN").trim().toUpperCase();
+  return st === "SHIPPED" || st === "CANCELLED";
 }
 
 function updateSOStatusHint_(){
   const el = document.getElementById("soStatusHint");
+  const shipEl = document.getElementById("soShipState");
   if(!el) return;
   if(soEditing){
-    const st = (document.getElementById("so_status")?.value || "OPEN").trim().toUpperCase();
+    const st = String(soLoadedStatus_ || "OPEN").trim().toUpperCase();
     const label = typeof termLabel === "function" ? termLabel(st) : st;
+    if(shipEl){
+      // 銷售狀態本身就有 OPEN/PARTIAL/SHIPPED，這裡用白話再提示一次「出貨面向」
+      shipEl.textContent =
+        st === "SHIPPED" ? "出貨狀態：已載入 — 已出畢（僅可檢視）" :
+        st === "PARTIAL" ? "出貨狀態：已載入 — 部分出貨（可編輯）" :
+        "出貨狀態：已載入 — 未出貨（可編輯）";
+      shipEl.style.color = st === "SHIPPED" ? "#166534" : "#64748b";
+    }
     if(isSOFormLocked_()){
-      el.textContent = "銷售狀態：已載入 — " + (label || st) + "（已結束，僅可檢視）";
+      el.textContent = "銷售流程：已載入 — " + (label || st) + "（僅可檢視）";
       return;
     }
     el.textContent =
-      "銷售狀態：已載入 — " +
+      "銷售流程：已載入 — " +
       (label || st) +
       " — 變更後按「更新」（主檔區或明細下方皆可，功能相同）";
     return;
   }
-  el.textContent = "銷售狀態：新單（未載入）— 填主檔與明細後按明細下方「建立」";
+  el.textContent = "銷售流程：新單 — 填主檔與明細後按下方「建立」";
+  if(shipEl){
+    shipEl.textContent = "出貨狀態：未載入 — 請先載入銷售單";
+    shipEl.style.color = "#92400e";
+  }
 }
 
 function setSOButtons_(){
   const locked = isSOFormLocked_();
   const createBtn = document.getElementById("so_create_btn");
   const updateBtn = document.getElementById("so_update_btn");
+  const cancelBtn = document.getElementById("so_cancel_btn");
   const addBtn = document.getElementById("so_add_item_btn");
   const itemsSaveBtn = document.getElementById("so_items_save_btn");
   if(createBtn) createBtn.disabled = locked || soEditing;
   if(updateBtn) updateBtn.disabled = locked || !soEditing;
   if(itemsSaveBtn) itemsSaveBtn.disabled = locked || !soEditing;
   if(addBtn) addBtn.disabled = locked;
+  if(cancelBtn){
+    if(!soEditing){
+      cancelBtn.disabled = true;
+      cancelBtn.title = "請先載入銷售單";
+    }else{
+      const st = String(soLoadedStatus_ || "OPEN").toUpperCase();
+      if(st === "CANCELLED"){
+        cancelBtn.disabled = true;
+        cancelBtn.title = "此銷售單已作廢";
+      }else if(st === "SHIPPED"){
+        cancelBtn.disabled = true;
+        cancelBtn.title = "此銷售單已出畢（SHIPPED），不可作廢";
+      }else{
+        // 需等載入時的出貨檢查（loadSalesOrder 會補 title）；這裡先給預設
+        cancelBtn.disabled = false;
+        cancelBtn.title = "作廢此銷售單（需先無有效出貨單）";
+      }
+    }
+  }
   updateSOStatusHint_();
 }
 
@@ -60,8 +107,15 @@ function formatSOProductDisplay_(productId, productName, productSpec){
   const name = String(productName || id || "").trim();
   const spec = String(productSpec || "").trim();
   if(!name && !id) return "";
-  if(spec) return `${name} (${id} / ${spec})`;
-  return id ? `${name} (${id})` : name;
+  // 對齊其他模組規則：產品名稱（規格）；不把 product_id 混在同一段字串裡
+  if(spec) return `${name}（${spec}）`;
+  return name || id;
+}
+
+function soFindProduct_(productId){
+  const id = String(productId || "").trim();
+  if(!id) return null;
+  return (soProducts || []).find(p => String(p.product_id || "").trim() === id) || null;
 }
 
 function money2(n){
@@ -108,8 +162,9 @@ async function initSalesDropdowns(){
       soProducts.map(p => {
         const name = String(p.product_name || "").trim();
         const spec = String(p.spec || "").trim();
-        const label = name ? (spec ? `${name} / ${spec}` : name) : (p.product_id || "");
-        return `<option value="${p.product_id}" data-unit="${p.unit}" data-spec="${(p.spec || "").replace(/"/g, "&quot;")}">${label}</option>`;
+        const label = formatSOProductDisplay_(p.product_id, name || p.product_id, spec);
+        const safeSpec = String(p.spec || "").replace(/"/g, "&quot;");
+        return `<option value="${p.product_id}" data-unit="${p.unit}" data-spec="${safeSpec}">${label}</option>`;
       }).join("");
   }
 
@@ -133,6 +188,7 @@ function resetSOForm(){
   soEditing = false;
   soItemsDraft = [];
   renderSOItemsDraft();
+  soLoadedStatus_ = "OPEN";
 
   const idEl = document.getElementById("so_id");
   if(idEl){
@@ -148,9 +204,6 @@ function resetSOForm(){
 
   const sp = document.getElementById("so_salesperson_id");
   if(sp) sp.value = "";
-
-  const st = document.getElementById("so_status");
-  if(st) st.value = "OPEN";
 
   const rm = document.getElementById("so_remark");
   if(rm) rm.value = "";
@@ -300,7 +353,8 @@ function addSOItemDraft(){
   }
 
   const opt = sel?.selectedOptions?.[0];
-  const product_name = (opt && opt.text && opt.text.split(" - ")[1]) ? opt.text.split(" - ")[1].trim() : product_id;
+  const p = soFindProduct_(product_id);
+  const product_name = String(p?.product_name || product_id || "").trim();
   const product_spec = opt?.getAttribute("data-spec") || "";
 
   const draft_id = "DRAFT-" + Date.now() + "-" + Math.floor(Math.random()*1000);
@@ -374,7 +428,7 @@ async function createSalesOrder(triggerEl){
   const customer_id = document.getElementById("so_customer_id")?.value || "";
   const salesperson_id = document.getElementById("so_salesperson_id")?.value || "";
   const order_date = document.getElementById("so_order_date")?.value || "";
-  const status = document.getElementById("so_status")?.value || "OPEN";
+  const status = "OPEN"; // 狀態由系統依出貨自動維護
   const remark = (document.getElementById("so_remark")?.value || "").trim();
 
   if(!so_id) return showToast("銷售單ID 必填","error");
@@ -435,6 +489,7 @@ async function loadSalesOrder(soId){
   if(!so) return;
 
   soEditing = true;
+  soLoadedStatus_ = String(so.status || "OPEN").toUpperCase();
   clearSOItemEntry();
   const idEl = document.getElementById("so_id");
   idEl.value = so.so_id;
@@ -444,10 +499,15 @@ async function loadSalesOrder(soId){
   const sp = document.getElementById("so_salesperson_id");
   if(sp) sp.value = so.salesperson_id || "";
   document.getElementById("so_order_date").value = dateInputValue_(so.order_date);
-  document.getElementById("so_status").value = so.status || "OPEN";
   document.getElementById("so_remark").value = so.remark || "";
 
-  const items = (await getAll("sales_order_item")).filter(it => it.so_id === soId);
+  let items = [];
+  try{
+    const r = await callAPI({ action: "list_sales_order_item_by_so", so_id: soId }, { method: "GET" });
+    items = (r && r.data) ? r.data : [];
+  }catch(_e){
+    items = (await getAll("sales_order_item")).filter(it => it.so_id === soId);
+  }
   soItemsDraft = items.map(it => ({
     draft_id: it.so_item_id,
     product_id: it.product_id,
@@ -461,12 +521,78 @@ async function loadSalesOrder(soId){
     remark: it.remark || ""
   }));
   renderSOItemsDraft();
-  const stLoaded = String(so.status || "").toUpperCase();
+  const stLoaded = String(soLoadedStatus_ || "").toUpperCase();
   if(stLoaded === "SHIPPED" || stLoaded === "CANCELLED"){
     showToast("此銷售單已結束，不可再修改。", "error");
   }
+  // 作廢按鈕狀態（對齊 PO/進口）：若已有未作廢出貨單，禁止作廢
+  try{
+    const cancelBtn = document.getElementById("so_cancel_btn");
+    if(cancelBtn){
+      if(stLoaded === "CANCELLED"){
+        cancelBtn.disabled = true;
+        cancelBtn.title = "此銷售單已作廢";
+      }else if(stLoaded === "SHIPPED"){
+        cancelBtn.disabled = true;
+        cancelBtn.title = "此銷售單已出畢（SHIPPED），不可作廢";
+      }else{
+        const hasShip = await hasSOShipments_(soId);
+        if(hasShip){
+          cancelBtn.disabled = true;
+          cancelBtn.title = "此銷售單已有未作廢出貨單，請先作廢所有出貨單";
+        }else{
+          cancelBtn.disabled = false;
+          cancelBtn.title = "作廢此銷售單（需先無有效出貨單）";
+        }
+      }
+    }
+  }catch(_e){}
   setSOButtons_();
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
+}
+
+async function cancelSalesOrder(triggerEl){
+  if(!soEditing) return showToast("請先載入一張銷售單再作廢","error");
+  const so_id = (document.getElementById("so_id")?.value || "").trim().toUpperCase();
+  if(!so_id) return showToast("銷售單ID 缺失","error");
+
+  showSaveHint(triggerEl || document.getElementById("soItemsCommitGroup"));
+  try{
+    const header = await getOne("sales_order","so_id",so_id).catch(()=>null);
+    if(!header) return showToast("找不到銷售單","error");
+    const st = String(header.status || "").toUpperCase();
+    if(st === "CANCELLED") return showToast("此銷售單已作廢","error");
+    if(st === "SHIPPED") return showToast("此銷售單已出畢（SHIPPED），不可作廢","error");
+
+    const hasShip = await hasSOShipments_(so_id);
+    if(hasShip){
+      return showToast("此銷售單已有未作廢出貨單，請先至「出貨管理」作廢所有出貨單後再作廢銷售單。","error");
+    }
+
+    const note = prompt("作廢原因（可留空）") ?? "";
+    if(!confirm(`確定作廢此銷售單？\n- SO：${so_id}\n\n限制：需先作廢所有出貨單。`)) return;
+
+    const prevRemark = String(header.remark || "").trim();
+    const nextRemark = String(note).trim()
+      ? (prevRemark ? `${prevRemark}\n[作廢 ${nowIso16()} ${getCurrentUser()}] ${String(note).trim()}` : `[作廢 ${nowIso16()} ${getCurrentUser()}] ${String(note).trim()}`)
+      : prevRemark;
+
+    await updateRecord("sales_order","so_id",so_id,{
+      status: "CANCELLED",
+      ...(nextRemark ? { remark: nextRemark } : {}),
+      updated_by: getCurrentUser(),
+      updated_at: nowIso16()
+    });
+
+    soLoadedStatus_ = "CANCELLED";
+    if(typeof invalidateCache === "function") invalidateCache("sales_order");
+    await renderSalesOrders();
+    await loadSalesOrder(so_id);
+    showToast("銷售單已作廢（CANCELLED）");
+  } finally {
+    hideSaveHint();
+    setSOButtons_();
+  }
 }
 
 async function updateSalesOrder(triggerEl){
@@ -478,7 +604,6 @@ async function updateSalesOrder(triggerEl){
   const customer_id = document.getElementById("so_customer_id")?.value || "";
   const salesperson_id = document.getElementById("so_salesperson_id")?.value || "";
   const order_date = document.getElementById("so_order_date")?.value || "";
-  const status = document.getElementById("so_status")?.value || "OPEN";
   const remark = (document.getElementById("so_remark")?.value || "").trim();
 
   if(!customer_id) return showToast("請選擇客戶","error");
@@ -494,18 +619,97 @@ async function updateSalesOrder(triggerEl){
   showSaveHint(triggerEl || document.getElementById("soItemsCommitGroup"));
   try {
   // 若已有出貨紀錄，禁止重建明細（保持追溯一致）
-  const shipments = await getAll("shipment_item").catch(()=>[]);
-  const hasShip = shipments.some(s => s.so_id === so_id);
+  let hasShip = false;
+  try{
+    let relatedShipmentIds = [];
+    try{
+      const rShips = await callAPI({ action: "list_shipment_by_so", so_id: so_id }, { method: "GET" });
+      const ships = (rShips && rShips.data) ? rShips.data : [];
+      relatedShipmentIds = (ships || []).map(s => String(s.shipment_id || "").trim()).filter(Boolean);
+    }catch(_e0){
+      // fallback：先用近期出貨（避免全表 shipment），最後才全表
+      try{
+        const rr = await callAPI({ action: "list_shipment_recent", days: 365, _ts: String(Date.now()) }, { method: "POST" });
+        const recent = (rr && rr.data) ? rr.data : [];
+        relatedShipmentIds = (recent || [])
+          .filter(s => String(s.so_id || "").toUpperCase() === so_id)
+          .map(s => String(s.shipment_id || "").trim())
+          .filter(Boolean);
+      }catch(_eRecent){
+        const allShips = await getAll("shipment").catch(()=>[]);
+        relatedShipmentIds = (allShips || [])
+          .filter(s => String(s.so_id || "").toUpperCase() === so_id)
+          .map(s => String(s.shipment_id || "").trim())
+          .filter(Boolean);
+      }
+    }
+
+    if(relatedShipmentIds.length){
+      // 優先一次打包查詢（避免逐單多次 API）
+      let anyItems = null;
+      try{
+        const r = await callAPI({
+          action: "list_shipment_item_by_shipments",
+          shipment_ids_json: JSON.stringify(relatedShipmentIds)
+        }, { method: "POST" });
+        const rows = (r && r.data) ? r.data : [];
+        anyItems = Array.isArray(rows) ? (rows.length > 0) : false;
+      }catch(_ePack){
+        anyItems = null;
+      }
+
+      if(anyItems === true){
+        hasShip = true;
+      }else if(anyItems === false){
+        hasShip = false;
+      }else{
+        // fallback：逐單查 shipment_item（避免全表下載）
+        const rItems = await Promise.all(relatedShipmentIds.map(async (sid) => {
+          try{
+            const r = await callAPI({ action: "list_shipment_item_by_shipment", shipment_id: sid });
+            return (r && r.data) ? r.data : [];
+          }catch(_e){
+            return null;
+          }
+        }));
+
+        hasShip = rItems.some(arr => Array.isArray(arr) && arr.length > 0);
+        if(!hasShip && rItems.every(arr => arr === null)){
+          const shipments = await getAll("shipment_item").catch(()=>[]);
+          hasShip = shipments.some(s => s.so_id === so_id);
+        }
+      }
+    }
+  }catch(_e2){
+    // 最後兜底：避免直接全表 shipment_item
+    try{
+      const rShips = await callAPI({ action: "list_shipment_by_so", so_id: so_id }, { method: "GET" });
+      const ships = (rShips && rShips.data) ? rShips.data : [];
+      const ids = (ships || []).map(s => String(s.shipment_id || "").trim()).filter(Boolean);
+      if(ids.length){
+        const r = await callAPI({ action: "list_shipment_item_by_shipments", shipment_ids_json: JSON.stringify(ids) }, { method: "POST" });
+        const rows = (r && r.data) ? r.data : [];
+        hasShip = Array.isArray(rows) && rows.length > 0;
+      }else{
+        hasShip = false;
+      }
+    }catch(_e3){
+      const shipments = await getAll("shipment_item").catch(()=>[]);
+      hasShip = shipments.some(s => s.so_id === so_id);
+    }
+  }
 
   await updateRecord("sales_order","so_id",so_id,{
     customer_id,
     salesperson_id,
     order_date,
-    status,
+    // 狀態由系統依出貨單自動維護；此處維持原值
+    status: header?.status || "OPEN",
     remark,
     updated_by: getCurrentUser(),
     updated_at: nowIso16()
   });
+  soLoadedStatus_ = String(header?.status || "OPEN").toUpperCase();
 
   if(hasShip){
     showToast("此銷售單已有出貨紀錄，已更新主檔但不允許重建明細。", "error");
@@ -514,7 +718,13 @@ async function updateSalesOrder(triggerEl){
   }
 
   // 刪除後重建明細（尚未出貨才允許）
-  const items = (await getAll("sales_order_item")).filter(it => it.so_id === so_id);
+  let items = [];
+  try{
+    const r = await callAPI({ action: "list_sales_order_item_by_so", so_id: so_id }, { method: "GET" });
+    items = (r && r.data) ? r.data : [];
+  }catch(_e){
+    items = (await getAll("sales_order_item")).filter(it => it.so_id === so_id);
+  }
   for(const it of items){
     await deleteRecord("sales_order_item","so_item_id",it.so_item_id);
   }
@@ -557,9 +767,16 @@ function resetSalesSearch(){
 async function renderSalesOrders(){
   const tbody = document.getElementById("soTableBody");
   if(!tbody) return;
+  setTbodyLoading_(tbody, 6);
   const qKw = (document.getElementById("so_search_keyword")?.value || "").trim().toUpperCase();
   const qSt = (document.getElementById("so_search_status")?.value || "").trim().toUpperCase();
-  const list = await getAll("sales_order").catch(()=>[]);
+  let list = [];
+  try{
+    const r = await callAPI({ action: "list_sales_order_recent", days: 365, _ts: String(Date.now()) }, { method: "POST" });
+    list = (r && r.data) ? r.data : [];
+  }catch(_e){
+    list = await getAll("sales_order").catch(()=>[]);
+  }
   const userMap = {};
   (soUsers || []).forEach(u => { if(u && u.user_id) userMap[u.user_id] = u; });
   const customerMap = {};
@@ -572,8 +789,10 @@ async function renderSalesOrders(){
     const sid = String(so.so_id || "").toUpperCase();
     const cid = String(so.customer_id || "").toUpperCase();
     const spid = String(so.salesperson_id || "").toUpperCase();
+    const spUser = userMap[so.salesperson_id] || null;
+    const spName = String(spUser?.user_name || "").toUpperCase();
     const cn = String(customerMap[so.customer_id]?.customer_name || "").toUpperCase();
-    return sid.includes(qKw) || cid.includes(qKw) || (cn && cn.includes(qKw)) || spid.includes(qKw);
+    return sid.includes(qKw) || cid.includes(qKw) || (cn && cn.includes(qKw)) || spid.includes(qKw) || (spName && spName.includes(qKw));
   });
   const sorted = [...filtered].sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||""));
   tbody.innerHTML = "";
@@ -584,7 +803,7 @@ async function renderSalesOrders(){
   sorted.forEach(so => {
     const sp = userMap[so.salesperson_id] || null;
     const spLabel = so.salesperson_id
-      ? `${so.salesperson_id}${sp && sp.user_name ? " - " + sp.user_name : ""}`
+      ? (String(sp?.user_name || "").trim() || "—")
       : "";
     const c = customerMap[so.customer_id] || null;
     const customerNameOnly = (c && c.customer_name) ? c.customer_name : (so.customer_id || "");
@@ -596,11 +815,23 @@ async function renderSalesOrders(){
         <td>${termLabel(so.status)}</td>
         <td>${so.created_at || ""}</td>
         <td>
-          <button class="btn-edit" onclick="loadSalesOrder('${so.so_id}')">載入</button>
+          <button class="btn-edit" onclick="loadSalesOrder('${so.so_id}')">Edit</button>
+          <button type="button" class="btn-secondary" onclick="gotoShippingFromSO_('${so.so_id}')">出貨</button>
           <button type="button" class="btn-secondary" onclick="openLogs('sales_order','${so.so_id}','sales')">Log</button>
         </td>
       </tr>
     `;
   });
+}
+
+function gotoShippingFromSO_(soId){
+  const id = String(soId || "").trim().toUpperCase();
+  if(!id) return;
+  try{ window.__ERP_PREFILL_SHIP_SO_ID__ = id; }catch(_e){}
+  if(typeof navigate === "function"){
+    navigate("shipping");
+  }else{
+    showToast("無法切換到出貨頁面（navigate 未定義）", "error");
+  }
 }
 

@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-  <title>ERP v2.2 - DINGLI 鼎力</title>
+  <title>ERP v3.1 - DINGLI 鼎力</title>
 
 <style>
 body{
@@ -240,6 +240,15 @@ button:disabled,
   max-width:100%;
 }
 
+/* Lots／庫存異動列表：關鍵字欄拉長（可佔滿剩餘寬度） */
+.search-toolbar .search-keyword-wide{
+  flex:1 1 380px;
+  min-width:min(100%, 260px);
+  max-width:min(100%, 820px);
+  width:auto;
+  box-sizing:border-box;
+}
+
 /* ===== 表格（橫向可捲、重要欄位可固定） ===== */
 .table-wrapper{
   height:420px;
@@ -265,6 +274,17 @@ button:disabled,
   z-index:1;
 }
 .data-table tbody tr:hover td:first-child{ background:inherit; }
+/* 收貨明細：項次欄允許換行（進口 item_no 可能較長；全域首欄 sticky+nowrap 會先擠壓產品/倉別） */
+.table-wrapper.table-rcv-lines .data-table th:first-child,
+.table-wrapper.table-rcv-lines .data-table td:first-child{
+  white-space:normal;
+  word-break:break-word;
+  overflow-wrap:anywhere;
+  max-width:min(22ch, 38vw);
+}
+.table-wrapper.table-rcv-lines .data-table td{
+  vertical-align:middle;
+}
 /* 新增品項下方的明細表：較小高度，用於採購/報單/銷售明細 */
 .table-wrapper-items{
   max-height:200px;
@@ -519,6 +539,16 @@ th span{
   .sidebar{ width:220px; padding:14px; }
   #content{ padding:20px; }
   .search-toolbar input,.search-toolbar select{ min-width:120px; }
+  /* 各模組列表首欄（多為 ID／單號）可換行，避免窄螢幕擠壓後欄；收貨明細 table-rcv-lines 規則較細仍優先 */
+  .table-wrapper > .data-table th:first-child,
+  .table-wrapper > .data-table td:first-child{
+    white-space:normal;
+    word-break:break-word;
+    overflow-wrap:anywhere;
+    max-width:min(32ch, 48vw);
+    line-height:1.35;
+    vertical-align:middle;
+  }
 }
 
 @media (max-width:1024px){
@@ -557,7 +587,7 @@ th span{
 <body>
 
 <div class="sidebar">
-  <h2>DINGLI 鼎力<br/>ERP v2.2</h2>
+  <h2>DINGLI 鼎力<br/>ERP v3.1</h2>
 
   <a onclick="navigate('dashboard')" title="總覽與建議操作順序">Dashboard 儀表板</a>
 
@@ -598,7 +628,7 @@ th span{
   <div class="topbar">
     <div>Enterprise Resource Planning System</div>
     <div style="display:flex;gap:12px;align-items:center;">
-      <div>Version 2.2</div>
+      <div>Version 3.1</div>
       <div style="display:flex;gap:8px;align-items:center;">
         <div style="font-size:13px;color:#64748b;">User</div>
         <select id="currentUserSelect" style="height:32px;">
@@ -620,10 +650,11 @@ th span{
 <script src="js/core/inventory-utils.js"></script>
 <script src="js/core/inventory-data.js"></script>
 <script src="js/core/sheet-links.js"></script>
+<script src="js/core/config.js"></script>
 <script src="js/core/service.js"></script>
 <script src="js/help.js"></script>
 <script src="js/router.js"></script>
-<script src="js/_legacy/dashboard.js"></script>
+<script src="js/dashboard.js"></script>
 <script src="js/products.js"></script>
 <script src="js/suppliers.js"></script>
 <script src="js/customers.js"></script>

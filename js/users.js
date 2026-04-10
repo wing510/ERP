@@ -6,7 +6,24 @@ let userEditing = false;
 
 async function usersInit(){
   resetUserForm();
+  bindAutoSearchToolbar_([
+    ["u_search_keyword", "input"],
+    ["u_search_status", "change"]
+  ], () => renderUsers());
   await renderUsers();
+}
+
+function setUserButtons_(){
+  const createBtn = document.getElementById("u_create_btn");
+  const updateBtn = document.getElementById("u_update_btn");
+  if(createBtn){
+    createBtn.disabled = !!userEditing;
+    createBtn.title = userEditing ? "已載入使用者，請用更新" : "建立新使用者";
+  }
+  if(updateBtn){
+    updateBtn.disabled = !userEditing;
+    updateBtn.title = userEditing ? "更新此使用者" : "請先載入使用者";
+  }
 }
 
 function resetUserForm(){
@@ -21,6 +38,7 @@ function resetUserForm(){
   if(st) st.value = "ACTIVE";
   const rm = document.getElementById("u_remark");
   if(rm) rm.value = "";
+  setUserButtons_();
 }
 
 async function createUser(triggerEl){
@@ -52,6 +70,7 @@ async function createUser(triggerEl){
   await renderUsers();
   resetUserForm();
   } finally { hideSaveHint(); }
+  setUserButtons_();
 }
 
 async function loadUser(userId){
@@ -67,6 +86,7 @@ async function loadUser(userId){
   document.getElementById("u_status").value = u.status || "ACTIVE";
   document.getElementById("u_remark").value = u.remark || "";
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
+  setUserButtons_();
 }
 
 async function updateUser(triggerEl){
@@ -92,14 +112,44 @@ async function updateUser(triggerEl){
   showToast("使用者更新成功");
   await renderUsers();
   } finally { hideSaveHint(); }
+  setUserButtons_();
+}
+
+function resetUserListSearch(){
+  const kw = document.getElementById("u_search_keyword");
+  const st = document.getElementById("u_search_status");
+  if(kw) kw.value = "";
+  if(st) st.value = "";
+  renderUsers();
 }
 
 async function renderUsers(){
   const tbody = document.getElementById("uTableBody");
   if(!tbody) return;
+  setTbodyLoading_(tbody, 6);
   const list = await getAll("user").catch(()=>[]);
-  const sorted = [...list].sort((a,b)=>(b.updated_at||"").localeCompare(a.updated_at||""));
+  const kw = (document.getElementById("u_search_keyword")?.value || "").trim().toLowerCase();
+  const qSt = (document.getElementById("u_search_status")?.value || "").trim().toUpperCase();
+  const filtered = (list || []).filter(u => {
+    if(qSt && String(u.status || "").toUpperCase() !== qSt) return false;
+    if(!kw) return true;
+    const hay = [
+      u.user_id,
+      u.user_name,
+      u.role,
+      u.remark
+    ].map(x => String(x || "").toLowerCase()).join(" ");
+    return hay.includes(kw);
+  });
+  const sorted = [...filtered].sort((a,b)=>(b.updated_at||"").localeCompare(a.updated_at||""));
   tbody.innerHTML = "";
+  if(!sorted.length){
+    const emptyMsg = kw || qSt
+      ? '<tr><td colspan="6" style="text-align:center;color:#64748b;padding:24px;">沒有符合條件的使用者。</td></tr>'
+      : '<tr><td colspan="6" style="text-align:center;color:#64748b;padding:24px;">尚無使用者。請在上方表單建立。</td></tr>';
+    tbody.innerHTML = emptyMsg;
+    return;
+  }
   sorted.forEach(u => {
     tbody.innerHTML += `
       <tr>

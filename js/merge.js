@@ -5,25 +5,31 @@
  */
 
 let mergeLots = [];
-let mergeMovements = [];
+let mergeAvailByLotId_ = {};
+let mergeMovementLoadFailed_ = false;
 let mergeDraft = [];
 let mergePickedProduct = "";
 let mergePickedUnit = "";
 let mergePickedType = "";
 let mergePickedQA = "";
+let mergePosting_ = false;
 
 async function mergeInit(){
   await loadMergeCaches();
   resetMerge();
+  setMergeButtons_();
 }
 
 async function loadMergeCaches(){
-  const [lots, movements] = await Promise.all([
+  const [lots, availPack] = await Promise.all([
     getAll("lot"),
-    getAll("inventory_movement").catch(() => [])
+    typeof loadInventoryMovementAvailableMap_ === "function"
+      ? loadInventoryMovementAvailableMap_()
+      : Promise.resolve({ map: {}, failed: true })
   ]);
   mergeLots = lots || [];
-  mergeMovements = movements || [];
+  mergeAvailByLotId_ = (availPack && availPack.map) || {};
+  mergeMovementLoadFailed_ = !!(availPack && availPack.failed);
 
   const sel = document.getElementById("merge_source_lot");
   if(sel){
@@ -32,13 +38,21 @@ async function loadMergeCaches(){
       `<option value="">請選擇來源 Lot</option>` +
       lots.map(l => {
         const av = mergeGetAvailable(l.lot_id);
-        return `<option value="${l.lot_id}" data-product="${l.product_id}" data-unit="${l.unit}" data-type="${l.type}" data-qa="${l.status}" data-av="${av}">${l.lot_id} (${l.product_id}) 可用:${av}</option>`;
+        return `<option value="${l.lot_id}" data-product="${l.product_id}" data-unit="${l.unit}" data-type="${l.type}" data-qa="${l.status}" data-av="${av}">${l.lot_id} 可用:${av}</option>`;
       }).join("");
   }
 }
 
 function mergeGetAvailable(lotId){
-  return mergeMovements.filter(m => m.lot_id === lotId).reduce((sum, m) => sum + Number(m.qty||0), 0);
+  const id = String(lotId || "");
+  if (!id) return 0;
+  const hit = mergeAvailByLotId_[id];
+  if (hit != null) return Number(hit || 0);
+  if (mergeMovementLoadFailed_) {
+    const lot = (mergeLots || []).find(l => String(l.lot_id || "") === id);
+    return Number(lot?.qty || 0);
+  }
+  return 0;
 }
 
 function resetMerge(){
@@ -61,6 +75,7 @@ function resetMerge(){
   document.getElementById("merge_take_qty").value = "";
   document.getElementById("merge_take_unit").value = "";
   document.getElementById("merge_take_remark").value = "";
+  setMergeButtons_();
 }
 
 function onSelectMergeSource(){
@@ -69,6 +84,7 @@ function onSelectMergeSource(){
   if(!opt) return;
   document.getElementById("merge_available").value = opt.getAttribute("data-av") || "";
   document.getElementById("merge_take_unit").value = opt.getAttribute("data-unit") || "";
+  setMergeButtons_();
 }
 
 function addMergeDraft(){
@@ -117,6 +133,7 @@ function addMergeDraft(){
 
   renderMergeDraft();
   updateMergeTotal();
+  setMergeButtons_();
 }
 
 function removeMergeDraft(draftId){
@@ -132,6 +149,7 @@ function removeMergeDraft(draftId){
     document.getElementById("merge_unit").value = "";
     document.getElementById("merge_total").value = "";
   }
+  setMergeButtons_();
 }
 
 function renderMergeDraft(){
@@ -151,11 +169,35 @@ function renderMergeDraft(){
       </tr>
     `;
   });
+  setMergeButtons_();
 }
 
 function updateMergeTotal(){
   const total = mergeDraft.reduce((sum, x) => sum + Number(x.qty||0), 0);
   document.getElementById("merge_total").value = total ? total.toFixed(2) : "";
+  setMergeButtons_();
+}
+
+function setMergeButtons_(){
+  const addBtn = document.getElementById("merge_add_btn");
+  const postBtn = document.getElementById("merge_post_btn");
+  const newId = String(document.getElementById("merge_new_lot_id")?.value || "").trim();
+  const hasEnough = (mergeDraft || []).length >= 2;
+  const readyMeta = !!mergePickedProduct && !!mergePickedUnit;
+  if(addBtn){
+    addBtn.disabled = mergePosting_;
+    addBtn.title = mergePosting_ ? "過帳中…" : "新增來源 Lot";
+  }
+  if(postBtn){
+    const canPost = !mergePosting_ && newId && hasEnough && readyMeta;
+    postBtn.disabled = !canPost;
+    postBtn.title =
+      mergePosting_ ? "過帳中…" :
+      (!newId ? "新 Lot ID 必填" :
+      (!hasEnough ? "合批至少需要 2 個來源 Lot" :
+      (!readyMeta ? "請先加入來源 Lot（以確定產品/單位）" :
+      "確認合批（過帳）")));
+  }
 }
 
 async function postMerge(triggerEl){
@@ -183,6 +225,8 @@ async function postMerge(triggerEl){
   const total = mergeDraft.reduce((sum, x) => sum + Number(x.qty||0), 0);
 
   showSaveHint(triggerEl || document.getElementById("mergePostButtonGroup"));
+  mergePosting_ = true;
+  setMergeButtons_();
   try {
   const firstSrcLot = (mergeLots || []).find(l => l.lot_id === (mergeDraft?.[0]?.lot_id || "")) || null;
   const whId = String(firstSrcLot?.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN";
@@ -271,6 +315,8 @@ async function postMerge(triggerEl){
   resetMerge();
   } finally {
     hideSaveHint();
+    mergePosting_ = false;
+    setMergeButtons_();
   }
 }
 

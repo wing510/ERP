@@ -7,9 +7,20 @@
 
 let wsWarehouses = [];
 let wsLots = [];
-let wsMovements = [];
 let wsProducts = [];
 let wsMovementLoadFailed = false;
+let wsAvailableByLotIdMap_ = {};
+let wsLoadedAt_ = 0;
+let wsReloading_ = false;
+
+async function wsLoadFreshAvailableMap_(){
+  // 與 dashboard / lots 相同：優先後端彙總 API，避免每次全表 list_inventory_movement
+  const pack =
+    typeof loadInventoryMovementAvailableMap_ === "function"
+      ? await loadInventoryMovementAvailableMap_()
+      : { map: {}, failed: true };
+  return pack && pack.map ? pack.map : {};
+}
 
 function wsEscapeHtml_(s){
   return String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -20,7 +31,16 @@ function wsExpiryInfo_(expiryDateStr){
 }
 
 function wsAvailableByLotId_(lotId){
-  return invAvailableByLotId_(lotId, wsLots, wsMovements);
+  const id = String(lotId || "");
+  if(!id) return 0;
+  const hit = wsAvailableByLotIdMap_?.[id];
+  if(hit != null) return Number(hit || 0);
+  // 只有在 movements 讀取失敗時，才退回用 lot.qty（避免 map 暫時缺值/快取舊值造成顯示錯帳）
+  if(wsMovementLoadFailed){
+    const lot = (wsLots || []).find(l => String(l.lot_id || "") === id) || null;
+    return Number(lot?.qty || 0);
+  }
+  return 0;
 }
 
 function wsProductDisplay_(productId){
@@ -51,12 +71,15 @@ async function warehouseStockInit(){
 }
 
 async function wsLoadData_(){
-  const core = await loadInventoryCoreData_({ needWarehouses: true });
+  const wsTb = document.getElementById("ws_tbody");
+  if(wsTb) setTbodyLoading_(wsTb, 5);
+  const core = await loadInventoryCoreData_({ needWarehouses: true, needMovementDetails: false });
   wsWarehouses = core.warehouses || [];
   wsLots = core.lots || [];
-  wsMovements = core.movements || [];
   wsProducts = core.products || [];
   wsMovementLoadFailed = !!core.movementLoadFailed;
+  wsAvailableByLotIdMap_ = core.movementAvailableByLotId || {};
+  wsLoadedAt_ = Date.now();
   if(wsMovementLoadFailed && typeof showToast === "function"){
     showToast("讀取庫存異動失敗，可用量可能不準。請重新整理頁面或稍後再試。", "error");
   }
@@ -84,13 +107,16 @@ function wsGetFilters_(){
   const warehouseId = (document.getElementById("ws_warehouse")?.value || "").trim().toUpperCase();
   const kw = (document.getElementById("ws_keyword")?.value || "").trim().toLowerCase();
   const view = document.getElementById("ws_view")?.value || "product";
-  const windowDays = Number(document.getElementById("ws_expiry_window")?.value || 30);
-  return { warehouseId, kw, view, windowDays };
+  const windowDays = Number(document.getElementById("ws_expiry_window")?.value || 0);
+  return { warehouseId, kw, view, windowDays, showZero: false };
 }
 
 function wsFilterLots_(){
   const { warehouseId, kw } = wsGetFilters_();
-  const source = (wsLots || []).filter(l => String(l.warehouse_id||"").toUpperCase() === warehouseId);
+  const source = (wsLots || [])
+    .filter(l => String(l.warehouse_id||"").toUpperCase() === warehouseId)
+    // 預設只看可用的 lot；轉倉後來源 lot 會被關閉（CLOSED），不應繼續在庫存頁面誤導使用者
+    .filter(l => String(l.inventory_status || "ACTIVE").toUpperCase() === "ACTIVE");
   if(!kw) return source;
   return source.filter(l=>{
     const lotId = String(l.lot_id||"").toLowerCase();
@@ -107,7 +133,36 @@ function wsRender_(){
   const summary = document.getElementById("ws_summary");
   if(!thead || !tbody || !summary) return;
 
-  const { view, windowDays, warehouseId } = wsGetFilters_();
+  // 若剛做過轉倉/扣庫，且此頁資料是舊的，就自動重載（避免兩邊都像有量）
+  try{
+    const dirtyAt = Number(localStorage.getItem("erp_inventory_dirty_at") || 0);
+    if(dirtyAt && dirtyAt > wsLoadedAt_ && !wsReloading_){
+      wsReloading_ = true;
+      // 先用最快的 core data 重載（主檔/lot/product）
+      wsLoadData_()
+        .then(async ()=>{
+          // 再強制重抓可用量彙總（POST + cache bust，與庫存核心策略一致）
+          try{
+            if (typeof loadInventoryMovementAvailableMap_ === "function") {
+              const pack = await loadInventoryMovementAvailableMap_();
+              wsAvailableByLotIdMap_ = pack.map || {};
+              wsMovementLoadFailed = !!pack.failed;
+            } else {
+              wsAvailableByLotIdMap_ = await wsLoadFreshAvailableMap_();
+              wsMovementLoadFailed = false;
+            }
+          }catch(_e){
+            // 保留 core 的 map（可能仍是舊的），但至少不會卡死
+          }
+          try{ localStorage.removeItem("erp_inventory_dirty_at"); }catch(_e){}
+        })
+        .then(()=> wsRender_())
+        .finally(()=>{ wsReloading_ = false; });
+      return;
+    }
+  }catch(_e){}
+
+  const { view, windowDays, warehouseId, showZero } = wsGetFilters_();
   if(!warehouseId){
     thead.innerHTML = "";
     tbody.innerHTML = '<tr><td style="text-align:center;color:#64748b;padding:22px;">請先建立倉庫</td></tr>';
@@ -120,7 +175,7 @@ function wsRender_(){
     const av = wsAvailableByLotId_(l.lot_id);
     const exp = wsExpiryInfo_(l.expiry_date);
     return { lot:l, av, exp };
-  }).filter(x => Number(x.av || 0) > 1e-9); // 只看有可用量
+  }).filter(x => showZero ? true : (Number(x.av || 0) > 1e-9)); // 預設只看有可用量
 
   const expWindowOn = windowDays > 0;
   const windowed = expWindowOn

@@ -6,14 +6,19 @@
 
 let shipDraft = [];
 let shipLots = [];
-let shipMovements = [];
+let shipMovements = []; // legacy: 保留變數以避免其他函式引用報錯
+let shipAvailableByLotId_ = {};
 let shipCustomers = [];
 let shipSalesOrders = [];
 let shipSalesItems = [];
+let shipSalesItemsBySoId_ = {};
+let shipSalesItemsLoadingBySoId_ = {};
 let shipProducts = [];
 let shipWarehouses = [];
 let shipEditing = false;
 let shipReadOnlyDraft = false;
+/** 主檔狀態由系統維護（過帳/作廢 bundle 回寫），前端僅顯示用 */
+let shipLoadedStatus_ = "OPEN";
 let shipGoodsReceiptIdToPoId = {};
 let shipImportReceiptIdToDocId = {};
 let shipImportDocIdToImportNo = {};
@@ -22,12 +27,54 @@ let shipSelectedLineId_ = "";
 
 function updateShipStatusHint_(){
   const el = document.getElementById("shipStatusHint");
+  const invEl = document.getElementById("shipInvState");
   if(!el) return;
   if(shipEditing && shipReadOnlyDraft){
-    const st = (document.getElementById("ship_status")?.value || "").trim().toUpperCase();
-    el.textContent = "出貨狀態：已載入 — " + (termLabel(st) || st) + "（明細僅檢視）";
+    const st = String(shipLoadedStatus_ || "").trim().toUpperCase();
+    el.textContent = "出貨流程：已載入 — " + (termLabel(st) || st) + "（僅可檢視）";
+    if(invEl){
+      invEl.textContent =
+        st === "POSTED" ? "扣庫狀態：已過帳 — 已扣庫" :
+        st === "CANCELLED" ? "扣庫狀態：已作廢 — 已反沖" :
+        "扣庫狀態：未過帳 — 未扣庫";
+      invEl.style.color =
+        st === "POSTED" ? "#166534" :
+        st === "CANCELLED" ? "#991b1b" :
+        "#92400e";
+    }
   }else{
-    el.textContent = "出貨狀態：新單 — 填主檔與明細後按下方「建立並過帳出貨」扣庫";
+    el.textContent = "出貨流程：新單 — 填主檔與明細後按下方「建立並過帳出貨」扣庫";
+    if(invEl){
+      invEl.textContent = "扣庫狀態：未過帳 — 建立並過帳後才扣庫";
+      invEl.style.color = "#92400e";
+    }
+  }
+}
+
+function setShipButtons_(){
+  const postBtn = document.getElementById("ship_post_btn");
+  const cancelBtn = document.getElementById("ship_cancel_btn");
+  const st = String(shipLoadedStatus_ || "OPEN").toUpperCase();
+
+  if(postBtn){
+    // 建單（並過帳）只在「新單草稿」可用
+    postBtn.disabled = !!shipEditing;
+    postBtn.title = shipEditing ? "請先清除回到新單，才能建立並過帳" : "建立並過帳出貨（扣庫）";
+  }
+  if(cancelBtn){
+    if(!shipEditing){
+      cancelBtn.disabled = true;
+      cancelBtn.title = "請先載入出貨單";
+    }else if(st === "CANCELLED"){
+      cancelBtn.disabled = true;
+      cancelBtn.title = "此出貨單已作廢";
+    }else if(st !== "POSTED"){
+      cancelBtn.disabled = true;
+      cancelBtn.title = "僅 POSTED 出貨單可作廢";
+    }else{
+      cancelBtn.disabled = false;
+      cancelBtn.title = "作廢此出貨單（將反沖庫存並回寫 SO）";
+    }
   }
 }
 
@@ -38,19 +85,44 @@ function formatShipProductDisplay_(productId){
   return spec ? `${name}（${spec}）` : name;
 }
 
+function shipFindProduct_(productId){
+  const id = String(productId || "").trim();
+  if(!id) return null;
+  return (shipProducts || []).find(p => String(p.product_id || "").trim() === id) || null;
+}
+
 async function shippingInit(){
   await loadShipMasterData();
   const lotKw = document.getElementById("ship_lot_picker_keyword");
   if(lotKw && !lotKw.dataset.bound){
     lotKw.dataset.bound = "1";
-    lotKw.addEventListener("input", () => renderShipLotPicker_(getShipEligibleLots_()));
+    lotKw.addEventListener("input", () => renderShipLotPicker_(getShipLotsForPicker_()));
   }
   const lotView = document.getElementById("ship_lot_picker_viewmode");
   if(lotView && !lotView.dataset.bound){
     lotView.dataset.bound = "1";
-    lotView.addEventListener("change", () => renderShipLotPicker_(getShipEligibleLots_()));
+    lotView.addEventListener("change", () => renderShipLotPicker_(getShipLotsForPicker_()));
+  }
+  const showInel = document.getElementById("ship_show_ineligible_lots");
+  if(showInel && !showInel.dataset.bound){
+    showInel.dataset.bound = "1";
+    showInel.addEventListener("change", () => renderShipLotPicker_(getShipLotsForPicker_()));
   }
   resetShipForm();
+  setShipButtons_();
+  try{ shipUpdateAllocModeUI_(); }catch(_e){}
+  // 從銷售單跳轉：預先選擇銷售單
+  try{
+    const preSo = window.__ERP_PREFILL_SHIP_SO_ID__;
+    if(preSo){
+      const soSel = document.getElementById("ship_so_id");
+      if(soSel){
+        soSel.value = String(preSo || "");
+        onSelectShipSO();
+      }
+      delete window.__ERP_PREFILL_SHIP_SO_ID__;
+    }
+  }catch(_e){}
   bindAutoSearchToolbar_([
     ["ship_search_keyword", "input"],
     ["ship_search_status", "change"]
@@ -58,13 +130,96 @@ async function shippingInit(){
   await renderShipments();
 }
 
+function shipIsAutoAlloc_(){
+  return !!document.getElementById("ship_auto_alloc")?.checked;
+}
+
+function shipUpdateAllocModeUI_(){
+  const auto = shipIsAutoAlloc_();
+  const pickBtn = document.getElementById("ship_pick_lot_btn");
+  const lotDisp = document.getElementById("ship_lot_display");
+  const lotId = document.getElementById("ship_lot_id");
+  if(pickBtn) pickBtn.disabled = !!shipReadOnlyDraft || auto;
+  if(lotDisp){
+    lotDisp.placeholder = auto ? "自動分配（依效期 FEFO）" : "請在下方按「選擇 Lot」帶入";
+    lotDisp.style.background = auto ? "#f8fafc" : "";
+  }
+  if(auto){
+    if(lotId) lotId.value = "";
+    if(lotDisp) lotDisp.value = "";
+  }
+}
+
+function shipParseYMD_(s){
+  const raw = String(s || "").trim();
+  if(!raw) return null;
+  const m = raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+  if(!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if(!y || !mo || !d) return null;
+  return { y, mo, d };
+}
+
+function shipExpirySortKey_(lot){
+  const ymd = shipParseYMD_(lot?.expiry_date);
+  if(!ymd) return "9999-12-31";
+  const pad2 = (n)=>String(n).padStart(2,"0");
+  return `${ymd.y}-${pad2(ymd.mo)}-${pad2(ymd.d)}`;
+}
+
+function shipIsLotEligibleForShip_(lot){
+  if(!lot) return false;
+  const whitelist = shipGetProductWhitelistForPicker_();
+  const pid = String(lot?.product_id || "").trim();
+  if(whitelist && !whitelist.has(pid)) return false;
+  if(String(lot.inventory_status || "ACTIVE").toUpperCase() !== "ACTIVE") return false;
+  if(String(lot.status || "PENDING").toUpperCase() !== "APPROVED") return false;
+  try{
+    if(typeof invIsExpired_ === "function" && invIsExpired_(lot.expiry_date)) return false;
+  }catch(_e){}
+  const av = shipGetAvailable(lot.lot_id);
+  return Number(av || 0) > 1e-9;
+}
+
+function shipAutoAllocateLots_(productId, qtyNeeded){
+  const pid = String(productId || "").trim();
+  let need = Number(qtyNeeded || 0);
+  if(!pid || !(need > 0)) return { lines: [], shortage: need };
+
+  const candidates = (shipLots || [])
+    .filter(l => String(l?.product_id || "").trim() === pid)
+    .filter(l => shipIsLotEligibleForShip_(l));
+
+  candidates.sort((a,b)=>{
+    const ea = shipExpirySortKey_(a);
+    const eb = shipExpirySortKey_(b);
+    if(ea !== eb) return ea.localeCompare(eb);
+    const ca = String(a?.created_at || "");
+    const cb = String(b?.created_at || "");
+    if(ca !== cb) return ca.localeCompare(cb);
+    return String(a?.lot_id || "").localeCompare(String(b?.lot_id || ""));
+  });
+
+  const lines = [];
+  for(const lot of candidates){
+    if(!(need > 1e-9)) break;
+    const av = Number(shipGetAvailable(lot.lot_id) || 0);
+    if(!(av > 1e-9)) continue;
+    const take = Math.min(av, need);
+    lines.push({ lot, qty: take });
+    need -= take;
+  }
+  return { lines, shortage: need };
+}
+
 async function loadShipMasterData(){
-  const [lots, movements, customersRaw, salesOrders, salesItems, products, warehouses, importReceipts, goodsReceipts, importDocs] = await Promise.all([
+  const [lots, avail, customersRaw, salesOrders, products, warehouses, importReceipts, goodsReceipts, importDocs] = await Promise.all([
     getAll("lot"),
-    getAll("inventory_movement").catch(() => []),
+    loadInventoryMovementAvailableMap_().catch(() => ({ map:{}, failed:true })),
     getAll("customer"),
     getAll("sales_order").catch(() => []),
-    getAll("sales_order_item").catch(() => []),
     getAll("product").catch(() => []),
     getAll("warehouse").catch(() => []),
     getAll("import_receipt").catch(() => []),
@@ -72,10 +227,12 @@ async function loadShipMasterData(){
     getAll("import_document").catch(() => [])
   ]);
   shipLots = lots || [];
-  shipMovements = movements || [];
+  shipAvailableByLotId_ = avail?.map || {};
   shipCustomers = (customersRaw || []).filter(c => c.status === "ACTIVE");
   shipSalesOrders = salesOrders || [];
-  shipSalesItems = salesItems || [];
+  shipSalesItems = [];
+  shipSalesItemsBySoId_ = {};
+  shipSalesItemsLoadingBySoId_ = {};
   shipProducts = products || [];
   shipWarehouses = (warehouses || []).filter(w => String(w.status || "ACTIVE").toUpperCase() === "ACTIVE");
 
@@ -101,6 +258,60 @@ async function loadShipMasterData(){
   initShipDropdowns();
 }
 
+async function shipLoadSalesItemsBySo_(soId){
+  const id = String(soId || "").trim().toUpperCase();
+  if(!id) return [];
+  if(Array.isArray(shipSalesItemsBySoId_?.[id])) return shipSalesItemsBySoId_[id];
+  if(shipSalesItemsLoadingBySoId_?.[id]) return await shipSalesItemsLoadingBySoId_[id];
+
+  const p = (async ()=>{
+    try{
+      const r = await callAPI({ action: "list_sales_order_item_by_so", so_id: id }, { method: "GET" });
+      const rows = (r && r.data) ? r.data : [];
+      shipSalesItemsBySoId_[id] = Array.isArray(rows) ? rows : [];
+      return shipSalesItemsBySoId_[id];
+    }catch(_e){
+      // fallback：舊版後端未支援時才退回全表
+      const all = await getAll("sales_order_item").catch(() => []);
+      const rows = (all || []).filter(it => String(it.so_id || "").trim().toUpperCase() === id);
+      shipSalesItemsBySoId_[id] = rows;
+      return rows;
+    }finally{
+      try{ delete shipSalesItemsLoadingBySoId_[id]; }catch(_e2){}
+    }
+  })();
+  shipSalesItemsLoadingBySoId_[id] = p;
+  return await p;
+}
+
+async function shipRefreshSoItemDropdown_(soId){
+  const id = String(soId || "").trim().toUpperCase();
+  const soiSel = document.getElementById("ship_so_item_id");
+  if(!soiSel) return;
+  if(!id){
+    soiSel.innerHTML = `<option value="">（不指定銷售品項）</option>`;
+    try{ shipUpdateAllocModeUI_(); }catch(_e){}
+    return;
+  }
+
+  const items = await shipLoadSalesItemsBySo_(id);
+  shipSalesItems = Array.isArray(items) ? items : [];
+
+  soiSel.innerHTML =
+    `<option value="">（不指定銷售品項）</option>` +
+    (shipSalesItems || []).map(it => {
+      const ordered = Number(it.order_qty || 0);
+      const shipped = Number(it.shipped_qty || 0);
+      const remain = Math.max(0, ordered - shipped);
+      const p = shipFindProduct_(it.product_id);
+      const name = String(p?.product_name || it.product_id || "").trim();
+      const spec = String(p?.spec || "").trim();
+      const prodText = spec ? `${name}（${spec}）` : name;
+      return `<option value="${it.so_item_id}" data-product="${it.product_id}" data-unit="${it.unit}" data-remain="${remain}">${it.so_item_id} - ${prodText}（剩餘 ${remain}）</option>`;
+    }).join("");
+  try{ shipUpdateAllocModeUI_(); }catch(_e2){}
+}
+
 function shipWarehouseLabelById_(warehouseId){
   const id = String(warehouseId || "").trim().toUpperCase();
   if(!id) return "";
@@ -118,15 +329,19 @@ function shipWarehouseLabelByLot_(lot){
 }
 
 function shipGetAvailable(lotId){
-  return shipMovements
-    .filter(m => m.lot_id === lotId)
-    .reduce((sum, m) => sum + Number(m.qty || 0), 0);
+  const id = String(lotId || "");
+  if(!id) return 0;
+  const hit = shipAvailableByLotId_?.[id];
+  if(hit != null) return Number(hit || 0);
+  const lot = (shipLots || []).find(l => String(l.lot_id || "") === id) || null;
+  return Number(lot?.qty || 0);
 }
 
 function formatShipLotOptionLabel_(lot, available){
   const lotId = String(lot?.lot_id || "");
-  const productId = String(lot?.product_id || "");
-  return `${lotId} (${productId}) 可用:${available}`;
+  const productText = formatShipProductDisplay_(lot?.product_id || "") || "";
+  const prodPart = productText ? ` ${productText}` : "";
+  return `${lotId}${prodPart} 可用:${available}`;
 }
 
 function formatShipLotSourceText_(lot){
@@ -148,13 +363,61 @@ function formatShipLotSourceText_(lot){
   return sourceType ? `${sourceType}:${sourceId}` : sourceId;
 }
 
+/** 有選銷售單／品項時：限制 Lot 產品；未選則 null 表示不限制 */
+function shipGetProductWhitelistForPicker_(){
+  const soId = String(document.getElementById("ship_so_id")?.value || "").trim();
+  const soItemId = String(document.getElementById("ship_so_item_id")?.value || "").trim();
+  const soItems = (shipSalesItems || []);
+  if(soItemId){
+    const soi = soItems.find(x => String(x.so_item_id || "").trim() === soItemId) || null;
+    const pid = String(soi?.product_id || "").trim();
+    return pid ? new Set([pid]) : null;
+  }
+  if(soId){
+    const pids = new Set();
+    soItems.filter(x => String(x.so_id || "").trim() === soId).forEach(x=>{
+      const pid = String(x?.product_id || "").trim();
+      if(pid) pids.add(pid);
+    });
+    return pids.size ? pids : null;
+  }
+  return null;
+}
+
 function getShipEligibleLots_(){
+  return (shipLots || []).filter(l => shipIsLotEligibleForShip_(l));
+}
+
+/** 手動選 Lot：顯示白名單內全部（含不可選與原因）；FEFO：僅可出貨批次 */
+function getShipLotsForPicker_(){
+  if(shipIsAutoAlloc_()) return getShipEligibleLots_();
+  const showInel = !!document.getElementById("ship_show_ineligible_lots")?.checked;
+  if(!showInel) return getShipEligibleLots_();
+  const productWhitelist = shipGetProductWhitelistForPicker_();
   return (shipLots || []).filter(l => {
-    if((l.inventory_status || "ACTIVE") !== "ACTIVE") return false;
-    if((l.status || "PENDING") !== "APPROVED") return false;
-    const av = shipGetAvailable(l.lot_id);
-    return Number(av) > 0;
+    if(productWhitelist && !productWhitelist.has(String(l?.product_id || "").trim())) return false;
+    return true;
   });
+}
+
+/** 空字串 = 可出貨；否則為不可選原因（給手動模式列示） */
+function shipIneligibleReasonForShip_(lot){
+  if(!lot) return "無 Lot 資料";
+  const whitelist = shipGetProductWhitelistForPicker_();
+  const pid = String(lot?.product_id || "").trim();
+  if(whitelist && !whitelist.has(pid)) return "非銷售單指定品項";
+  if(String(lot.inventory_status || "ACTIVE").toUpperCase() !== "ACTIVE"){
+    return "庫存非使用中（非 ACTIVE）";
+  }
+  const qa = String(lot.status || "PENDING").toUpperCase();
+  if(qa === "REJECTED") return "QA已退回";
+  if(qa !== "APPROVED") return "待QA（須先放行）";
+  try{
+    if(typeof invIsExpired_ === "function" && invIsExpired_(lot.expiry_date)) return "已過期";
+  }catch(_e){}
+  const av = shipGetAvailable(lot.lot_id);
+  if(!(Number(av || 0) > 1e-9)) return "可用量為 0";
+  return "";
 }
 
 function renderShipLotPicker_(lots){
@@ -171,9 +434,26 @@ function renderShipLotPicker_(lots){
     const wh = String(shipWarehouseLabelByLot_(l) || "").toLowerCase();
     return lotId.includes(kw) || pname.includes(kw) || src.includes(kw) || wh.includes(kw);
   });
+
+  // 排序：可出貨在上；同類內依效期 ASC、Lot ID ASC
+  function shipSortLotsForPicker_(arr){
+    const a = Array.isArray(arr) ? arr.slice() : [];
+    a.sort((x, y) => {
+      const rx = shipIneligibleReasonForShip_(x);
+      const ry = shipIneligibleReasonForShip_(y);
+      const okx = !rx;
+      const oky = !ry;
+      if(okx !== oky) return okx ? -1 : 1;
+      const ex = shipExpirySortKey_(x);
+      const ey = shipExpirySortKey_(y);
+      if(ex !== ey) return ex.localeCompare(ey);
+      return String(x?.lot_id || "").localeCompare(String(y?.lot_id || ""));
+    });
+    return a;
+  }
   tbody.innerHTML = "";
   if(!list.length){
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#64748b;">目前無可選 Lot</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#64748b;">目前無符合的 Lot（請調整銷售單／品項或關鍵字）</td></tr>`;
     return;
   }
 
@@ -182,16 +462,23 @@ function renderShipLotPicker_(lots){
     const lotId = String(l.lot_id || "");
     const productText = formatShipProductDisplay_(l.product_id || "");
     const whText = shipWarehouseLabelByLot_(l) || (l.warehouse_id ? String(l.warehouse_id) : "");
-    const createdAt = String(l.created_at || "");
+    const expiry = String(l.expiry_date || "") || "—";
     const safeId = lotId.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+    const reason = shipIneligibleReasonForShip_(l);
+    const ok = !reason;
+    const hint = ok ? "可出貨" : reason;
+    const rowStyle = ok ? "cursor:pointer;" : "cursor:default;opacity:0.72;background:#f8fafc;";
+    const onRow = ok ? `onclick="pickShipLineLot('${safeId}')"` : "";
+    const btnDisabled = ok ? "" : " disabled";
     tbody.innerHTML += `
-      <tr style="cursor:pointer;" onclick="pickShipLineLot('${safeId}')">
+      <tr style="${rowStyle}" ${onRow}>
         <td>${lotId}</td>
         <td>${productText}</td>
         <td>${whText || "—"}</td>
         <td>${av}</td>
-        <td>${createdAt}</td>
-        <td><button type="button" class="btn-secondary">帶入</button></td>
+        <td>${expiry}</td>
+        <td style="font-size:12px;color:${ok ? "#166534" : "#92400e"};max-width:200px;">${hint}</td>
+        <td><button type="button" class="btn-secondary"${btnDisabled} ${ok ? `onclick="event.stopPropagation();pickShipLineLot('${safeId}')"` : ""}>帶入</button></td>
       </tr>
     `;
   }
@@ -205,13 +492,13 @@ function renderShipLotPicker_(lots){
     Object.keys(groups).sort().forEach(k => {
       tbody.innerHTML += `
         <tr style="background:#f8fafc;">
-          <td colspan="6" style="font-weight:600;color:#334155;padding:8px 10px;">來源：${k}（${groups[k].length}）</td>
+          <td colspan="7" style="font-weight:600;color:#334155;padding:8px 10px;">來源：${k}（${groups[k].length}）</td>
         </tr>
       `;
-      groups[k].forEach(renderLotRow_);
+      shipSortLotsForPicker_(groups[k]).forEach(renderLotRow_);
     });
   }else{
-    list.forEach(renderLotRow_);
+    shipSortLotsForPicker_(list).forEach(renderLotRow_);
   }
 }
 
@@ -219,13 +506,21 @@ function openShipLotPicker(){
   if(shipReadOnlyDraft) return;
   const modal = document.getElementById("shipLotPickerModal");
   if(!modal) return;
+  const titleEl = document.getElementById("ship_lot_picker_title");
+  const showInel = document.getElementById("ship_show_ineligible_lots");
+  if(showInel) showInel.checked = false; // 預設隱藏不可選 Lot
+  if(titleEl){
+    titleEl.textContent = shipIsAutoAlloc_()
+      ? "選擇 Lot（FEFO：僅顯示可出貨批次）"
+      : "選擇 Lot（手動：僅顯示可出貨批次）";
+  }
   modal.style.display = "flex";
   const kw = document.getElementById("ship_lot_picker_keyword");
   if(kw){
     kw.value = "";
     kw.focus();
   }
-  renderShipLotPicker_(getShipEligibleLots_());
+  renderShipLotPicker_(getShipLotsForPicker_());
 }
 
 function closeShipLotPicker(){
@@ -234,12 +529,17 @@ function closeShipLotPicker(){
 }
 
 function pickShipLineLot(lotId){
+  const lot = (shipLots || []).find(l => String(l.lot_id || "") === String(lotId || ""));
+  if(!shipIsLotEligibleForShip_(lot)){
+    const r = shipIneligibleReasonForShip_(lot) || "不符合出貨條件";
+    if(typeof showToast === "function") showToast("無法選擇此 Lot：" + r, "error");
+    return;
+  }
   const input = document.getElementById("ship_lot_id");
   const display = document.getElementById("ship_lot_display");
   if(!input) return;
   input.value = lotId || "";
   if(display){
-    const lot = (shipLots || []).find(l => String(l.lot_id || "") === String(lotId || ""));
     const av = lot ? shipGetAvailable(lot.lot_id) : "";
     const whText = lot ? (shipWarehouseLabelByLot_(lot) || "") : "";
     display.value = lot ? (formatShipLotOptionLabel_(lot, av) + (whText ? ` | ${whText}` : "")) : (lotId || "");
@@ -250,7 +550,7 @@ function pickShipLineLot(lotId){
 
 function setShipPickLotBtnState_(){
   const btn = document.getElementById("ship_pick_lot_btn");
-  if(btn) btn.disabled = !!shipReadOnlyDraft;
+  if(btn) btn.disabled = !!shipReadOnlyDraft || shipIsAutoAlloc_();
 }
 
 function initShipDropdowns(){
@@ -283,6 +583,7 @@ function resetShipForm(){
   shipEditing = false;
   shipReadOnlyDraft = false;
   shipDraft = [];
+  shipLoadedStatus_ = "OPEN";
   renderShipDraft();
 
   const idEl = document.getElementById("ship_id");
@@ -293,9 +594,6 @@ function resetShipForm(){
 
   const dateEl = document.getElementById("ship_date");
   if(dateEl) dateEl.value = nowIso16().slice(0, 10);
-
-  const st = document.getElementById("ship_status");
-  if(st) st.value = "OPEN";
 
   const rm = document.getElementById("ship_remark");
   if(rm) rm.value = "";
@@ -310,6 +608,7 @@ function resetShipForm(){
   clearShipItemEntry();
   setShipPickLotBtnState_();
   updateShipStatusHint_();
+  setShipButtons_();
 }
 
 function clearShipItemEntry(){
@@ -317,16 +616,12 @@ function clearShipItemEntry(){
   const a = document.getElementById("ship_so_item_id");
   const b = document.getElementById("ship_lot_id");
   const bDisp = document.getElementById("ship_lot_display");
-  const c = document.getElementById("ship_available");
   const d = document.getElementById("ship_qty");
-  const e = document.getElementById("ship_unit");
   const f = document.getElementById("ship_item_remark");
   if(a) a.value = "";
   if(b) b.value = "";
   if(bDisp) bDisp.value = "";
-  if(c) c.value = "";
   if(d) d.value = "";
-  if(e) e.value = "";
   if(f) f.value = "";
 }
 
@@ -427,15 +722,11 @@ async function updateSelectedShipItemRemark(triggerEl){
 function clearShipLotEntryOnly_(){
   const hid = document.getElementById("ship_lot_id");
   const disp = document.getElementById("ship_lot_display");
-  const av = document.getElementById("ship_available");
   const qty = document.getElementById("ship_qty");
-  const u = document.getElementById("ship_unit");
   const rm = document.getElementById("ship_item_remark");
   if(hid) hid.value = "";
   if(disp) disp.value = "";
-  if(av) av.value = "";
   if(qty) qty.value = "";
-  if(u) u.value = "";
   if(rm) rm.value = "";
 }
 
@@ -455,15 +746,10 @@ function onSelectShipSO(){
     cSel.value = so.customer_id || "";
   }
 
-  const items = shipSalesItems.filter(it => it.so_id === soId);
-  soiSel.innerHTML =
-    `<option value="">（不指定銷售品項）</option>` +
-    items.map(it => {
-      const ordered = Number(it.order_qty || 0);
-      const shipped = Number(it.shipped_qty || 0);
-      const remain = Math.max(0, ordered - shipped);
-      return `<option value="${it.so_item_id}" data-product="${it.product_id}" data-unit="${it.unit}" data-remain="${remain}">${it.so_item_id} - ${it.product_id}（剩餘 ${remain}）</option>`;
-    }).join("");
+  // 銷售品項改為按 SO 載入（非同步更新 dropdown）
+  shipRefreshSoItemDropdown_(soId).catch(() => {
+    soiSel.innerHTML = `<option value="">（不指定銷售品項）</option>`;
+  });
 }
 
 function onSelectShipSOItem(){
@@ -471,50 +757,82 @@ function onSelectShipSOItem(){
   const opt = soiSel?.selectedOptions?.[0];
   if(!opt) return;
   // 此處不強制鎖 Lot，因為可能多批次出貨；但可用 remain 當提示
+  try{ shipUpdateAllocModeUI_(); }catch(_e){}
 }
 
 function onSelectShipLot(){
   const lotId = document.getElementById("ship_lot_id")?.value || "";
   const lot = (shipLots || []).find(l => String(l.lot_id || "") === String(lotId || ""));
-  const avEl = document.getElementById("ship_available");
-  const uEl = document.getElementById("ship_unit");
   if(!lot){
-    if(avEl) avEl.value = "";
-    if(uEl) uEl.value = "";
     return;
   }
-  if(avEl) avEl.value = String(shipGetAvailable(lotId));
-  if(uEl) uEl.value = lot.unit || "";
 }
 
-function addShipItemDraft(){
+async function addShipItemDraft(){
   if(shipReadOnlyDraft) return showToast("已載入出貨單，明細僅供檢視","error");
   const so_id = document.getElementById("ship_so_id")?.value || "";
   const so_item_id = document.getElementById("ship_so_item_id")?.value || "";
   const lot_id = document.getElementById("ship_lot_id")?.value || "";
   const qty = Number(document.getElementById("ship_qty")?.value || 0);
-  const unit = document.getElementById("ship_unit")?.value || "";
   const remark = (document.getElementById("ship_item_remark")?.value || "").trim();
 
-  if(!lot_id) return showToast("請選擇 Lot","error");
   if(!qty || qty <= 0) return showToast("出貨數量需大於 0","error");
-  if(!unit) return showToast("Lot 單位缺失","error");
+  const auto = shipIsAutoAlloc_();
+  if(so_id){
+    try{
+      await shipLoadSalesItemsBySo_(so_id);
+      const id = String(so_id || "").trim().toUpperCase();
+      if(Array.isArray(shipSalesItemsBySoId_?.[id])) shipSalesItems = shipSalesItemsBySoId_[id];
+    }catch(_e){}
+  }
+  const soi = so_item_id ? (shipSalesItems || []).find(x => x.so_item_id === so_item_id) : null;
 
-  const lot = shipLots.find(l => l.lot_id === lot_id);
-  if(!lot) return showToast("找不到 Lot","error");
+  if(auto){
+    if(!so_item_id || !soi) return showToast("自動分配需要先選擇 銷售品項", "error");
+    const pid = String(soi.product_id || "").trim();
+    if(!pid) return showToast("銷售品項缺少 product_id", "error");
+    const remain = Math.max(0, Number(soi.order_qty||0) - Number(soi.shipped_qty||0));
+    if(qty > remain) return showToast("出貨不可超過銷售單剩餘未出貨量","error");
 
-  const av = shipGetAvailable(lot_id);
-  if(qty > av) return showToast("出貨不可超過可用量","error");
-
-  if(so_id && so_item_id){
-    const soi = shipSalesItems.find(x => x.so_item_id === so_item_id);
-    if(soi){
-      const remain = Math.max(0, Number(soi.order_qty||0) - Number(soi.shipped_qty||0));
-      if(qty > remain) return showToast("出貨不可超過銷售單剩餘未出貨量","error");
-      if(lot.product_id !== soi.product_id) return showToast("Lot 產品與銷售品項不一致","error");
+    const alloc = shipAutoAllocateLots_(pid, qty);
+    if(alloc.shortage > 1e-9){
+      return showToast(`可用量不足，尚缺 ${Math.round(Number(alloc.shortage||0)*10000)/10000}`, "error");
     }
+    if(!alloc.lines.length){
+      return showToast("查無可用 Lot（需 ACTIVE + QA放行 + 可用量>0，且未過期）", "error");
+    }
+
+    for(const x of alloc.lines){
+      const lot = x.lot;
+      shipDraft.push({
+        draft_id: "DRAFT-" + Date.now() + "-" + Math.floor(Math.random()*1000),
+        so_id,
+        so_item_id,
+        lot_id: lot.lot_id,
+        product_id: lot.product_id,
+        warehouse_id: String(lot.warehouse_id || "").trim().toUpperCase(),
+        ship_qty: x.qty,
+        unit: lot.unit || "",
+        remark
+      });
+    }
+    clearShipItemEntry();
+    renderShipDraft();
+    showToast(`已自動分配 ${alloc.lines.length} 筆 Lot（FEFO）`);
+    return;
   }
 
+  // 手動 override
+  if(!lot_id) return showToast("請選擇 Lot","error");
+  const lot = shipLots.find(l => l.lot_id === lot_id);
+  if(!lot) return showToast("找不到 Lot","error");
+  const av = shipGetAvailable(lot_id);
+  if(qty > av) return showToast("出貨不可超過可用量","error");
+  if(so_id && so_item_id && soi){
+    const remain = Math.max(0, Number(soi.order_qty||0) - Number(soi.shipped_qty||0));
+    if(qty > remain) return showToast("出貨不可超過銷售單剩餘未出貨量","error");
+    if(lot.product_id !== soi.product_id) return showToast("Lot 產品與銷售品項不一致","error");
+  }
   shipDraft.push({
     draft_id: "DRAFT-" + Date.now() + "-" + Math.floor(Math.random()*1000),
     so_id,
@@ -523,7 +841,7 @@ function addShipItemDraft(){
     product_id: lot.product_id,
     warehouse_id: String(lot.warehouse_id || "").trim().toUpperCase(),
     ship_qty: qty,
-    unit,
+    unit: lot.unit || "",
     remark
   });
 
@@ -543,6 +861,8 @@ function renderShipDraft(){
   tbody.innerHTML = "";
 
   shipDraft.forEach((it, idx) => {
+    const lot = (shipLots || []).find(l => String(l?.lot_id || "") === String(it?.lot_id || "")) || null;
+    const expiry = String(lot?.expiry_date || "") || "—";
     const safeId = String(it.draft_id || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const isDraft = isShipDraftLineRow_(it);
     let rowClick = "";
@@ -566,7 +886,7 @@ function renderShipDraft(){
         <td>${shipWarehouseLabelById_(it.warehouse_id) || "—"}</td>
         <td>${it.ship_qty}</td>
         <td>${it.unit}</td>
-        <td>${it.so_item_id || ""}</td>
+        <td>${expiry}</td>
         <td>${formatShipLineStatus_(it)}</td>
         <td>${actionBtn}</td>
       </tr>
@@ -586,10 +906,17 @@ async function renderShipments(){
   const tbody = document.getElementById("shipTableBody");
   if(!tbody) return;
 
+  setTbodyLoading_(tbody, 6);
   const qKw = (document.getElementById("ship_search_keyword")?.value || "").trim().toUpperCase();
   const qSt = (document.getElementById("ship_search_status")?.value || "").trim().toUpperCase();
 
-  const list = await getAll("shipment").catch(()=>[]);
+  let list = [];
+  try{
+    const r = await callAPI({ action: "list_shipment_recent", days: 180, _ts: String(Date.now()) }, { method: "POST" });
+    list = (r && r.data) ? r.data : [];
+  }catch(_e){
+    list = await getAll("shipment").catch(()=>[]);
+  }
   const customerMap = {};
   (shipCustomers || []).forEach(c => { if(c && c.customer_id) customerMap[c.customer_id] = c; });
   const filtered = (list || []).filter(s => {
@@ -637,11 +964,19 @@ async function loadShipment(shipmentId){
   const sh = await getOne("shipment","shipment_id",id).catch(()=>null);
   if(!sh) return showToast("找不到出貨單","error");
 
-  const itemsAll = await getAll("shipment_item").catch(()=>[]);
-  const items = (itemsAll || []).filter(x => x.shipment_id === id);
+  let items = [];
+  try{
+    const r = await callAPI({ action: "list_shipment_item_by_shipment", shipment_id: id });
+    items = (r && r.data) ? r.data : [];
+  }catch(_e){
+    // fallback：舊版後端尚未支援時，退回全表抓取（但只取該出貨單相關資料）
+    const itemsAll = await getAll("shipment_item").catch(()=>[]);
+    items = (itemsAll || []).filter(x => String(x.shipment_id || "").trim().toUpperCase() === id);
+  }
 
   shipEditing = true;
   shipReadOnlyDraft = true;
+  shipLoadedStatus_ = String(sh.status || "OPEN").toUpperCase();
 
   const idEl = document.getElementById("ship_id");
   if(idEl){
@@ -652,7 +987,6 @@ async function loadShipment(shipmentId){
   onSelectShipSO();
   document.getElementById("ship_customer_id").value = sh.customer_id || "";
   document.getElementById("ship_date").value = dateInputValue_(sh.ship_date);
-  document.getElementById("ship_status").value = sh.status || "OPEN";
   document.getElementById("ship_remark").value = sh.remark || "";
 
   clearShipLotEntryOnly_();
@@ -673,6 +1007,7 @@ async function loadShipment(shipmentId){
   showToast("已載入出貨單：" + id);
   setShipPickLotBtnState_();
   updateShipStatusHint_();
+  setShipButtons_();
 }
 
 async function cancelShipment(triggerEl){
@@ -691,75 +1026,24 @@ async function cancelShipment(triggerEl){
 
   showSaveHint(triggerEl || document.getElementById("shipPostButtonGroup"));
   try{
-    await loadShipMasterData();
-
-  const itemsAll = await getAll("shipment_item").catch(()=>[]);
-  const items = (itemsAll || []).filter(x => x.shipment_id === shipment_id);
-  if(items.length === 0) return showToast("找不到出貨明細，無法作廢","error");
-
-  // 1) 反沖庫存：ADJUST +qty
-  for(const it of items){
-    const lot = (shipLots || []).find(l => String(l.lot_id||"") === String(it.lot_id||"")) || null;
-    await createRecord("inventory_movement", {
-      movement_id: generateId("MV"),
-      movement_type: "ADJUST",
-      lot_id: it.lot_id,
-      product_id: it.product_id,
-      warehouse_id: String(lot?.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
-      qty: String(Math.abs(Number(it.ship_qty || 0))),
-      unit: it.unit || "",
-      ref_type: "SHIPMENT_CANCEL",
-      ref_id: shipment_id,
-      remark: "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: "",
-      system_remark: `Cancel Shipment: ${shipment_id}`,
-    });
-  }
-
-  // 2) 更新出貨單狀態
-  await updateRecord("shipment","shipment_id",shipment_id,{
-    status: "CANCELLED",
-    remark: (sh.remark || "").trim() ? `${sh.remark} | CANCELLED` : "CANCELLED"
-  });
-
-  // 3) 回寫 SO 已出貨量與 SO 狀態
-  const soItemAll = await getAll("sales_order_item").catch(()=>[]);
-  const byId = {};
-  (soItemAll || []).forEach(x => { byId[x.so_item_id] = x; });
-
-  const touchedSO = new Set();
-  for(const it of items){
-    const so_item_id = String(it.so_item_id || "");
-    const so_id = String(it.so_id || "");
-    if(so_id) touchedSO.add(so_id);
-    if(!so_item_id) continue;
-    const row = byId[so_item_id];
-    if(!row) continue;
-
-    const next = Math.max(0, Number(row.shipped_qty || 0) - Number(it.ship_qty || 0));
-    await updateRecord("sales_order_item","so_item_id",so_item_id,{
-      shipped_qty: String(next),
+    await callAPI({
+      action: "cancel_shipment_bundle",
+      shipment_id: shipment_id,
       updated_by: getCurrentUser(),
       updated_at: nowIso16()
-    });
-  }
+    }, { method: "POST" });
 
-  for(const so_id of touchedSO){
-    const items2 = (await getAll("sales_order_item")).filter(x => x.so_id === so_id);
-    const allShipped = items2.length > 0 && items2.every(x => Number(x.shipped_qty||0) >= Number(x.order_qty||0));
-    const anyShipped = items2.some(x => Number(x.shipped_qty||0) > 0);
-    const next = allShipped ? "SHIPPED" : (anyShipped ? "PARTIAL" : "OPEN");
-    await updateRecord("sales_order","so_id",so_id,{
-      status: next,
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16()
-    });
-  }
+    if(typeof invalidateCache === "function"){
+      invalidateCache("shipment");
+      invalidateCache("shipment_item");
+      invalidateCache("inventory_movement");
+      invalidateCache("lot");
+      invalidateCache("sales_order_item");
+      invalidateCache("sales_order");
+    }
 
     showToast("作廢完成：已反沖庫存並回寫 SO");
+    await loadShipMasterData();
     await renderShipments();
     await loadShipment(shipment_id);
   } finally {
@@ -774,7 +1058,6 @@ async function postShipment(triggerEl){
   const so_id = document.getElementById("ship_so_id")?.value || "";
   const customer_id = document.getElementById("ship_customer_id")?.value || "";
   const ship_date = document.getElementById("ship_date")?.value || "";
-  const status = document.getElementById("ship_status")?.value || "OPEN";
   const remark = (document.getElementById("ship_remark")?.value || "").trim();
 
   if(!shipment_id) return showToast("出貨單ID 必填","error");
@@ -784,85 +1067,44 @@ async function postShipment(triggerEl){
 
   showSaveHint(triggerEl || document.getElementById("shipPostButtonGroup"));
   try {
-  // refresh
+  // refresh（避免用舊 lot/可用量 做前置檢查）
   await loadShipMasterData();
 
-  await createRecord("shipment", {
+  const payloadItems = (shipDraft || []).map((it) => ({
+    so_id: it.so_id || so_id || "",
+    so_item_id: it.so_item_id || "",
+    lot_id: it.lot_id,
+    product_id: it.product_id,
+    ship_qty: String(it.ship_qty),
+    unit: it.unit,
+    remark: it.remark || ""
+  }));
+
+  await callAPI({
+    action: "post_shipment_bundle",
     shipment_id,
     so_id,
     customer_id,
     ship_date,
-    status: "POSTED",
     remark,
     created_by: getCurrentUser(),
-    created_at: nowIso16()
-  });
+    created_at: nowIso16(),
+    items_json: JSON.stringify(payloadItems)
+  }, { method: "POST" });
 
-  // write items + movements + update SO shipped_qty
-  for(let idx=0; idx<shipDraft.length; idx++){
-    const it = shipDraft[idx];
-    const lot = (shipLots || []).find(l => String(l.lot_id||"") === String(it.lot_id||"")) || null;
-
-    await createRecord("shipment_item", {
-      shipment_item_id: `SHI-${shipment_id}-${String(idx+1).padStart(3,"0")}`,
-      shipment_id,
-      so_id: it.so_id || so_id || "",
-      so_item_id: it.so_item_id || "",
-      lot_id: it.lot_id,
-      product_id: it.product_id,
-      ship_qty: String(it.ship_qty),
-      unit: it.unit,
-      remark: it.remark || "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16()
-    });
-
-    await createRecord("inventory_movement", {
-      movement_id: generateId("MV"),
-      movement_type: "SHIP_OUT",
-      lot_id: it.lot_id,
-      product_id: it.product_id,
-      warehouse_id: String(lot?.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
-      qty: String(-Math.abs(it.ship_qty)),
-      unit: it.unit,
-      ref_type: "SHIPMENT",
-      ref_id: shipment_id,
-      remark: "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: "",
-      system_remark: `Ship OUT: ${shipment_id}`,
-    });
-
-    if(it.so_item_id){
-      const soi = shipSalesItems.find(x => x.so_item_id === it.so_item_id);
-      if(soi){
-        const newShipped = Number(soi.shipped_qty || 0) + Number(it.ship_qty || 0);
-        await updateRecord("sales_order_item","so_item_id",it.so_item_id,{
-          shipped_qty: String(newShipped),
-          updated_by: getCurrentUser(),
-          updated_at: nowIso16()
-        });
-      }
-    }
-  }
-
-  // update SO status
-  if(so_id){
-    const items = (await getAll("sales_order_item")).filter(x => x.so_id === so_id);
-    const allShipped = items.length > 0 && items.every(x => Number(x.shipped_qty||0) >= Number(x.order_qty||0));
-    const anyShipped = items.some(x => Number(x.shipped_qty||0) > 0);
-    const next = allShipped ? "SHIPPED" : (anyShipped ? "PARTIAL" : "OPEN");
-    await updateRecord("sales_order","so_id",so_id,{
-      status: next,
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16()
-    });
+  // bundle 會更新：shipment/shipment_item/inventory_movement/sales_order_item/sales_order/lot.inventory_status
+  if(typeof invalidateCache === "function"){
+    invalidateCache("shipment");
+    invalidateCache("shipment_item");
+    invalidateCache("inventory_movement");
+    invalidateCache("lot");
+    invalidateCache("sales_order_item");
+    invalidateCache("sales_order");
   }
 
   showToast("出貨已過帳（已扣庫）");
   resetShipForm();
+  await loadShipMasterData();
   await renderShipments();
   } finally { hideSaveHint(); }
 }

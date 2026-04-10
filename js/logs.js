@@ -193,6 +193,7 @@ async function logsInit(){
 
 /* ===== 讀取資料 ===== */
 async function loadLogs(){
+  setTbodyLoading_("logsTableBody", 7);
   const list = await getAll("logs");
   logsCache = Array.isArray(list) ? list : [];
 
