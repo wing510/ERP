@@ -70,39 +70,30 @@
             多單位換算（用途：當投料與回收單位不同，例如投料 KG、回收 BOX 時，系統會依此規則換算後再比較）
           </summary>
           <div style="margin-top:10px;color:#475569;line-height:1.6;min-width:0;max-width:100%;">
-            <div class="form-grid-4">
-              <div class="form-group" id="p_base_unit_group">
-                <label>投料單位</label>
-                <select id="p_base_unit">
-                  <option value="">（預設同產品單位）</option>
-                  <option value="L">L（公升）</option>
-                  <option value="KG">KG（公斤）</option>
-                  <option value="PCS">PCS（件）</option>
-                  <option value="PC">PC（顆）</option>
-                  <option value="BOX">BOX（盒）</option>
-                  <option value="BOTTLE">BOTTLE（瓶）</option>
-                  <option value="BAG">BAG（袋）</option>
-                </select>
-              </div>
-            </div>
-
-            <div id="p_unit_ratio_group" style="margin-top:6px;min-width:0;max-width:100%;">
+            <div id="p_unit_ratio_group" style="margin-top:0;min-width:0;max-width:100%;">
               <div class="p-unit-ratio-table-host">
                 <input type="hidden" id="p_unit_ratio_to_base_json">
-                <div class="table-wrapper table-wrapper-product-uom" style="height:180px;">
-                  <table class="data-table">
-                    <thead>
-                      <tr>
-                        <th>產生單位</th>
-                        <th>產出換算（每 1 投料單位可做出）</th>
-                        <th>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody id="p_unit_ratio_rows"></tbody>
-                  </table>
+                <div class="p-unit-ratio-matrix">
+                  <div class="p-unit-ratio-matrix-inner">
+                    <div class="p-unit-ratio-matrix-head">
+                      <span class="p-unit-ratio-matrix-lead">每</span>
+                      <select id="p_base_unit" class="p-unit-ratio-matrix-base-select" title="投料單位">
+                        <option value="">（預設同產品單位）</option>
+                        <option value="L">L（公升）</option>
+                        <option value="KG">KG（公斤）</option>
+                        <option value="PCS">PCS（件）</option>
+                        <option value="PC">PC（顆）</option>
+                        <option value="BOX">BOX（盒）</option>
+                        <option value="BOTTLE">BOTTLE（瓶）</option>
+                        <option value="BAG">BAG（袋）</option>
+                      </select>
+                      <span class="p-unit-ratio-matrix-lead">投料可產生</span>
+                    </div>
+                    <div class="p-unit-ratio-matrix-rows" id="p_unit_ratio_rows"></div>
+                  </div>
                 </div>
                 <div class="button-group" style="margin-top:8px;">
-                  <button type="button" class="btn-secondary btn-sm" style="min-width:96px;" onclick="addProductUnitRatioRow()">新增換算列</button>
+                  <button type="button" class="btn-secondary btn-sm" style="min-width:96px;" onclick="addProductUnitRatioRow()">新增一條產出</button>
                 </div>
               </div>
             </div>

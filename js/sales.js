@@ -836,7 +836,7 @@ async function renderSalesOrders(){
         <td>${so.so_id || ""}</td>
         <td>${customerNameOnly}</td>
         <td>${spLabel}</td>
-        <td>${termLabel(so.status)}</td>
+        <td>${termLabelZhOnly(so.status)}</td>
         <td>${so.created_at || ""}</td>
         <td>
           <button class="btn-edit" onclick="loadSalesOrder('${so.so_id}')">Load</button>

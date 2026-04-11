@@ -4,6 +4,25 @@
 
 let userEditing = false;
 
+function escHtml_(s){
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function escAttr_(s){
+  return String(s ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+}
+
+/** 列表顯示用（與表單選項中文一致）；未知代碼則原樣顯示 */
+function userRoleLabelZh_(role){
+  const r = String(role || "").trim().toUpperCase();
+  const map = {
+    ADMIN: "管理員",
+    QA: "品保",
+    OP: "作業",
+    SALES: "業務"
+  };
+  return map[r] || String(role || "").trim() || "—";
+}
+
 async function usersInit(){
   resetUserForm();
   bindAutoSearchToolbar_([
@@ -136,10 +155,12 @@ async function renderUsers(){
   const filtered = (list || []).filter(u => {
     if(qSt && String(u.status || "").toUpperCase() !== qSt) return false;
     if(!kw) return true;
+    const roleZh = userRoleLabelZh_(u.role);
     const hay = [
       u.user_id,
       u.user_name,
       u.role,
+      roleZh,
       u.remark
     ].map(x => String(x || "").toLowerCase()).join(" ");
     return hay.includes(kw);
@@ -155,11 +176,12 @@ async function renderUsers(){
   }
   sorted.forEach(u => {
     const badge = termStatusLampHtml(u.status);
+    const roleCode = String(u.role || "").trim();
     tbody.innerHTML += `
       <tr>
         <td>${u.user_id || ""}</td>
         <td>${u.user_name || ""}</td>
-        <td>${u.role || ""}</td>
+        <td${roleCode ? ` title="${escAttr_(roleCode)}"` : ""}>${escHtml_(userRoleLabelZh_(u.role))}</td>
         <td class="col-status">${badge}</td>
         <td><button class="btn-edit" onclick="loadUser('${u.user_id}')">Load</button></td>
       </tr>

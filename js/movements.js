@@ -69,11 +69,13 @@ function mvMovementRowMatchesKeyword_(m, kw){
   const whText = String(mvWarehouseLabelById_(m.warehouse_id) || m.warehouse_id || "").toLowerCase();
   const mtCode = String(m.movement_type || "").toLowerCase();
   const mtLabel = String(typeof termLabel === "function" ? termLabel(m.movement_type) : "").toLowerCase();
+  const mtLabelZh = String(typeof termLabelZhOnly === "function" ? termLabelZhOnly(m.movement_type) : "").toLowerCase();
   const hay = [
     m.lot_id,
     m.movement_id,
     m.movement_type,
     mtLabel,
+    mtLabelZh,
     m.ref_type,
     m.ref_id,
     m.issued_to,
@@ -866,7 +868,7 @@ function renderMovementTable(){
         <td>${lidCell}</td>
         <td>${escapeMvHtml_(productSpec)}</td>
         <td>${escapeMvHtml_(whText || "—")}</td>
-        <td>${termLabel(m.movement_type)}</td>
+        <td>${termLabelZhOnly(m.movement_type)}</td>
         <td>${(function(){
           const mq = String(m.qty ?? "").trim();
           const mu = String(m.unit || "").trim();

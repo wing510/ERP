@@ -960,7 +960,7 @@ async function renderShipments(){
         <td>${s.shipment_id || ""}</td>
         <td>${s.so_id || ""}</td>
         <td>${customerNameOnly}</td>
-        <td>${termLabel(s.status)}</td>
+        <td>${termLabelZhOnly(s.status)}</td>
         <td>${dateInputValue_(s.ship_date)}</td>
         <td>
           <button class="btn-edit" onclick="loadShipment('${s.shipment_id}')">Load</button>

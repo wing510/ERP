@@ -84,7 +84,7 @@ function syncProductBaseUnitFromUnit_(){
 
 function productUnitOptionsHtml_(){
   return `
-    <option value="">請選擇</option>
+    <option value="">回收單位</option>
     <option value="L">L（公升）</option>
     <option value="KG">KG（公斤）</option>
     <option value="PCS">PCS（件）</option>
@@ -96,18 +96,18 @@ function productUnitOptionsHtml_(){
 }
 
 function syncProductUnitRatioJson_(){
-  const tbody = document.getElementById("p_unit_ratio_rows");
+  const host = document.getElementById("p_unit_ratio_rows");
   const hidden = document.getElementById("p_unit_ratio_to_base_json");
   if(!hidden) return;
-  if(!tbody){
+  if(!host){
     hidden.value = "{}";
     return;
   }
-  const rows = Array.from(tbody.querySelectorAll("tr"));
+  const rows = Array.from(host.querySelectorAll('[data-role="ratio-row"]'));
   const map = {};
-  rows.forEach(tr => {
-    const unit = normalizeUnit(tr.querySelector('[data-role="unit"]')?.value || "");
-    const perBase = Number(tr.querySelector('[data-role="per_base"]')?.value || 0);
+  rows.forEach(row => {
+    const unit = normalizeUnit(row.querySelector('[data-role="unit"]')?.value || "");
+    const perBase = Number(row.querySelector('[data-role="per_base"]')?.value || 0);
     // 使用者輸入：1 基準單位可做出 perBase 單位
     // 內部儲存：1 單位 = ? 基準單位（rate）
     if(unit && perBase > 0) map[unit] = 1 / perBase;
@@ -117,20 +117,16 @@ function syncProductUnitRatioJson_(){
 
 function refreshProductUnitRatioHints_(){
   const baseUnit = normalizeUnit(document.getElementById("p_base_unit")?.value || document.getElementById("p_unit")?.value || "");
-  const tbody = document.getElementById("p_unit_ratio_rows");
-  if(!tbody) return;
-  Array.from(tbody.querySelectorAll("tr")).forEach(tr => {
-    const hintEl = tr.querySelector('[data-role="base_hint"]');
-    const unitEl = tr.querySelector('[data-role="unit_hint"]');
-    const eqEl = tr.querySelector('[data-role="eq_hint"]');
-    const unit = normalizeUnit(tr.querySelector('[data-role="unit"]')?.value || "");
-    const perBase = Number(tr.querySelector('[data-role="per_base"]')?.value || 0);
-    if(hintEl) hintEl.textContent = baseUnit || "基準單位";
-    if(unitEl) unitEl.textContent = unit || "單位";
+  const host = document.getElementById("p_unit_ratio_rows");
+  if(!host) return;
+  Array.from(host.querySelectorAll('[data-role="ratio-row"]')).forEach(row => {
+    const eqEl = row.querySelector('[data-role="eq_hint"]');
+    const unit = normalizeUnit(row.querySelector('[data-role="unit"]')?.value || "");
+    const perBase = Number(row.querySelector('[data-role="per_base"]')?.value || 0);
     if(eqEl){
       if(baseUnit && unit && perBase > 0){
         const rate = 1 / perBase;
-        eqEl.textContent = `（對照：1 ${unit} = ${rate.toFixed(6).replace(/\.?0+$/,"")} ${baseUnit}）`;
+        eqEl.textContent = "（對照：1 " + unit + " = " + rate.toFixed(6).replace(/\.?0+$/, "") + " " + baseUnit + "）";
       }else{
         eqEl.textContent = "";
       }
@@ -139,28 +135,22 @@ function refreshProductUnitRatioHints_(){
 }
 
 function addProductUnitRatioRow(unit="", rate=""){
-  const tbody = document.getElementById("p_unit_ratio_rows");
-  if(!tbody) return;
-  const tr = document.createElement("tr");
-  tr.innerHTML = `
-    <td>
-      <select data-role="unit">${productUnitOptionsHtml_()}</select>
-    </td>
-    <td>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;">
-        <span style="color:#475569;">1 <span data-role="base_hint">投料單位</span> 可做出</span>
-        <input data-role="per_base" type="number" min="0" step="0.000001" placeholder="例如 10" style="min-width:0;max-width:100%;width:8rem;">
-        <span style="color:#475569;"><span data-role="unit_hint">單位</span></span>
-        <span data-role="eq_hint" style="color:#64748b;"></span>
-      </div>
-    </td>
-    <td>
-      <button type="button" class="btn-secondary" data-role="remove">刪除</button>
-    </td>
-  `;
-  const unitSel = tr.querySelector('[data-role="unit"]');
-  const perBaseInput = tr.querySelector('[data-role="per_base"]');
-  const removeBtn = tr.querySelector('[data-role="remove"]');
+  const host = document.getElementById("p_unit_ratio_rows");
+  if(!host) return;
+  const line = document.createElement("div");
+  line.className = "p-unit-ratio-matrix-line";
+  line.setAttribute("data-role", "ratio-row");
+  line.innerHTML =
+    '<div class="p-unit-ratio-matrix-line-main">' +
+    '<span class="p-unit-ratio-matrix-row-arrow" aria-hidden="true">⇒</span>' +
+    '<input data-role="per_base" type="number" min="0" step="0.000001">' +
+    '<select data-role="unit">' + productUnitOptionsHtml_() + "</select>" +
+    '<button type="button" class="btn-secondary" data-role="remove">刪除</button>' +
+    "</div>" +
+    '<span class="p-unit-ratio-matrix-line-hint" data-role="eq_hint"></span>';
+  const unitSel = line.querySelector('[data-role="unit"]');
+  const perBaseInput = line.querySelector('[data-role="per_base"]');
+  const removeBtn = line.querySelector('[data-role="remove"]');
   if(unitSel) unitSel.value = normalizeUnit(unit || "");
   if(perBaseInput) perBaseInput.value = rate || "";
   if(unitSel && !unitSel.dataset.bound){
@@ -179,20 +169,20 @@ function addProductUnitRatioRow(unit="", rate=""){
   }
   if(removeBtn){
     removeBtn.addEventListener("click", function(){
-      tr.remove();
+      line.remove();
       ensureProductUnitRatioRows_();
       syncProductUnitRatioJson_();
     });
   }
-  tbody.appendChild(tr);
+  host.appendChild(line);
   refreshProductUnitRatioHints_();
   syncProductUnitRatioJson_();
 }
 
 function ensureProductUnitRatioRows_(){
-  const tbody = document.getElementById("p_unit_ratio_rows");
-  if(!tbody) return;
-  if(tbody.querySelectorAll("tr").length === 0){
+  const host = document.getElementById("p_unit_ratio_rows");
+  if(!host) return;
+  if(host.querySelectorAll('[data-role="ratio-row"]').length === 0){
     addProductUnitRatioRow();
     return;
   }
@@ -201,9 +191,9 @@ function ensureProductUnitRatioRows_(){
 }
 
 function setProductUnitRatioRowsFromMap_(map){
-  const tbody = document.getElementById("p_unit_ratio_rows");
-  if(!tbody) return;
-  tbody.innerHTML = "";
+  const host = document.getElementById("p_unit_ratio_rows");
+  if(!host) return;
+  host.innerHTML = "";
   const obj = map && typeof map === "object" ? map : {};
   const keys = Object.keys(obj);
   if(keys.length === 0){

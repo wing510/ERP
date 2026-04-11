@@ -147,7 +147,7 @@ body{
   min-width:0;
 }
 
-/* ===== 表單：大螢幕 4 欄、其餘 2 欄（含手機，備註等 full-width 仍跨滿列） ===== */
+/* ===== 表單：大螢幕 4 欄、≤1200px 兩欄、≤768px 一欄一行（小螢幕） ===== */
 .form-grid-4{
   display:grid;
   grid-template-columns:repeat(4,1fr);
@@ -174,12 +174,15 @@ body{
   .form-group.form-group-span-3{ grid-column:span 2; }
 }
 
-@media (max-width:640px){
+@media (max-width:768px){
   .form-grid-4{
-    grid-template-columns:repeat(2, minmax(0, 1fr));
-    gap:12px 14px;
+    grid-template-columns:1fr;
+    gap:14px;
   }
-  .form-group.full-width{ grid-column:span 2; }
+  .form-group.full-width,
+  .form-group.form-group-span-3{
+    grid-column:span 1;
+  }
 }
 
 label{
@@ -301,8 +304,9 @@ input,select{
     margin-top:4px;
   }
 }
-@media (max-width:640px){
-  .mv-editor-fields{
+@media (max-width:768px){
+  .mv-editor-fields,
+  .mv-editor-fields.mv-row-meta{
     grid-template-columns:1fr;
   }
 }
@@ -518,14 +522,14 @@ button:disabled,
   vertical-align:middle;
 }
 .table-wrapper.table-lots-list .data-table td:last-child .btn-lots-action{
-  font-size:11px;
-  line-height:1.25;
-  padding:5px 5px;
+  font-size:10px;
+  line-height:1.2;
+  padding:3px 4px;
   white-space:normal;
   text-align:center;
-  max-width:4.2rem;
+  max-width:4rem;
   height:auto;
-  min-height:36px;
+  min-height:26px;
   box-sizing:border-box;
   display:inline-block;
   vertical-align:middle;
@@ -544,34 +548,123 @@ button:disabled,
   height:auto;
 }
 
-/* 產品「多單位換算」內嵌表：取消全站首欄 sticky、外層可橫向捲動，避免窄版刪除鈕爆框 */
+/* 產品「多單位換算」：矩陣／一覽式（左基準 1 投料單位 ⇒ 右側多條產出） */
 .p-unit-ratio-table-host{
   min-width:0;
   max-width:100%;
   overflow-x:auto;
   -webkit-overflow-scrolling:touch;
 }
-.table-wrapper.table-wrapper-product-uom{
+.p-unit-ratio-matrix{
+  min-width:0;
   max-width:100%;
   box-sizing:border-box;
 }
-.table-wrapper.table-wrapper-product-uom .data-table th:first-child,
-.table-wrapper.table-wrapper-product-uom .data-table td:first-child{
-  position:static;
-  left:auto;
-  white-space:normal;
+.p-unit-ratio-matrix-inner{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:flex-start;
+  gap:8px 10px;
+  padding:12px;
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+  border-radius:8px;
+  box-sizing:border-box;
 }
-.table-wrapper.table-wrapper-product-uom .data-table thead th:first-child{
-  z-index:2;
+.p-unit-ratio-matrix-head{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px 8px;
+  min-width:0;
 }
-.table-wrapper.table-wrapper-product-uom .data-table tbody td:first-child{
-  z-index:auto;
+.p-unit-ratio-matrix-lead{
+  font-weight:400;
+  font-size:14px;
+  color:#475569;
+  line-height:32px;
+  flex-shrink:0;
 }
-.table-wrapper.table-wrapper-product-uom .data-table td:last-child,
-.table-wrapper.table-wrapper-product-uom .data-table th:last-child{
-  white-space:nowrap;
-  vertical-align:middle;
-  width:1%;
+/* 與列上單位選單同高／字級／邊框，僅寬度較窄（短一點） */
+.p-unit-ratio-matrix-base-select{
+  height:32px;
+  padding:0 8px;
+  font-size:13px;
+  font-weight:400;
+  color:#334155;
+  min-width:4.75rem;
+  max-width:7rem;
+  border:1px solid #ddd;
+  border-radius:6px;
+  background:#fff;
+  box-sizing:border-box;
+  flex-shrink:0;
+}
+/* 每列產出左側 ⇒（可產生後不再重複一個） */
+.p-unit-ratio-matrix-row-arrow{
+  color:#94a3b8;
+  line-height:32px;
+  flex-shrink:0;
+  font-size:15px;
+}
+.p-unit-ratio-matrix-rows{
+  flex:1 1 200px;
+  min-width:0;
+  max-width:100%;
+  max-height:220px;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+@media (max-width:768px){
+  .p-unit-ratio-matrix-inner{
+    flex-direction:column;
+    align-items:stretch;
+    gap:10px;
+  }
+  .p-unit-ratio-matrix-rows{
+    flex:none;
+    width:100%;
+    max-height:280px;
+  }
+}
+.p-unit-ratio-matrix-line{
+  margin-bottom:8px;
+}
+.p-unit-ratio-matrix-line:last-child{
+  margin-bottom:0;
+}
+.p-unit-ratio-matrix-line-main{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px;
+  min-width:0;
+}
+.p-unit-ratio-matrix-line-main input[data-role="per_base"]{
+  width:5.75rem;
+  max-width:100%;
+  min-width:0;
+  height:32px;
+  padding:0 8px;
+  font-size:13px;
+  box-sizing:border-box;
+}
+.p-unit-ratio-matrix-line-main select[data-role="unit"]{
+  min-width:5.5rem;
+  max-width:8.5rem;
+  width:auto;
+  height:32px;
+  padding:0 8px;
+  font-size:13px;
+  box-sizing:border-box;
+}
+.p-unit-ratio-matrix-line-hint{
+  display:block;
+  font-size:12px;
+  color:#64748b;
+  margin-top:4px;
+  padding-left:2px;
+  word-break:break-word;
 }
 
 .data-table{
@@ -786,6 +879,25 @@ th span{
 }
 .btn-edit:hover{
   background:#bae6fd;
+}
+
+/* 列表／明細表列內按鈕（縮小；表單底部 .button-group、搜尋列不受影響） */
+.data-table tbody button{
+  height:28px;
+  min-height:28px;
+  padding:0 10px;
+  font-size:12px;
+  line-height:1.2;
+  border-radius:5px;
+  box-sizing:border-box;
+  margin-right:6px;
+  vertical-align:middle;
+}
+.data-table tbody button:last-child{
+  margin-right:0;
+}
+.data-table tbody .btn-primary{
+  margin-right:6px;
 }
 
 /* ===== Toast ===== */

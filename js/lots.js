@@ -438,7 +438,7 @@ function lotInventoryStatusLabel_(status){
   if(s === "ACTIVE") return "可使用";
   if(s === "CLOSED") return "無庫存";
   if(s === "VOID") return "已過期";
-  return termLabel(s || "");
+  return (typeof termLabelZhOnly === "function" ? termLabelZhOnly(s || "") : termLabel(s || ""));
 }
 
 function lotInventoryStatusBadge_(status){
@@ -457,7 +457,7 @@ function lotQaStatusLabel_(status){
   if(s === "PENDING") return "待QA";
   if(s === "APPROVED") return "QA已放行";
   if(s === "REJECTED") return "QA已退回";
-  return termLabel(s || "");
+  return (typeof termLabelZhOnly === "function" ? termLabelZhOnly(s || "") : termLabel(s || ""));
 }
 
 function getLotImportDocId_(lot){

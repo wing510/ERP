@@ -361,8 +361,8 @@ async function runTrace(){
       `Lot: ${lot.lot_id}\n` +
       `Product: ${lot.product_id}\n` +
       `Type: ${lot.type}\n` +
-      `QA: ${termLabel(lot.status || "PENDING")}\n` +
-      `Inventory: ${termLabel(lot.inventory_status || "ACTIVE")}\n` +
+      `品檢：${typeof termLabelZhOnly === "function" ? termLabelZhOnly(lot.status || "PENDING") : termLabel(lot.status || "PENDING")}\n` +
+      `庫存：${typeof termLabelZhOnly === "function" ? termLabelZhOnly(lot.inventory_status || "ACTIVE") : termLabel(lot.inventory_status || "ACTIVE")}\n` +
       `Available: ${av}\n` +
       `Source: ${(lot.source_type||"")} ${(lot.source_id||"")}\n`;
   }

@@ -672,7 +672,7 @@ async function renderPurchaseOrders(list=null){
         <td>${supplierNameOnly}</td>
         <td>${po.order_date || ""}</td>
         <td>${po.expected_arrival_date || ""}</td>
-        <td>${termLabel(po.status)}</td>
+        <td>${termLabelZhOnly(po.status)}</td>
         <td>${linkCell}</td>
         <td>${btn}</td>
       </tr>

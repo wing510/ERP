@@ -1120,7 +1120,7 @@ async function renderImportDocuments(list=null){
         <td>${doc.import_date || ""}</td>
         <td>${doc.release_date || ""}</td>
         <td>${supplierNameOnly}</td>
-        <td>${termLabel(doc.status)}</td>
+        <td>${termLabelZhOnly(doc.status)}</td>
         <td>${linkCell}</td>
         <td>${btn}</td>
       </tr>

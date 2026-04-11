@@ -271,7 +271,7 @@ async function renderRcvPostedReceipts_(){
         const totalQty = its.reduce((s,x)=>s + Number(x.received_qty || 0), 0);
         const wh = rcvWarehouseLabelById_(r.warehouse || r.warehouse_id || "");
         const st = String(r.status || "").toUpperCase() || "OPEN";
-        const stLabel = (typeof termLabel === "function" ? termLabel(st) : st);
+        const stLabel = (typeof termLabelZhOnly === "function" ? termLabelZhOnly(st) : (typeof termLabel === "function" ? termLabel(st) : st));
         const ev = rcvVoidEligibilityForGr_(id, r, rcvSourceId, items, mv, availOpts);
         const canVoid = ev.ok;
         const disabled = canVoid ? "" : "disabled";
@@ -316,7 +316,7 @@ async function renderRcvPostedReceipts_(){
         const totalQty = its.reduce((s,x)=>s + Number(x.received_qty || 0), 0);
         const wh = rcvWarehouseLabelById_(r.warehouse || r.warehouse_id || "");
         const st = String(r.status || "").toUpperCase() || "OPEN";
-        const stLabel = (typeof termLabel === "function" ? termLabel(st) : st);
+        const stLabel = (typeof termLabelZhOnly === "function" ? termLabelZhOnly(st) : (typeof termLabel === "function" ? termLabel(st) : st));
         const ev = rcvVoidEligibilityForIr_(id, r, rcvSourceId, items, mv, availOpts);
         const canVoid = ev.ok;
         const disabled = canVoid ? "" : "disabled";

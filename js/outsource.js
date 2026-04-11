@@ -236,9 +236,9 @@ function procOpenLots_(keyword){
 function procOutputStatusLabel_(status){
   const s = String(status || "").trim().toUpperCase();
   // 相容舊資料：早期回收 output.status 可能是 PENDING（其實代表已建立）
-  if(s === "PENDING" || s === "CREATED") return "CREATED（已建立回收批次）";
-  if(s === "CANCELLED") return "CANCELLED（已作廢）";
-  return (typeof termLabel === "function" ? termLabel(s) : s) || s;
+  if(s === "PENDING" || s === "CREATED") return "已建立回收批次";
+  if(s === "CANCELLED") return "已作廢";
+  return (typeof termLabelZhOnly === "function" ? termLabelZhOnly(s) : (typeof termLabel === "function" ? termLabel(s) : s)) || s;
 }
 
 function renderProcLoadedInputsTable_(inputs){
@@ -2017,7 +2017,7 @@ async function loadProcessOrder(processOrderId){
       `Type: ${po.process_type || ""}\n` +
       `Source Type: ${po.source_type || ""}\n` +
       `Supplier: ${formatProcSupplierDisplay_(po.supplier_id || "")}\n` +
-      `Status: ${termLabel(po.status)}\n` +
+      `狀態：${typeof termLabelZhOnly === "function" ? termLabelZhOnly(po.status) : termLabel(po.status)}\n` +
       `Planned: ${po.planned_date || ""}\n` +
       `Created: ${(po.created_at||"")} by ${(po.created_by||"")}\n` +
       `Updated: ${(po.updated_at||"")} by ${(po.updated_by||"")}\n` +
@@ -2042,7 +2042,7 @@ async function loadProcessOrder(processOrderId){
           const lossText = (x.loss_base_qty_after != null && x.loss_base_unit)
             ? ` | loss_after:${x.loss_base_qty_after} ${x.loss_base_unit}`
             : "";
-          return `- ${x.process_output_id || ""} | ${x.lot_id} | ${prod} | qty:${x.receive_qty} ${x.unit} | status:${termLabel(x.status)}${lossText} | ${x.remark||""}`;
+          return `- ${x.process_output_id || ""} | ${x.lot_id} | ${prod} | qty:${x.receive_qty} ${x.unit} | 狀態:${typeof termLabelZhOnly === "function" ? termLabelZhOnly(x.status) : termLabel(x.status)}${lossText} | ${x.remark||""}`;
         }).join("\n")
       : "(無)";
   }
@@ -2131,7 +2131,7 @@ async function renderProcessOrders(){
         <td>${escapeHtml_(procProcessTypeLabel_(p.process_type))}</td>
         <td>${escapeHtml_(p.source_type || "")}</td>
         <td>${escapeHtml_(procSupplierListCell_(p.supplier_id, supMap))}</td>
-        <td>${escapeHtml_(termLabel(p.status))}</td>
+        <td>${escapeHtml_(termLabelZhOnly(p.status))}</td>
         <td>${escapeHtml_(p.created_at || "")}</td>
         <td>
           <button class="btn-edit" onclick="loadProcessOrder('${poId}')">Load</button>

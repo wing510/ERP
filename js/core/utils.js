@@ -121,6 +121,15 @@ function termLabel(code) {
   return TERM_LABELS[s] || code;
 }
 
+/** 列表等僅顯示中文：termLabel 為「CODE（說明）」時取括號內，否則沿用原字串。 */
+function termLabelZhOnly(code) {
+  if (code == null || code === "") return "";
+  var full = (typeof termLabel === "function" ? termLabel(code) : String(code)) || "";
+  var m = String(full).match(/^([A-Z0-9_]+)（([^）]+)）$/);
+  if (m) return m[2];
+  return full;
+}
+
 /**
  * 狀態徽章內文：英文碼一行、（中文說明）下一行（對齊 termLabel「CODE（說明）」）
  */
@@ -157,7 +166,7 @@ function termStatusLampHtml(code){
       .replace(/"/g, "&quot;");
   };
   var normCode = active ? "ACTIVE" : (inactive ? "INACTIVE" : (raw || "INACTIVE"));
-  var labelFull = (typeof termLabel === "function" ? termLabel(normCode) : normCode) || normCode;
+  var labelFull = (typeof termLabelZhOnly === "function" ? termLabelZhOnly(normCode) : ((typeof termLabel === "function" ? termLabel(normCode) : normCode) || normCode)) || normCode;
   var modClass = active ? "status-lamp--active" : (inactive ? "status-lamp--inactive" : "status-lamp--unknown");
   return (
     '<span class="status-lamp status-lamp--solo ' + modClass + '" title="' + esc(labelFull) + '" aria-label="' + esc(labelFull) + '" role="img">' +
