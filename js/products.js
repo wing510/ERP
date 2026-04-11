@@ -46,6 +46,7 @@ async function productsInit(){
   ensureProductUnitRatioRows_();
   await renderProducts();
   clearForm();
+  if(typeof bindStatusSelectLamp_ === "function") bindStatusSelectLamp_("p_status");
 }
 
 function setProductButtons_(){
@@ -146,9 +147,9 @@ function addProductUnitRatioRow(unit="", rate=""){
       <select data-role="unit">${productUnitOptionsHtml_()}</select>
     </td>
     <td>
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;">
         <span style="color:#475569;">1 <span data-role="base_hint">投料單位</span> 可做出</span>
-        <input data-role="per_base" type="number" min="0" step="0.000001" placeholder="例如 10">
+        <input data-role="per_base" type="number" min="0" step="0.000001" placeholder="例如 10" style="min-width:0;max-width:100%;width:8rem;">
         <span style="color:#475569;"><span data-role="unit_hint">單位</span></span>
         <span data-role="eq_hint" style="color:#64748b;"></span>
       </div>
@@ -390,6 +391,7 @@ function clearForm(){
   p_status.value = "ACTIVE";
   p_type.value = "RM";
   p_id.value = generateShortId("P");
+  if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("p_status");
   setProductButtons_();
 }
 
@@ -416,6 +418,7 @@ async function loadProduct(id){
   setProductUnitRatioRowsFromMap_(parsed && typeof parsed === "object" ? parsed : {});
   p_remark.value = stripProductUomRemark(p.remark);
   p_status.value = p.status;
+  if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("p_status");
 
   p_id.disabled = true;
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
@@ -484,23 +487,18 @@ async function renderProducts(list=null){
   }
   list.forEach(p=>{
 
-    const badge=p.status==="ACTIVE"
-      ? `<span class="badge badge-active">${termLabel("ACTIVE")}</span>`
-      : `<span class="badge badge-inactive">${termLabel(p.status||"INACTIVE")}</span>`;
-
-    const typeLabel = p.type ? `[${p.type}] ` : "";
+    const badge = termStatusLampHtml(p.status);
 
     tbody.innerHTML+=`
       <tr>
         <td>${p.product_id}</td>
-        <td>${typeLabel}${p.product_name}</td>
-        <td>${p.type}</td>
+        <td>${p.product_name}</td>
         <td>${p.spec||""}</td>
         <td>${p.unit}</td>
-        <td>${badge}</td>
+        <td>${p.type}</td>
+        <td class="col-status">${badge}</td>
         <td>
-          <button class="btn-edit" onclick="loadProduct('${p.product_id}')">Edit</button>
-          <button class="btn-secondary" onclick="openLogs('product','${p.product_id}','master')">Logs</button>
+          <button class="btn-edit" onclick="loadProduct('${p.product_id}')">Load</button>
         </td>
       </tr>
     `;

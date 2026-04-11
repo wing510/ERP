@@ -94,7 +94,7 @@ function setRcvPostBtnState_(){
   const hasQty = (qtys || []).some(q => Number(q || 0) > 0);
   if(!hasQty){
     postBtn.disabled = true;
-    postBtn.title = "請至少輸入一筆本次收貨數量";
+    postBtn.title = "請至少輸入一筆本次收貨";
     return;
   }
 
@@ -504,7 +504,7 @@ async function onRcvSourceSelect() {
     return;
   }
 
-  setTbodyLoading_(tbody, 10);
+  setTbodyLoading_(tbody, 9);
 
   try {
     if (rcvSourceType === "PO") {
@@ -582,7 +582,7 @@ async function onRcvSourceSelect() {
   } catch (e) {
     console.error(e);
     rcvLines = [];
-    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#991b1b;padding:18px;">收貨明細載入失敗</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#991b1b;padding:18px;">收貨明細載入失敗</td></tr>`;
     setRcvReceiptState_("收庫流程：明細載入失敗", "error");
   }
   await refreshRcvVoidReceiptOptions();
@@ -745,18 +745,18 @@ function renderRcvLines() {
     const maxVal = canReceive ? row.remaining : 0;
     const placeholder = canReceive ? "0" : "剩餘=0";
     const disabledAttr = canReceive ? "" : 'disabled value="0"';
+    const ru = String(row.unit || "").trim().replace(/</g, "");
     tbody.innerHTML += `
       <tr>
-        <td>${row.item_no}</td>
+        <td class="col-rcv-item-no" title="${String(row.item_no ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;")}">${row.item_no}</td>
         <td>${formatRcvProductDisplay_(row.product_id)}</td>
         <td>${whText || "—"}</td>
         <td>${row.order_qty}</td>
         <td>${row.received_qty}</td>
         <td>${row.remaining}</td>
-        <td><input type="number" id="rcv_qty_${idx}" min="0" max="${maxVal}" step="0.01" placeholder="${placeholder}" ${disabledAttr} style="width:100px;"></td>
-        <td><input type="date" id="rcv_mfg_${idx}" style="width:120px;padding:4px 6px;"></td>
-        <td><input type="date" id="rcv_exp_${idx}" style="width:120px;padding:4px 6px;"></td>
-        <td>${row.unit}</td>
+        <td class="col-rcv-qty-cell"><div class="erp-input-with-suffix"><input type="number" id="rcv_qty_${idx}" min="0" max="${maxVal}" step="0.01" placeholder="${placeholder}" ${disabledAttr}><span class="erp-input-suffix">${ru}</span></div></td>
+        <td><input type="date" class="rcv-input-date" id="rcv_mfg_${idx}"></td>
+        <td><input type="date" class="rcv-input-date" id="rcv_exp_${idx}"></td>
       </tr>
     `;
   });
@@ -825,7 +825,7 @@ async function postReceipt(triggerEl) {
   const qtys = getRcvInputQtys();
   const lotDates = getRcvLotDates();
   const hasQty = qtys.some((q) => q > 0);
-  if (!hasQty) return showToast("請至少輸入一筆本次收貨數量", "error");
+  if (!hasQty) return showToast("請至少輸入一筆本次收貨", "error");
 
   for(let i = 0; i < qtys.length; i++){
     if((qtys[i] || 0) <= 0) continue;
@@ -978,7 +978,7 @@ async function postGoodsReceiptUnified(gr_id, receipt_date, warehouse, remark, q
   }
 
   const poMsg = created === 0
-    ? "本次沒有可收數量（本次收貨數量未填或超過可收量），未產生 Lot。"
+    ? "本次沒有可收數量（本次收貨未填或超過可收量），未產生 Lot。"
     : `收貨完成：已產生 ${created} 個 Lot（PENDING）`;
   showToast(poMsg);
   setRcvLotState_(created === 0 ? "批次狀態：未產生" : `批次狀態：已產生 — ${created} 個（待QA）`, created === 0 ? "warn" : "ok");
@@ -1096,7 +1096,7 @@ async function postImportReceiptUnified(import_receipt_id, receipt_date, warehou
   }
 
   const irMsg = created === 0
-    ? "本次沒有可收數量（本次收貨數量未填或超過可收量），未產生 Lot。"
+    ? "本次沒有可收數量（本次收貨未填或超過可收量），未產生 Lot。"
     : `進口收貨完成：已產生 ${created} 個 Lot（PENDING）`;
   showToast(irMsg);
   resetRcvForm();

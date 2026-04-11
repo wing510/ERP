@@ -2,7 +2,7 @@
   <div class="card">
     <div class="card-header card-header-flex">
       <span>
-        產品資料編輯
+        Products 產品
         <button type="button" class="btn-sheet" onclick="openSheetLink('product')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
       </span>
       <span data-help="productEdit"></span>
@@ -23,23 +23,6 @@
       </div>
 
       <div class="form-group">
-        <label>類型</label>
-        <select id="p_type">
-          <option value="RM">RM（原料）</option>
-          <option value="WIP">WIP（半成品）</option>
-          <option value="FG">FG（成品）</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>狀態</label>
-        <select id="p_status">
-          <option value="ACTIVE">ACTIVE（使用中）</option>
-          <option value="INACTIVE">INACTIVE（停用）</option>
-        </select>
-      </div>
-
-      <div class="form-group">
         <label>規格</label>
         <input type="text" id="p_spec">
       </div>
@@ -56,17 +39,37 @@
         </select>
       </div>
 
+      <div class="form-group">
+        <label>類型</label>
+        <select id="p_type">
+          <option value="RM">RM（原料）</option>
+          <option value="WIP">WIP（半成品）</option>
+          <option value="FG">FG（成品）</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>狀態</label>
+        <div class="erp-status-select-row">
+          <select id="p_status">
+            <option value="ACTIVE">ACTIVE（使用中）</option>
+            <option value="INACTIVE">INACTIVE（停用）</option>
+          </select>
+          <span id="p_status_lamp" class="status-lamp status-lamp--solo status-lamp--active" role="img" title="ACTIVE（使用中）" aria-label="ACTIVE（使用中）"><span class="status-lamp-dot" aria-hidden="true"></span></span>
+        </div>
+      </div>
+
       <div class="form-group full-width">
         <label>備註</label>
         <input type="text" id="p_remark">
       </div>
 
       <div class="form-group full-width">
-        <details id="p_multi_unit_details" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px;">
+        <details id="p_multi_unit_details" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:8px 10px;min-width:0;max-width:100%;box-sizing:border-box;">
           <summary style="cursor:pointer;font-weight:600;color:#475569;font-size:13px;line-height:1.35;">
             多單位換算（用途：當投料與回收單位不同，例如投料 KG、回收 BOX 時，系統會依此規則換算後再比較）
           </summary>
-          <div style="margin-top:10px;color:#475569;line-height:1.6;">
+          <div style="margin-top:10px;color:#475569;line-height:1.6;min-width:0;max-width:100%;">
             <div class="form-grid-4">
               <div class="form-group" id="p_base_unit_group">
                 <label>投料單位</label>
@@ -83,10 +86,10 @@
               </div>
             </div>
 
-            <div id="p_unit_ratio_group" style="margin-top:6px;">
-              <div style="min-width:520px;">
+            <div id="p_unit_ratio_group" style="margin-top:6px;min-width:0;max-width:100%;">
+              <div class="p-unit-ratio-table-host">
                 <input type="hidden" id="p_unit_ratio_to_base_json">
-                <div class="table-wrapper" style="height:180px;">
+                <div class="table-wrapper table-wrapper-product-uom" style="height:180px;">
                   <table class="data-table">
                     <thead>
                       <tr>
@@ -151,16 +154,16 @@
 
     <br>
 
-    <div class="table-wrapper">
+    <div class="table-wrapper table-wrapper-master">
       <table class="data-table">
         <thead>
         <tr>
           <th onclick="sortProducts('product_id')">ID</th>
           <th onclick="sortProducts('product_name')">名稱</th>
-          <th onclick="sortProducts('type')">類型</th>
           <th onclick="sortProducts('spec')">規格</th>
           <th onclick="sortProducts('unit')">單位</th>
-          <th onclick="sortProducts('status')">狀態</th>
+          <th onclick="sortProducts('type')">類型</th>
+          <th class="col-status" onclick="sortProducts('status')">狀態</th>
           <th>操作</th>
         </tr>
         </thead>

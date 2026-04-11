@@ -237,6 +237,7 @@ function clearSOItemEntry(){
   if(a) a.value = "";
   if(b) b.value = "";
   if(c) c.value = "";
+  syncSOItemUnitSuffix_();
   if(d) d.value = "";
   if(e) e.value = "0.00";
   if(f) f.value = "";
@@ -329,11 +330,22 @@ function beginEditSOItemDraft_(draftId){
   renderSOItemsDraft();
 }
 
+function syncSOItemUnitSuffix_(){
+  syncErpQtyUnitSuffix_("so_item_unit", "so_item_unit_suffix");
+}
+
 function onSelectSOProduct(){
   const sel = document.getElementById("so_item_product_id");
   const opt = sel?.selectedOptions?.[0];
-  if(!opt) return;
-  document.getElementById("so_item_unit").value = opt.getAttribute("data-unit") || "";
+  const uEl = document.getElementById("so_item_unit");
+  if(!uEl) return;
+  if(!opt || !String(sel?.value || "").trim()){
+    uEl.value = "";
+    syncSOItemUnitSuffix_();
+    return;
+  }
+  uEl.value = opt.getAttribute("data-unit") || "";
+  syncSOItemUnitSuffix_();
 }
 
 function calcSOAmount(){
@@ -419,13 +431,14 @@ function renderSOItemsDraft(){
       ? "—"
       : `<button type="button" class="btn-secondary" onclick="event.stopPropagation(); beginEditSOItemDraft_('${safeId}')">編輯</button> ` +
         `<button type="button" class="btn-secondary" onclick="event.stopPropagation(); removeSOItemDraft('${safeId}')">刪除</button>`;
+    const su = String(it.unit || "").trim();
+    const orderQtyCell = su ? `${it.order_qty} ${su.replace(/</g, "")}` : String(it.order_qty);
     tbody.innerHTML += `
       <tr style="${locked ? "" : "cursor:pointer;"}" ${rowClick}>
         <td>${idx+1}</td>
         <td title="${String(display).replace(/"/g, "&quot;")}">${display}</td>
-        <td>${it.order_qty}</td>
+        <td>${orderQtyCell}</td>
         <td>${it.shipped_qty}</td>
-        <td>${it.unit}</td>
         <td>${it.unit_price}</td>
         <td>${it.amount.toFixed(2)}</td>
         <td>${formatSOItemLineStatus_(it)}</td>
@@ -826,7 +839,7 @@ async function renderSalesOrders(){
         <td>${termLabel(so.status)}</td>
         <td>${so.created_at || ""}</td>
         <td>
-          <button class="btn-edit" onclick="loadSalesOrder('${so.so_id}')">Edit</button>
+          <button class="btn-edit" onclick="loadSalesOrder('${so.so_id}')">Load</button>
           <button type="button" class="btn-secondary" onclick="gotoShippingFromSO_('${so.so_id}')">出貨</button>
           <button type="button" class="btn-secondary" onclick="openLogs('sales_order','${so.so_id}','sales')">Log</button>
         </td>

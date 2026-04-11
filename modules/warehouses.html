@@ -31,10 +31,13 @@
 
       <div class="form-group">
         <label>狀態</label>
-        <select id="wh_status">
-          <option value="ACTIVE">ACTIVE（使用中）</option>
-          <option value="INACTIVE">INACTIVE（停用）</option>
-        </select>
+        <div class="erp-status-select-row">
+          <select id="wh_status">
+            <option value="ACTIVE">ACTIVE（使用中）</option>
+            <option value="INACTIVE">INACTIVE（停用）</option>
+          </select>
+          <span id="wh_status_lamp" class="status-lamp status-lamp--solo status-lamp--active" role="img" title="ACTIVE（使用中）" aria-label="ACTIVE（使用中）"><span class="status-lamp-dot" aria-hidden="true"></span></span>
+        </div>
       </div>
 
       <div class="form-group full-width">
@@ -79,14 +82,13 @@
 
     <br>
 
-    <div class="table-wrapper">
+    <div class="table-wrapper table-wrapper-master">
       <table class="data-table">
         <thead>
           <tr>
             <th>倉庫ID</th>
             <th>名稱</th>
-            <th>狀態</th>
-            <th>更新時間</th>
+            <th class="col-status">狀態</th>
             <th>操作</th>
           </tr>
         </thead>

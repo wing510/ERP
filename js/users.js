@@ -11,6 +11,7 @@ async function usersInit(){
     ["u_search_status", "change"]
   ], () => renderUsers());
   await renderUsers();
+  if(typeof bindStatusSelectLamp_ === "function") bindStatusSelectLamp_("u_status");
 }
 
 function setUserButtons_(){
@@ -36,6 +37,7 @@ function resetUserForm(){
   if(role) role.value = "OP";
   const st = document.getElementById("u_status");
   if(st) st.value = "ACTIVE";
+  if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("u_status");
   const rm = document.getElementById("u_remark");
   if(rm) rm.value = "";
   setUserButtons_();
@@ -84,6 +86,7 @@ async function loadUser(userId){
   document.getElementById("u_name").value = u.user_name || "";
   document.getElementById("u_role").value = u.role || "OP";
   document.getElementById("u_status").value = u.status || "ACTIVE";
+  if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("u_status");
   document.getElementById("u_remark").value = u.remark || "";
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
   setUserButtons_();
@@ -126,7 +129,7 @@ function resetUserListSearch(){
 async function renderUsers(){
   const tbody = document.getElementById("uTableBody");
   if(!tbody) return;
-  setTbodyLoading_(tbody, 6);
+  setTbodyLoading_(tbody, 5);
   const list = await getAll("user").catch(()=>[]);
   const kw = (document.getElementById("u_search_keyword")?.value || "").trim().toLowerCase();
   const qSt = (document.getElementById("u_search_status")?.value || "").trim().toUpperCase();
@@ -145,20 +148,20 @@ async function renderUsers(){
   tbody.innerHTML = "";
   if(!sorted.length){
     const emptyMsg = kw || qSt
-      ? '<tr><td colspan="6" style="text-align:center;color:#64748b;padding:24px;">沒有符合條件的使用者。</td></tr>'
-      : '<tr><td colspan="6" style="text-align:center;color:#64748b;padding:24px;">尚無使用者。請在上方表單建立。</td></tr>';
+      ? '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:24px;">沒有符合條件的使用者。</td></tr>'
+      : '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:24px;">尚無使用者。請在上方表單建立。</td></tr>';
     tbody.innerHTML = emptyMsg;
     return;
   }
   sorted.forEach(u => {
+    const badge = termStatusLampHtml(u.status);
     tbody.innerHTML += `
       <tr>
         <td>${u.user_id || ""}</td>
         <td>${u.user_name || ""}</td>
         <td>${u.role || ""}</td>
-        <td>${termLabel(u.status)}</td>
-        <td>${u.updated_at || ""}</td>
-        <td><button class="btn-edit" onclick="loadUser('${u.user_id}')">Edit</button></td>
+        <td class="col-status">${badge}</td>
+        <td><button class="btn-edit" onclick="loadUser('${u.user_id}')">Load</button></td>
       </tr>
     `;
   });

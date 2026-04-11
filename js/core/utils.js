@@ -34,14 +34,52 @@ function generateId(prefix){
   return `${prefix}-${ymd}-${hm}-${rnd}`;
 }
 
-/** 較短的主檔 ID：例如 P240331-7K3F（長度更短、仍足夠避免日常撞號） */
+/** 較短的主檔 ID：例如 P260411-A3（日期後僅 2 碼英數，主檔用） */
 function generateShortId(prefix){
   const d = new Date();
   const pad = (n) => String(n).padStart(2,"0");
   const yy = String(d.getFullYear()).slice(-2);
   const ymd = `${yy}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
-  const rnd = Math.random().toString(36).slice(2,6).toUpperCase(); // 4 碼
+  const n = Math.floor(Math.random() * 36 * 36);
+  const rnd = n.toString(36).toUpperCase().padStart(2, "0");
   return `${prefix}${ymd}-${rnd}`;
+}
+
+/**
+ * 下拉與既有資料對齊：若值不在固定選項內，暫時加一筆「舊資料」避免載入後空白。
+ * 適用客戶分類／國家、供應商國家、進口原產地等。
+ */
+function syncSelectWithLegacy_(selectId, storedValue){
+  const sel = document.getElementById(selectId);
+  if(!sel) return;
+  sel.querySelectorAll("option[data-legacy='1']").forEach(function(o){
+    o.remove();
+  });
+  const v = String(storedValue || "").trim();
+  if(!v){
+    sel.value = "";
+    return;
+  }
+  const exists = Array.from(sel.options).some(function(o){
+    return String(o.value) === v;
+  });
+  if(!exists){
+    const opt = document.createElement("option");
+    opt.value = v;
+    opt.textContent = v + "（舊資料）";
+    opt.dataset.legacy = "1";
+    sel.appendChild(opt);
+  }
+  sel.value = v;
+}
+
+/** 數量框旁單位後綴：hidden 存值、span 顯示；無單位時空白（不顯示佔位符）。 */
+function syncErpQtyUnitSuffix_(hiddenId, suffixId){
+  const h = document.getElementById(hiddenId);
+  const s = document.getElementById(suffixId);
+  if(!s) return;
+  const u = h ? String(h.value || "").trim() : "";
+  s.textContent = u;
 }
 
 /* =========================================================
@@ -81,6 +119,82 @@ function termLabel(code) {
   if (code == null || code === "") return "";
   var s = String(code).trim().toUpperCase();
   return TERM_LABELS[s] || code;
+}
+
+/**
+ * 狀態徽章內文：英文碼一行、（中文說明）下一行（對齊 termLabel「CODE（說明）」）
+ */
+function termStatusBadgeInnerHtml(code){
+  var full = (typeof termLabel === "function" ? termLabel(code) : String(code || "")) || "";
+  var esc = function(t){
+    return String(t || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  };
+  var m = String(full).match(/^([A-Z0-9_]+)（([^）]+)）$/);
+  if(m){
+    return '<span class="badge-line badge-line-en">' + esc(m[1]) + '</span>' +
+      '<span class="badge-line badge-line-zh">（' + esc(m[2]) + '）</span>';
+  }
+  return esc(full);
+}
+
+/**
+ * 主檔列表狀態：僅燈號（hover 可看完整說明，與表單旁燈號同色）
+ */
+function termStatusLampHtml(code){
+  var raw = String(code == null ? "" : code).trim();
+  var st = raw.toUpperCase();
+  var active = st === "ACTIVE";
+  var inactive = st === "INACTIVE";
+  var esc = function(t){
+    return String(t || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  };
+  var normCode = active ? "ACTIVE" : (inactive ? "INACTIVE" : (raw || "INACTIVE"));
+  var labelFull = (typeof termLabel === "function" ? termLabel(normCode) : normCode) || normCode;
+  var modClass = active ? "status-lamp--active" : (inactive ? "status-lamp--inactive" : "status-lamp--unknown");
+  return (
+    '<span class="status-lamp status-lamp--solo ' + modClass + '" title="' + esc(labelFull) + '" aria-label="' + esc(labelFull) + '" role="img">' +
+    '<span class="status-lamp-dot" aria-hidden="true"></span></span>'
+  );
+}
+
+/**
+ * 主檔表單：依狀態下拉目前值更新旁邊燈號（lamp 預設 id = selectId + "_lamp"）
+ */
+function syncStatusSelectLamp_(selectId, lampId){
+  var sel = document.getElementById(selectId);
+  var lamp = document.getElementById(lampId || (selectId + "_lamp"));
+  if(!sel || !lamp) return;
+  var raw = String(sel.value || "").trim();
+  var st = raw.toUpperCase();
+  var active = st === "ACTIVE";
+  var inactive = st === "INACTIVE";
+  var normCode = active ? "ACTIVE" : (inactive ? "INACTIVE" : (raw || "INACTIVE"));
+  var labelFull = (typeof termLabel === "function" ? termLabel(normCode) : normCode) || normCode;
+  var modClass = active ? "status-lamp--active" : (inactive ? "status-lamp--inactive" : "status-lamp--unknown");
+  lamp.className = "status-lamp status-lamp--solo " + modClass;
+  lamp.setAttribute("title", labelFull);
+  lamp.setAttribute("aria-label", labelFull);
+  lamp.setAttribute("role", "img");
+  lamp.innerHTML = '<span class="status-lamp-dot" aria-hidden="true"></span>';
+}
+
+function bindStatusSelectLamp_(selectId, lampId){
+  var sel = document.getElementById(selectId);
+  if(!sel || sel.dataset.statusLampBound) return;
+  sel.dataset.statusLampBound = "1";
+  var lid = lampId || (selectId + "_lamp");
+  sel.addEventListener("change", function(){
+    syncStatusSelectLamp_(selectId, lid);
+  });
+  syncStatusSelectLamp_(selectId, lid);
 }
 
 /**
@@ -127,7 +241,7 @@ function bindUppercaseInput(elementId){
 }
 
 /* =========================================================
-   UX：列表 Edit 後捲到上方編輯區
+   UX：列表按 Load 後捲到上方編輯區
 ========================================================= */
 
 function scrollToEditorTop(){

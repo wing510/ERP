@@ -55,12 +55,23 @@ function splitGetAvailable(lotId){
 function onSelectSplitSource(){
   const sel = document.getElementById("split_source_lot");
   const opt = sel?.selectedOptions?.[0];
-  if(!opt) return;
+  const hasLot = !!(opt && String(opt.value || "").trim());
+  if(!hasLot){
+    document.getElementById("split_product").value = "";
+    document.getElementById("split_unit").value = "";
+    document.getElementById("split_available").value = "";
+    document.getElementById("split_new_unit").value = "";
+    syncErpQtyUnitSuffix_("split_new_unit", "split_new_unit_suffix");
+    document.getElementById("split_new_lot_id").value = generateId("LOT");
+    setSplitButtons_();
+    return;
+  }
   document.getElementById("split_product").value = opt.getAttribute("data-product") || "";
   document.getElementById("split_unit").value = opt.getAttribute("data-unit") || "";
   document.getElementById("split_available").value = opt.getAttribute("data-av") || "";
 
   document.getElementById("split_new_unit").value = opt.getAttribute("data-unit") || "";
+  syncErpQtyUnitSuffix_("split_new_unit", "split_new_unit_suffix");
   document.getElementById("split_new_lot_id").value = generateId("LOT");
   setSplitButtons_();
 }
@@ -78,6 +89,7 @@ function resetSplit(){
   document.getElementById("split_new_lot_id").value = generateId("LOT");
   document.getElementById("split_new_qty").value = "";
   document.getElementById("split_new_unit").value = "";
+  syncErpQtyUnitSuffix_("split_new_unit", "split_new_unit_suffix");
   document.getElementById("split_new_remark").value = "";
   setSplitButtons_();
 }
@@ -124,12 +136,13 @@ function renderSplitDraft(){
   if(!tbody) return;
   tbody.innerHTML = "";
   splitDraft.forEach((it, idx) => {
+    const su = String(it.unit || "").trim();
+    const sqCell = su ? `${it.qty} ${su.replace(/</g, "")}` : String(it.qty);
     tbody.innerHTML += `
       <tr>
         <td>${idx+1}</td>
         <td>${it.new_lot_id}</td>
-        <td>${it.qty}</td>
-        <td>${it.unit}</td>
+        <td>${sqCell}</td>
         <td>${it.remark || ""}</td>
         <td><button class="btn-secondary" onclick="removeSplitDraft('${it.draft_id}')">刪除</button></td>
       </tr>

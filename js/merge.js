@@ -5,6 +5,7 @@
  */
 
 let mergeLots = [];
+let mergeProducts = [];
 let mergeAvailByLotId_ = {};
 let mergeMovementLoadFailed_ = false;
 let mergeDraft = [];
@@ -21,13 +22,15 @@ async function mergeInit(){
 }
 
 async function loadMergeCaches(){
-  const [lots, availPack] = await Promise.all([
+  const [lots, products, availPack] = await Promise.all([
     getAll("lot"),
+    getAll("product"),
     typeof loadInventoryMovementAvailableMap_ === "function"
       ? loadInventoryMovementAvailableMap_()
       : Promise.resolve({ map: {}, failed: true })
   ]);
   mergeLots = lots || [];
+  mergeProducts = products || [];
   mergeAvailByLotId_ = (availPack && availPack.map) || {};
   mergeMovementLoadFailed_ = !!(availPack && availPack.failed);
 
@@ -41,6 +44,13 @@ async function loadMergeCaches(){
         return `<option value="${l.lot_id}" data-product="${l.product_id}" data-unit="${l.unit}" data-type="${l.type}" data-qa="${l.status}" data-av="${av}">${l.lot_id} 可用:${av}</option>`;
       }).join("");
   }
+}
+
+function formatMergeProductDisplay_(productId){
+  const p = (mergeProducts || []).find(x => x.product_id === productId) || {};
+  const name = String(p.product_name || productId || "").trim();
+  const spec = String(p.spec || "").trim();
+  return spec ? `${name}（${spec}）` : name;
 }
 
 function mergeGetAvailable(lotId){
@@ -74,6 +84,7 @@ function resetMerge(){
   document.getElementById("merge_available").value = "";
   document.getElementById("merge_take_qty").value = "";
   document.getElementById("merge_take_unit").value = "";
+  syncErpQtyUnitSuffix_("merge_take_unit", "merge_take_unit_suffix");
   document.getElementById("merge_take_remark").value = "";
   setMergeButtons_();
 }
@@ -81,9 +92,10 @@ function resetMerge(){
 function onSelectMergeSource(){
   const sel = document.getElementById("merge_source_lot");
   const opt = sel?.selectedOptions?.[0];
-  if(!opt) return;
-  document.getElementById("merge_available").value = opt.getAttribute("data-av") || "";
-  document.getElementById("merge_take_unit").value = opt.getAttribute("data-unit") || "";
+  const hasLot = !!(opt && String(opt.value || "").trim());
+  document.getElementById("merge_available").value = hasLot ? (opt.getAttribute("data-av") || "") : "";
+  document.getElementById("merge_take_unit").value = hasLot ? (opt.getAttribute("data-unit") || "") : "";
+  syncErpQtyUnitSuffix_("merge_take_unit", "merge_take_unit_suffix");
   setMergeButtons_();
 }
 
@@ -109,7 +121,7 @@ function addMergeDraft(){
     mergePickedUnit = lot.unit;
     mergePickedType = lot.type;
     mergePickedQA = lot.status;
-    document.getElementById("merge_product").value = mergePickedProduct;
+    document.getElementById("merge_product").value = formatMergeProductDisplay_(mergePickedProduct);
     document.getElementById("merge_unit").value = mergePickedUnit;
   }else{
     if(lot.product_id !== mergePickedProduct) return showToast("合批必須同一產品","error");
@@ -129,6 +141,7 @@ function addMergeDraft(){
   document.getElementById("merge_available").value = "";
   document.getElementById("merge_take_qty").value = "";
   document.getElementById("merge_take_unit").value = "";
+  syncErpQtyUnitSuffix_("merge_take_unit", "merge_take_unit_suffix");
   document.getElementById("merge_take_remark").value = "";
 
   renderMergeDraft();
@@ -157,13 +170,14 @@ function renderMergeDraft(){
   if(!tbody) return;
   tbody.innerHTML = "";
   mergeDraft.forEach((it, idx) => {
+    const mu = String(it.unit || "").trim();
+    const mqCell = mu ? `${it.qty} ${mu.replace(/</g, "")}` : String(it.qty);
     tbody.innerHTML += `
       <tr>
         <td>${idx+1}</td>
         <td>${it.lot_id}</td>
-        <td>${it.product_id}</td>
-        <td>${it.qty}</td>
-        <td>${it.unit}</td>
+        <td>${formatMergeProductDisplay_(it.product_id)}</td>
+        <td>${mqCell}</td>
         <td>${it.remark || ""}</td>
         <td><button class="btn-secondary" onclick="removeMergeDraft('${it.draft_id}')">刪除</button></td>
       </tr>

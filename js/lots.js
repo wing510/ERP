@@ -623,19 +623,19 @@ async function renderLots(){
         const allowQa = String(invStatus || "").toUpperCase() === "ACTIVE";
         const action =
           (qaStatus === "PENDING" && allowQa)
-            ? `<button class="btn-secondary" onclick="approveLot('${safeLotId}', this)">QA 放行</button>
-               <button class="btn-secondary" onclick="rejectLot('${safeLotId}', this)">QA 退回</button>
-               <button class="btn-secondary" onclick="editLotDates('${safeLotId}')">補登日期</button>`
-            : `<button class="btn-secondary" onclick="openLogs('lot','${safeLotId}','inventory')">Log</button>
-               <button class="btn-secondary" onclick="window.__pendingTraceLotId='${safeLotId}';if(typeof navigate==='function')navigate('trace')">追溯</button>
-               <button class="btn-secondary" onclick="editLotDates('${safeLotId}')">補登日期</button>`;
+            ? `<button type="button" class="btn-secondary btn-lots-action" onclick="approveLot('${safeLotId}', this)">QA<br>放行</button>
+               <button type="button" class="btn-secondary btn-lots-action" onclick="rejectLot('${safeLotId}', this)">QA<br>退回</button>
+               <button type="button" class="btn-secondary btn-lots-action" onclick="editLotDates('${safeLotId}')">補登<br>日期</button>`
+            : `<button type="button" class="btn-secondary" onclick="openLogs('lot','${safeLotId}','inventory')">Log</button>
+               <button type="button" class="btn-secondary" onclick="window.__pendingTraceLotId='${safeLotId}';if(typeof navigate==='function')navigate('trace')">追溯</button>
+               <button type="button" class="btn-secondary btn-lots-action" onclick="editLotDates('${safeLotId}')">補登<br>日期</button>`;
 
         const productDisplay = lotsFormatProductSpec_(lot);
         const pidAttr = escapeLotsHtml_(lot.product_id || "");
 
         container.innerHTML += `
       <tr>
-        <td>${escapeLotsHtml_(lot.lot_id || "")}</td>
+        <td title="${escapeLotsHtml_(lot.lot_id || "")}">${escapeLotsHtml_(lot.lot_id || "")}</td>
         <td title="${pidAttr}">${escapeLotsHtml_(productDisplay)}</td>
         <td>${escapeLotsHtml_(whText || "—")}</td>
         <td>${escapeLotsHtml_(lot.type || "")}</td>

@@ -431,7 +431,7 @@ function renderProcLoadedOutputsTable_(outputs){
   const rows = Array.isArray(outputs) ? outputs : [];
   tbody.innerHTML = "";
   if(rows.length === 0){
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#64748b;">(無)</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#64748b;">(無)</td></tr>`;
     return;
   }
   rows.forEach((x, idx) => {
@@ -439,7 +439,8 @@ function renderProcLoadedOutputsTable_(outputs){
     const lotId = String(x.lot_id || "");
     const productId = String(x.product_id || "");
     const qty = (x.receive_qty != null ? x.receive_qty : "");
-    const unit = String(x.unit || "");
+    const unit = String(x.unit || "").trim();
+    const qtyUnit = unit ? `${escapeHtml_(String(qty))} ${escapeHtml_(unit)}` : escapeHtml_(String(qty));
     const status = String(x.status || "");
     const canVoid = !!outId && String(status).toUpperCase() !== "CANCELLED";
     const safeOutId = outId.replace(/\\/g,"\\\\").replace(/'/g,"\\'");
@@ -448,8 +449,7 @@ function renderProcLoadedOutputsTable_(outputs){
         <td>${idx+1}</td>
         <td>${escapeHtml_(lotId)}</td>
         <td>${escapeHtml_(formatProcProductDisplay_(productId))}</td>
-        <td>${escapeHtml_(qty)}</td>
-        <td>${escapeHtml_(unit)}</td>
+        <td>${qtyUnit}</td>
         <td>${escapeHtml_(procOutputStatusLabel_(status))}</td>
         <td>
           <button class="btn-secondary" ${canVoid ? "" : "disabled"} onclick="${canVoid ? `voidProcessOutput('${safeOutId}')` : "return false;"}">作廢本筆回收</button>
@@ -905,6 +905,7 @@ function resetProcessForm(){
   if(inQty) inQty.value = "";
   const inUnit = document.getElementById("proc_input_unit");
   if(inUnit) inUnit.value = "";
+  syncErpQtyUnitSuffix_("proc_input_unit", "proc_input_unit_suffix");
   const inRm = document.getElementById("proc_input_remark");
   if(inRm) inRm.value = "";
 
@@ -914,6 +915,7 @@ function resetProcessForm(){
   if(outQty) outQty.value = "";
   const outUnit = document.getElementById("proc_output_unit");
   if(outUnit) outUnit.value = "";
+  syncErpQtyUnitSuffix_("proc_output_unit", "proc_output_unit_suffix");
   const outRm = document.getElementById("proc_output_remark");
   if(outRm) outRm.value = "";
   const outWh = document.getElementById("proc_output_warehouse");
@@ -937,10 +939,12 @@ function onSelectProcInputLot(){
   const lot = (procLots || []).find(l => String(l.lot_id || "") === String(lotId || ""));
   if(!lot){
     document.getElementById("proc_input_unit").value = "";
+    syncErpQtyUnitSuffix_("proc_input_unit", "proc_input_unit_suffix");
     document.getElementById("proc_input_available").value = "";
     return;
   }
   document.getElementById("proc_input_unit").value = lot.unit || "";
+  syncErpQtyUnitSuffix_("proc_input_unit", "proc_input_unit_suffix");
   document.getElementById("proc_input_available").value = String(procGetAvailable(lotId));
   setProcButtons_();
 }
@@ -963,8 +967,16 @@ function pickProcInputLot(lotId){
 function onSelectProcOutputProduct(){
   const sel = document.getElementById("proc_output_product");
   const opt = sel?.selectedOptions?.[0];
-  if(!opt) return;
-  document.getElementById("proc_output_unit").value = opt.getAttribute("data-unit") || "";
+  const uEl = document.getElementById("proc_output_unit");
+  if(!uEl) return;
+  if(!opt || !String(sel?.value || "").trim()){
+    uEl.value = "";
+    syncErpQtyUnitSuffix_("proc_output_unit", "proc_output_unit_suffix");
+    setProcButtons_();
+    return;
+  }
+  uEl.value = opt.getAttribute("data-unit") || "";
+  syncErpQtyUnitSuffix_("proc_output_unit", "proc_output_unit_suffix");
   setProcButtons_();
 }
 
@@ -1022,6 +1034,7 @@ function addProcOutputDraft(){
   if(outP) outP.value = "";
   if(outQtyEl) outQtyEl.value = "";
   if(outUnitEl) outUnitEl.value = "";
+  syncErpQtyUnitSuffix_("proc_output_unit", "proc_output_unit_suffix");
   const outRmEl = document.getElementById("proc_output_remark");
   if(outRmEl) outRmEl.value = "";
   procEditingOutputDraftId = "";
@@ -1133,12 +1146,13 @@ function renderProcOutputs(){
     const rowOnclick = isDraft
       ? `beginEditProcOutputDraft_('${it.draft_id}')`
       : (isDb ? `selectProcOutputDbRow_('${String(it.process_output_id || "").replace(/\\/g,"\\\\").replace(/'/g,"\\'")}')` : "");
+    const ou = String(it.unit || "").trim();
+    const outQtyCell = ou ? `${it.receive_qty} ${ou.replace(/</g, "")}` : String(it.receive_qty);
     tbody.innerHTML += `
       <tr style="cursor:pointer;" onclick="${rowOnclick}">
         <td>${idx+1}</td>
         <td>${formatProcProductDisplay_(it.product_id)}</td>
-        <td>${it.receive_qty}</td>
-        <td>${it.unit}</td>
+        <td>${outQtyCell}</td>
         <td>
           ${statusText}
         </td>
@@ -1195,6 +1209,7 @@ function addProcInputDraft(){
   document.getElementById("proc_input_available").value = "";
   document.getElementById("proc_input_qty").value = "";
   document.getElementById("proc_input_unit").value = "";
+  syncErpQtyUnitSuffix_("proc_input_unit", "proc_input_unit_suffix");
   document.getElementById("proc_input_remark").value = "";
   procEditingInputDraftId = "";
 
@@ -1239,14 +1254,15 @@ function renderProcInputs(){
       : (isDb ? `selectProcInputDbRow_('${String(it.process_input_id || "").replace(/\\/g,"\\\\").replace(/'/g,"\\'")}')` : "");
     const lot = (procLots || []).find(l => String(l.lot_id || "") === String(it.lot_id || "")) || null;
     const whText = lot ? (procWarehouseLabelByLot_(lot) || (lot.warehouse_id ? String(lot.warehouse_id) : "")) : "";
+    const pu = String(it.unit || "").trim();
+    const inQtyCell = pu ? `${it.issue_qty} ${pu.replace(/</g, "")}` : String(it.issue_qty);
     tbody.innerHTML += `
       <tr style="cursor:pointer;" onclick="${rowOnclick}">
         <td>${idx+1}</td>
         <td>${it.lot_id}</td>
         <td>${formatProcProductDisplay_(it.product_id)}</td>
         <td>${whText || "—"}</td>
-        <td>${it.issue_qty}</td>
-        <td>${it.unit}</td>
+        <td>${inQtyCell}</td>
         <td>${statusText}</td>
         <td>${actionHtml}</td>
       </tr>
@@ -1362,6 +1378,7 @@ function clearProcOutputEditor_(){
   if(outSelEl) outSelEl.value = "";
   if(outQtyEl) outQtyEl.value = "";
   if(outUnitEl) outUnitEl.value = "";
+  syncErpQtyUnitSuffix_("proc_output_unit", "proc_output_unit_suffix");
   if(outRmEl) outRmEl.value = "";
   if(outWhEl) outWhEl.value = "";
   procSelectedDbOutputId = "";
@@ -1399,7 +1416,7 @@ function setProcButtons_(){
       (!editing ? "請先載入加工單" :
       (st === "POSTED" ? "已結案（POSTED），不可修改" :
       (st === "CANCELLED" ? "已取消（CANCELLED），不可修改" :
-      "更新備註/預計日期")));
+      "更新備註/預計到貨日期")));
   }
   if(cancelBtn){
     cancelBtn.disabled = inFlight || !editing || ended;
@@ -1808,6 +1825,7 @@ async function receiveProcessOutput(){
     if(outQtyEl) outQtyEl.value = "";
     if(outSelEl) outSelEl.value = "";
     if(outUnitEl) outUnitEl.value = "";
+    syncErpQtyUnitSuffix_("proc_output_unit", "proc_output_unit_suffix");
     if(outRmEl) outRmEl.value = "";
     if(outWhEl) outWhEl.value = "";
     procOutputs = [];
@@ -2116,7 +2134,7 @@ async function renderProcessOrders(){
         <td>${escapeHtml_(termLabel(p.status))}</td>
         <td>${escapeHtml_(p.created_at || "")}</td>
         <td>
-          <button class="btn-edit" onclick="loadProcessOrder('${poId}')">載入</button>
+          <button class="btn-edit" onclick="loadProcessOrder('${poId}')">Load</button>
           <button class="btn-secondary" onclick="openLogs('process_order','${poId}','process')">Logs</button>
         </td>
       </tr>

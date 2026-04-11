@@ -1,5 +1,5 @@
 /**
- * Warehouse Stock（含有效期限）
+ * Warehouse 倉庫庫存（含有效期限）
  * - 依倉別查看產品彙總 / Lot 明細
  * - 可用量：inventory_movement 依 lot_id 加總
  * - 到期：expiry_date 當天 23:59:59 視為有效期限截止

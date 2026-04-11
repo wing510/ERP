@@ -55,11 +55,11 @@
       </div>
       <div class="form-group">
         <label>取用數量 *</label>
-        <input type="number" id="merge_take_qty" min="0" step="0.01">
-      </div>
-      <div class="form-group">
-        <label>單位</label>
-        <input type="text" id="merge_take_unit" readonly>
+        <div class="erp-input-with-suffix">
+          <input type="number" id="merge_take_qty" min="0" step="0.01">
+          <span id="merge_take_unit_suffix" class="erp-input-suffix"></span>
+        </div>
+        <input type="hidden" id="merge_take_unit" value="">
       </div>
       <div class="form-group full-width">
         <label>備註</label>
@@ -81,7 +81,6 @@
             <th>來源 Lot</th>
             <th>產品</th>
             <th>數量</th>
-            <th>單位</th>
             <th>備註</th>
             <th>操作</th>
           </tr>

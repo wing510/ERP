@@ -51,7 +51,7 @@
   </div>
 </div>
 
-<!-- ===== 收貨明細：項次、產品、剩餘可收(自動)、本次收貨數量、單位 ===== -->
+<!-- ===== 收貨明細：「本次收貨」欄內含單位後綴 ===== -->
 <div class="card">
   <div class="card-header card-header-flex">
     <span>
@@ -62,20 +62,32 @@
     <span data-help="receiveLines"></span>
   </div>
   <div class="card-body">
+    <p class="rcv-lines-narrow-hint">欄位較多時，請左右滑動表格以填寫「本次收貨」與日期。</p>
     <div class="table-wrapper table-rcv-lines" style="height:220px;">
       <table class="data-table">
+        <!-- 9 欄與 thead 一一對應；勿用單一 span 均分剩餘寬度，否則數量/已收/剩餘會被拉太寬 -->
+        <colgroup>
+          <col class="rcv-col-item-no" />
+          <col class="rcv-col-product" />
+          <col class="rcv-col-wh" />
+          <col class="rcv-col-num" />
+          <col class="rcv-col-num" />
+          <col class="rcv-col-num" />
+          <col class="rcv-col-qty-input" />
+          <col class="rcv-col-date" />
+          <col class="rcv-col-date" />
+        </colgroup>
         <thead>
           <tr>
-            <th>項次</th>
+            <th class="col-rcv-item-no">項次</th>
             <th>產品（規格）</th>
             <th>倉別</th>
             <th>數量</th>
             <th>已收</th>
             <th>剩餘</th>
-            <th>本次收貨數量</th>
+            <th class="col-rcv-qty-cell">本次收貨</th>
             <th>製造日</th>
             <th>有效期</th>
-            <th>單位</th>
           </tr>
         </thead>
         <tbody id="rcvLinesBody"></tbody>

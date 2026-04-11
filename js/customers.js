@@ -10,7 +10,7 @@ const CUSTOMER_RULES = {
   idMax: 30
 };
 
-// `bindUppercaseInput` 已移至 `js/core/utils.js`
+// `bindUppercaseInput`、`syncSelectWithLegacy_` 已移至 `js/core/utils.js`
 
 /* ===== 初始化 ===== */
 async function customersInit(){
@@ -21,6 +21,7 @@ async function customersInit(){
   ], () => searchCustomers());
   await renderCustomers();
   clearCustomerForm();
+  if(typeof bindStatusSelectLamp_ === "function") bindStatusSelectLamp_("c_status");
 }
 
 function setCustomerButtons_(){
@@ -150,11 +151,15 @@ function clearCustomerForm(){
   c_id.disabled=false;
 
   document.querySelectorAll(
-    "#c_id,#c_name,#c_category,#c_contact,#c_phone,#c_email,#c_address,#c_country,#c_remark"
+    "#c_id,#c_name,#c_contact,#c_phone,#c_email,#c_address,#c_remark"
   ).forEach(el=>el.value="");
+
+  syncSelectWithLegacy_("c_category", "");
+  syncSelectWithLegacy_("c_country", "");
 
   c_status.value="ACTIVE";
   c_id.value = generateShortId("C");
+  if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("c_status");
   setCustomerButtons_();
 }
 
@@ -168,15 +173,15 @@ async function loadCustomer(id){
 
   c_id.value = c.customer_id;
   c_name.value = c.customer_name;
-  const cat = document.getElementById("c_category");
-  if(cat) cat.value = c.category || "";
+  syncSelectWithLegacy_("c_category", c.category);
   c_contact.value = c.contact_person;
   c_phone.value = c.phone;
   c_email.value = c.email;
   c_address.value = c.address;
-  c_country.value = c.country;
+  syncSelectWithLegacy_("c_country", c.country);
   c_status.value = c.status;
   c_remark.value = c.remark;
+  if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("c_status");
 
   c_id.disabled=true;
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
@@ -260,9 +265,7 @@ async function renderCustomers(list=null){
 
   list.forEach(c=>{
 
-    const badge = c.status==="ACTIVE"
-      ? `<span class="badge badge-active">${termLabel("ACTIVE")}</span>`
-      : `<span class="badge badge-inactive">${termLabel(c.status||"INACTIVE")}</span>`;
+    const badge = termStatusLampHtml(c.status);
 
     tbody.innerHTML+=`
       <tr>
@@ -271,10 +274,9 @@ async function renderCustomers(list=null){
         <td>${c.category||""}</td>
         <td>${c.contact_person||""}</td>
         <td>${c.phone||""}</td>
-        <td>${badge}</td>
+        <td class="col-status">${badge}</td>
         <td>
-          <button class="btn-edit" onclick="loadCustomer('${c.customer_id}')">Edit</button>
-          <button class="btn-secondary" onclick="openLogs('customer','${c.customer_id}','master')">Logs</button>
+          <button class="btn-edit" onclick="loadCustomer('${c.customer_id}')">Load</button>
         </td>
       </tr>
     `;

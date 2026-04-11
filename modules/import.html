@@ -2,7 +2,7 @@
 <div class="card">
   <div class="card-header card-header-flex">
     <span>
-      進口報單資料編輯
+      Import Doc(s) 進口報單
       <button type="button" class="btn-sheet" onclick="openSheetLink('import_document')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
       <span id="importFlowHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">報單流程：新單 — 填主檔與明細後按下方「建立」寫入</span>
       <span id="importReceiptState" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">收貨狀態：未載入 — 請先載入報單</span>
@@ -66,7 +66,7 @@
     <span data-help="importItems"></span>
   </div>
   <div class="card-body">
-    <!-- 填入欄位順序：產品、稅則號列、批號、原產地、數量、單位、備註（項次新增時自動產生） -->
+    <!-- 填入欄位順序：產品、稅則號列、批號、原產地、數量（後綴單位）、備註（項次新增時自動產生） -->
     <div class="form-grid-4">
       <div class="form-group">
         <label>產品（規格）*</label>
@@ -82,15 +82,32 @@
       </div>
       <div class="form-group">
         <label>原產地</label>
-        <input type="text" id="import_item_origin_country" placeholder="例如：INDONESIA">
+        <select id="import_item_origin_country">
+          <option value="">（未選）</option>
+          <option value="台灣">台灣</option>
+          <option value="中國">中國</option>
+          <option value="日本">日本</option>
+          <option value="韓國">韓國</option>
+          <option value="新加坡">新加坡</option>
+          <option value="馬來西亞">馬來西亞</option>
+          <option value="越南">越南</option>
+          <option value="印尼">印尼</option>
+          <option value="泰國">泰國</option>
+          <option value="美國">美國</option>
+          <option value="加拿大">加拿大</option>
+          <option value="英國">英國</option>
+          <option value="德國">德國</option>
+          <option value="澳洲">澳洲</option>
+          <option value="其他">其他</option>
+        </select>
       </div>
       <div class="form-group">
         <label>數量 *</label>
-        <input type="number" id="import_item_declared_qty" min="0" step="0.01">
-      </div>
-      <div class="form-group">
-        <label>單位</label>
-        <input type="text" id="import_item_declared_unit" readonly>
+        <div class="erp-input-with-suffix">
+          <input type="number" id="import_item_declared_qty" min="0" step="0.01">
+          <span id="import_item_unit_suffix" class="erp-input-suffix"></span>
+        </div>
+        <input type="hidden" id="import_item_declared_unit" value="">
       </div>
       <div class="form-group full-width">
         <label>備註</label>
@@ -115,7 +132,6 @@
             <th>批號（Inv No）</th>
             <th>原產地</th>
             <th>數量</th>
-            <th>單位</th>
             <th>狀態</th>
             <th>操作</th>
           </tr>

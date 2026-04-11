@@ -3,7 +3,7 @@
 
   <div class="card-header card-header-flex">
     <span>
-      供應商資料編輯
+      Suppliers 供應商
       <button type="button" class="btn-sheet" onclick="openSheetLink('supplier')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
     </span>
     <span data-help="supplierEdit"></span>
@@ -45,15 +45,35 @@
 
       <div class="form-group">
         <label>國家</label>
-        <input type="text" id="s_country">
+        <select id="s_country">
+          <option value="">（未選）</option>
+          <option value="台灣">台灣</option>
+          <option value="中國">中國</option>
+          <option value="日本">日本</option>
+          <option value="韓國">韓國</option>
+          <option value="新加坡">新加坡</option>
+          <option value="馬來西亞">馬來西亞</option>
+          <option value="越南">越南</option>
+          <option value="印尼">印尼</option>
+          <option value="泰國">泰國</option>
+          <option value="美國">美國</option>
+          <option value="加拿大">加拿大</option>
+          <option value="英國">英國</option>
+          <option value="德國">德國</option>
+          <option value="澳洲">澳洲</option>
+          <option value="其他">其他</option>
+        </select>
       </div>
 
       <div class="form-group">
         <label>狀態</label>
-        <select id="s_status">
-          <option value="ACTIVE">ACTIVE（使用中）</option>
-          <option value="INACTIVE">INACTIVE（停用）</option>
-        </select>
+        <div class="erp-status-select-row">
+          <select id="s_status">
+            <option value="ACTIVE">ACTIVE（使用中）</option>
+            <option value="INACTIVE">INACTIVE（停用）</option>
+          </select>
+          <span id="s_status_lamp" class="status-lamp status-lamp--solo status-lamp--active" role="img" title="ACTIVE（使用中）" aria-label="ACTIVE（使用中）"><span class="status-lamp-dot" aria-hidden="true"></span></span>
+        </div>
       </div>
 
       <div class="form-group full-width">
@@ -100,7 +120,7 @@
 
     <br>
 
-    <div class="table-wrapper">
+    <div class="table-wrapper table-wrapper-master">
       <table class="data-table">
         <thead>
           <tr>
@@ -108,7 +128,7 @@
             <th onclick="sortSuppliers('supplier_name')">名稱 <span id="sort-supplierName"></span></th>
             <th onclick="sortSuppliers('contact_person')">聯絡人 <span id="sort-contactPerson"></span></th>
             <th onclick="sortSuppliers('phone')">電話 <span id="sort-phone"></span></th>
-            <th onclick="sortSuppliers('status')">狀態 <span id="sort-status"></span></th>
+            <th class="col-status" onclick="sortSuppliers('status')">狀態 <span id="sort-status"></span></th>
             <th>操作</th>
           </tr>
         </thead>

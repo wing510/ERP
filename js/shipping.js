@@ -550,6 +550,9 @@ function pickShipLineLot(lotId){
     const whText = lot ? (shipWarehouseLabelByLot_(lot) || "") : "";
     display.value = lot ? (formatShipLotOptionLabel_(lot, av) + (whText ? ` | ${whText}` : "")) : (lotId || "");
   }
+  const uHid = document.getElementById("ship_line_unit");
+  if(uHid) uHid.value = lot ? String(lot.unit || "").trim() : "";
+  syncErpQtyUnitSuffix_("ship_line_unit", "ship_qty_unit_suffix");
   onSelectShipLot();
   closeShipLotPicker();
 }
@@ -612,6 +615,7 @@ function resetShipForm(){
 
   onSelectShipSO();
   clearShipItemEntry();
+  syncErpQtyUnitSuffix_("ship_line_unit", "ship_qty_unit_suffix");
   setShipPickLotBtnState_();
   updateShipStatusHint_();
   setShipButtons_();
@@ -628,6 +632,9 @@ function clearShipItemEntry(){
   if(b) b.value = "";
   if(bDisp) bDisp.value = "";
   if(d) d.value = "";
+  const uHid = document.getElementById("ship_line_unit");
+  if(uHid) uHid.value = "";
+  syncErpQtyUnitSuffix_("ship_line_unit", "ship_qty_unit_suffix");
   if(f) f.value = "";
 }
 
@@ -733,6 +740,9 @@ function clearShipLotEntryOnly_(){
   if(hid) hid.value = "";
   if(disp) disp.value = "";
   if(qty) qty.value = "";
+  const uHid = document.getElementById("ship_line_unit");
+  if(uHid) uHid.value = "";
+  syncErpQtyUnitSuffix_("ship_line_unit", "ship_qty_unit_suffix");
   if(rm) rm.value = "";
 }
 
@@ -884,14 +894,15 @@ function renderShipDraft(){
     }else{
       actionBtn = `<button type="button" class="btn-secondary" onclick="removeShipDraft('${safeId}')">刪除</button>`;
     }
+    const u = String(it.unit || "").trim();
+    const shipQtyCell = u ? `${it.ship_qty} ${u.replace(/</g, "")}` : String(it.ship_qty);
     tbody.innerHTML += `
       <tr style="${rowClick ? "cursor:pointer;" : ""}" ${rowClick}>
         <td>${idx+1}</td>
         <td>${it.lot_id}</td>
         <td>${formatShipProductDisplay_(it.product_id)}</td>
         <td>${shipWarehouseLabelById_(it.warehouse_id) || "—"}</td>
-        <td>${it.ship_qty}</td>
-        <td>${it.unit}</td>
+        <td>${shipQtyCell}</td>
         <td>${expiry}</td>
         <td>${formatShipLineStatus_(it)}</td>
         <td>${actionBtn}</td>
@@ -952,7 +963,7 @@ async function renderShipments(){
         <td>${termLabel(s.status)}</td>
         <td>${dateInputValue_(s.ship_date)}</td>
         <td>
-          <button class="btn-edit" onclick="loadShipment('${s.shipment_id}')">載入</button>
+          <button class="btn-edit" onclick="loadShipment('${s.shipment_id}')">Load</button>
           <button class="btn-secondary" onclick="openLogs('shipment','${s.shipment_id}','shipment')">Log</button>
           ${cancelBtn}
         </td>

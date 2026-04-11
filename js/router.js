@@ -171,6 +171,9 @@ function loadModule(path, moduleName = null) {
 }
 
 function navigate(module) {
+  if (typeof window.closeSidebarDrawer === "function") {
+    window.closeSidebarDrawer();
+  }
   switch (module) {
 
     case "dashboard":

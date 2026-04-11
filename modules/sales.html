@@ -2,7 +2,7 @@
 <div class="card">
   <div class="card-header card-header-flex">
     <span>
-      銷售單（Sales Order）
+      Sales Orders 銷售單
       <button type="button" class="btn-sheet" onclick="openSheetLink('sales_order')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
       <span id="soStatusHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">銷售流程：新單 — 填主檔與明細後按下方「建立」</span>
       <span id="soShipState" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">出貨狀態：未載入 — 請先載入銷售單</span>
@@ -65,12 +65,11 @@
 
       <div class="form-group">
         <label>訂購數量 *</label>
-        <input type="number" id="so_item_order_qty" min="0" step="0.01" oninput="calcSOAmount()">
-      </div>
-
-      <div class="form-group">
-        <label>單位</label>
-        <input type="text" id="so_item_unit" readonly>
+        <div class="erp-input-with-suffix">
+          <input type="number" id="so_item_order_qty" min="0" step="0.01" oninput="calcSOAmount()">
+          <span id="so_item_unit_suffix" class="erp-input-suffix"></span>
+        </div>
+        <input type="hidden" id="so_item_unit" value="">
       </div>
 
       <div class="form-group">
@@ -104,7 +103,6 @@
             <th>產品（規格）</th>
             <th>訂購數量</th>
             <th>已出貨</th>
-            <th>單位</th>
             <th>單價</th>
             <th>金額</th>
             <th>狀態</th>

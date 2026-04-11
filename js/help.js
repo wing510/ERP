@@ -11,7 +11,7 @@ const HelpConfig = {
 
   productEdit: `
     <strong>流程：</strong><br>
-    • 填寫上方欄位後按「建立」新增產品；已建立的產品可按列表 Edit 載入後「更新」<br>
+    • 填寫上方欄位後按「建立」新增產品；已建立的產品可按列表「Load」帶回上方後再「更新」<br>
     • 投料／回收單位不同時：展開「多單位換算」填好後按「建立」或「更新」<br>
     <strong>規則：</strong><br>
     • 產品 ID（product_id）可由系統自動產生，建立並儲存後不可修改<br>
@@ -30,7 +30,7 @@ const HelpConfig = {
 
   productList: `
     <strong>流程：</strong><br>
-    • 點欄位標題可排序；點 Edit 會載入到上方編輯區<br>
+    • 點欄位標題可排序；點「Load」會帶到上方編輯區<br>
     <strong>規則：</strong><br>
     • 關鍵字比對：產品ID／名稱／規格／備註／uom_config（JSON 字串）<br>
     • 狀態：ACTIVE（使用中）/ INACTIVE（停用保留歷史）<br>
@@ -39,7 +39,7 @@ const HelpConfig = {
   `,
   supplierEdit: `
     <strong>流程：</strong><br>
-    • 填寫後按「建立」新增供應商；點列表 Edit 載入後可「更新」<br>
+    • 填寫後按「建立」新增供應商；點列表「Load」後可「更新」<br>
     • 稽核/修改紀錄請到 Logs 查<br>
     <strong>規則：</strong><br>
     • 供應商 ID（supplier_id）可由系統自動產生，建立並儲存後不可修改<br>
@@ -55,7 +55,7 @@ const HelpConfig = {
 
   supplierList: `
     <strong>流程：</strong><br>
-    • 點欄位可排序；點 Edit 載入到上方編輯區<br>
+    • 點欄位可排序；點「Load」帶到上方編輯區<br>
     <strong>規則：</strong><br>
     • 關鍵字比對：供應商ID／名稱／聯絡人／電話／Email<br>
     • 狀態：ACTIVE（使用中）/ INACTIVE（停用保留歷史）<br>
@@ -65,7 +65,7 @@ const HelpConfig = {
 
   customerEdit: `
     <strong>流程：</strong><br>
-    • 填寫後按「建立」新增客戶；點列表 Edit 載入後可「更新」<br>
+    • 填寫後按「建立」新增客戶；點列表「Load」後可「更新」<br>
     • 稽核/修改紀錄請到 Logs 查<br>
     <strong>規則：</strong><br>
     • 客戶 ID（customer_id）可由系統自動產生，建立並儲存後不可修改<br>
@@ -81,7 +81,7 @@ const HelpConfig = {
 
   customerList: `
     <strong>流程：</strong><br>
-    • 點欄位可排序；點 Edit 載入到上方編輯區<br>
+    • 點欄位可排序；點「Load」帶到上方編輯區<br>
     <strong>規則：</strong><br>
     • 關鍵字比對：客戶ID／名稱／聯絡人／電話／Email<br>
     • 狀態：ACTIVE（使用中）/ INACTIVE（停用保留歷史）<br>
@@ -109,7 +109,7 @@ const HelpConfig = {
     <strong>規則：</strong><br>
     • 採購單（PO, Purchase Order）本身不產生庫存；收貨入庫才產生 Lot<br>
     • 文件連結：可貼 PDF／雲端檔案 URL 方便追資料<br>
-    • Edit 會先檢查收貨狀態：檢查中 / 已收貨 / 未收貨<br>
+    • 點「Load」會先檢查收貨狀態：檢查中 / 已收貨 / 未收貨<br>
     • 已收貨後：整張採購單會鎖定不可改（避免破壞追溯）<br>
     • 狀態 CLOSED（結案）不可再修改<br>
     <strong>常見提示：</strong><br>
@@ -136,7 +136,7 @@ const HelpConfig = {
   `,
   purchaseList: `
     <strong>流程：</strong><br>
-    • Edit：載入到上方編輯區；收貨：跳到收貨入庫並預選該 PO<br>
+    • 「Load」：帶到上方編輯區；收貨：跳到收貨入庫並預選該 PO<br>
     <strong>規則：</strong><br>
     • 關鍵字比對：採購單號、供應商 ID<br>
     • 有填文件連結才會顯示「連結」<br>
@@ -151,7 +151,7 @@ const HelpConfig = {
     <strong>規則：</strong><br>
     • 進口報單（Import Document）是來源文件：收貨入庫會以報單明細計算可收上限<br>
     • 批號（Inv No. 發票/文件批號）必填（請依文件填）<br>
-    • Edit 會先檢查收貨狀態：檢查中 / 已收貨 / 未收貨<br>
+    • 點「Load」會先檢查收貨狀態：檢查中 / 已收貨 / 未收貨<br>
     • 已收貨後：整張報單會鎖定不可改（避免追溯風險）<br>
     • 若需調整：請用「沖銷/補單」<br>
     &nbsp;&nbsp;沖銷（Reversal）：多收/收錯要減量 → 到「庫存異動」選 Lot 扣回數量<br>
@@ -179,7 +179,7 @@ const HelpConfig = {
   `,
   importList: `
     <strong>流程：</strong><br>
-    • Edit：載入到上方編輯區；收貨：跳到收貨入庫並預選該報單<br>
+    • 「Load」：帶到上方編輯區；收貨：跳到收貨入庫並預選該報單<br>
     <strong>規則：</strong><br>
     • 列表不顯示備註（避免太擠），編輯區仍可填寫<br>
     <strong>常見提示：</strong><br>
@@ -189,7 +189,7 @@ const HelpConfig = {
   receiveHeader: `
     <strong>流程：</strong><br>
     • 來源類型請先選 PO 或進口報單，再選單號<br>
-    • 選單後填收貨日期、倉別（連倉庫主檔）；於收貨明細輸入各列「本次收貨數量」後產生批次<br>
+    • 選單後填收貨日期、倉別（連倉庫主檔）；於收貨明細輸入各列「本次收貨」後產生批次<br>
     • 同卡下方摺疊「已收列表」：點開才載入該來源單之已收紀錄；作廢與預檢說明見明細區說明<br>
     <strong>規則：</strong><br>
     • 收貨單 ID 自動產生（唯讀）<br>
@@ -197,17 +197,17 @@ const HelpConfig = {
     • 建立的 Lot 預設 PENDING（待 QA）<br>
     <strong>常見提示：</strong><br>
     • 收貨日期 必填／請選擇來源類型與單號<br>
-    • 請至少輸入一筆本次收貨數量<br>
+    • 請至少輸入一筆本次收貨<br>
     • 找不到報單或載入失敗：依畫面提示重試<br>
     • 收貨完成：已產生 X 個 Lot（PENDING 待QA）
   `,
   receiveLines: `
     <strong>流程：</strong><br>
-    • 依「項次」對應來源明細逐列輸入本次收貨數量；表含產品（規格）、倉別、已收／剩餘、製造日／有效期<br>
+    • 依「項次」對應來源明細逐列輸入本次收貨；表含產品（規格）、倉別、已收／剩餘、製造日／有效期<br>
     • 摺疊「已收列表」展開後載入；作廢鈕會帶入該收貨單號並開啟視窗：選作廢原因（下拉為主），選「其他」須填補充說明並寫入備註<br>
     • 無法作廢之列按鈕顯示「無法作廢」，游標停留可看預判原因<br>
     <strong>規則：</strong><br>
-    • 本次收貨數量不可超過剩餘可收；製造日／有效期寫入新 Lot<br>
+    • 本次收貨不可超過剩餘可收；製造日／有效期寫入新 Lot<br>
     • 作廢僅限狀態「未取消」之收貨單；若產生之 Lot 已被出庫、加工或調整扣減導致無法沖銷入庫，則無法整張作廢<br>
     <strong>常見提示：</strong><br>
     • 品項超過剩餘可收／本次無可收量，未產生 Lot
@@ -270,7 +270,7 @@ const HelpConfig = {
   `,
   shippingList: `
     <strong>流程：</strong><br>
-    • 「載入」帶回上方檢視；作廢前請確認（會反沖庫存）<br>
+    • 「Load」帶回上方檢視；作廢前請確認（會反沖庫存）<br>
     <strong>規則：</strong><br>
     • 關鍵字比對：出貨單／客戶／銷售單<br>
     • 只能作廢 POSTED（已過帳）出貨單<br>
@@ -292,9 +292,9 @@ const HelpConfig = {
   salesHeader: `
     <strong>流程：</strong><br>
     • 完成主檔與品項明細後建立銷售單（主檔+明細一併寫入）；可指定「業務」（使用者主檔）<br>
-    • 實際扣庫請到「出貨（Shipment）」建立出貨單<br>
+    • 實際扣庫請到「Shipment 出貨管理」建立出貨單<br>
     <strong>規則：</strong><br>
-    • 銷售單（Sales Order, SO）不直接扣庫；實際扣庫發生在 Shipment<br>
+    • Sales Orders（銷售單，SO）不直接扣庫；實際扣庫發生在 Shipment 出貨管理<br>
     • 狀態 SHIPPED（全數出貨）/ CANCELLED（已取消）的銷售單不可再修改<br>
     <strong>常見提示：</strong><br>
     • 銷售單ID 必填／請選擇客戶／下單日期必填<br>
@@ -318,7 +318,7 @@ const HelpConfig = {
   `,
   salesList: `
     <strong>流程：</strong><br>
-    • 「Edit」載入到上方編輯區；「出貨」可捷徑帶單至出貨模組<br>
+    • 「Load」帶到上方編輯區；「出貨」可捷徑帶單至出貨模組<br>
     <strong>規則：</strong><br>
     • 關鍵字比對：銷售單 ID／客戶／業務等（與列表欄位一致）<br>
     <strong>常見提示：</strong><br>
@@ -327,7 +327,7 @@ const HelpConfig = {
 
   usersList: `
     <strong>流程：</strong><br>
-    • 需要修改請回到上方載入後更新<br>
+    • 點「Load」帶回上方後再更新；需要修改時請先載入<br>
     <strong>規則：</strong><br>
     • 建議用 INACTIVE（停用）保留歷史使用者，不建議刪除（避免稽核斷裂）<br>
     <strong>常見提示：</strong><br>
@@ -336,7 +336,7 @@ const HelpConfig = {
 
   outsourceHeader: `
     <strong>流程：</strong><br>
-    • 輸入加工單 ID 後建立加工單；已存在則可更新備註／預計日期或取消加工單（回沖）<br>
+    • 輸入加工單 ID 後建立加工單；已存在則可更新備註／預計到貨日期或取消加工單（回沖）<br>
     • 送加工（扣庫）與回收加工品分別在投料區、回收區操作，可分批、多次<br>
     • 建議：建立或從列表載入 → 送加工 → 回收<br>
     <strong>規則：</strong><br>
@@ -384,7 +384,7 @@ const HelpConfig = {
   `,
   outsourceList: `
     <strong>流程：</strong><br>
-    • 在加工單列表點「載入」：帶回主檔並刷新投料／回收明細<br>
+    • 在加工單列表點「Load」：帶回主檔並刷新投料／回收明細<br>
     • 最下方「已載入加工單明細」以文字區摘要投料、產出與 lot_relation 關聯（方便核對）<br>
     • 需要稽核單筆異動時可用上方「Log」（加工單主檔）<br>
     <strong>規則：</strong><br>
@@ -447,7 +447,7 @@ const HelpConfig = {
 
   warehouseList: `
     <strong>流程：</strong><br>
-    • 點欄位可排序；Edit 載入到上方編輯區<br>
+    • 點欄位可排序；點「Load」帶到上方編輯區<br>
     <strong>規則：</strong><br>
     • 關鍵字比對：倉庫 ID／名稱<br>
     <strong>常見提示：</strong><br>

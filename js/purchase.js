@@ -40,6 +40,7 @@ async function purchaseInit(){
   bindUppercaseIdInput("po_id");
   await initPurchaseDropdowns();
   resetPOForm();
+  syncPOItemUnitSuffix_();
   setPOReceiptState_("收貨狀態：未載入 — 請先載入採購單", "warn");
   // 主檔變更時，更新「更新」按鈕可用性
   ["po_supplier_id","po_order_date","po_expected_arrival_date","po_document_link","po_remark"].forEach(function(id){
@@ -217,14 +218,22 @@ async function initPurchaseDropdowns(){
   }
 }
 
+function syncPOItemUnitSuffix_(){
+  syncErpQtyUnitSuffix_("po_item_unit", "po_item_unit_suffix");
+}
+
 function onSelectPOItemProduct(){
   const productSelect = document.getElementById("po_item_product_id");
   const unitEl = document.getElementById("po_item_unit");
   if(!productSelect || !unitEl) return;
-
   const opt = productSelect.selectedOptions?.[0];
-  const unit = opt?.getAttribute("data-unit") || "";
-  unitEl.value = unit;
+  if(!opt || !String(productSelect.value || "").trim()){
+    unitEl.value = "";
+    syncPOItemUnitSuffix_();
+    return;
+  }
+  unitEl.value = opt.getAttribute("data-unit") || "";
+  syncPOItemUnitSuffix_();
 }
 
 function isPOItemDraftRow_(it){
@@ -298,9 +307,9 @@ function addPOItemDraft(){
   if(!unit) return showToast("找不到產品單位，請先確認產品主檔","error");
 
   const draftId = "DRAFT-" + Date.now() + "-" + Math.floor(Math.random()*1000);
-  const opt = productSelect?.selectedOptions?.[0];
-  const productName = (opt && opt.text && opt.text.split(" - ")[1]) ? opt.text.split(" - ")[1].trim() : productId;
-  const productSpec = opt?.getAttribute("data-spec") || "";
+  const pRow = poProducts.find(x => x.product_id === productId) || {};
+  const productName = String(pRow.product_name || "").trim() || productId;
+  const productSpec = String(pRow.spec || "").trim();
 
   poItemsDraft.push({
     draft_id: draftId,
@@ -318,6 +327,7 @@ function addPOItemDraft(){
   document.getElementById("po_item_product_id").value = "";
   document.getElementById("po_item_order_qty").value = "";
   document.getElementById("po_item_unit").value = "";
+  syncPOItemUnitSuffix_();
   document.getElementById("po_item_remark").value = "";
 
   renderPOItemsDraft();
@@ -349,12 +359,13 @@ function renderPOItemsDraft(){
     const safeId = String(it.draft_id || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const rowClick =
       poReadOnly || isPOItemDraftRow_(it) ? "" : `onclick="selectPOItemDbRow_('${safeId}')"`;
+    const u = String(it.unit || "").trim();
+    const qtyUnitHtml = u ? `${it.order_qty} ${u.replace(/</g, "")}` : String(it.order_qty);
     tbody.innerHTML += `
       <tr style="${rowClick ? "cursor:pointer;" : ""}" ${rowClick}>
         <td>${idx+1}</td>
         <td title="${String(display).replace(/"/g, "&quot;")}">${display}</td>
-        <td>${it.order_qty}</td>
-        <td>${it.unit}</td>
+        <td>${qtyUnitHtml}</td>
         <td>${formatPOItemLineStatus_(it)}</td>
         <td><button class="btn-secondary" ${poReadOnly ? "disabled" : ""} onclick="event.stopPropagation(); removePOItemDraft('${safeId}')">刪除</button></td>
       </tr>
@@ -648,7 +659,7 @@ async function renderPurchaseOrders(list=null){
     const s = supMap[sid] || null;
     const supplierNameOnly = (s && s.supplier_name) ? s.supplier_name : sid;
     const btn = `
-      <button class="btn-edit" onclick="loadPurchaseOrder('${po.po_id}')">Edit</button>
+      <button class="btn-edit" onclick="loadPurchaseOrder('${po.po_id}')">Load</button>
       <button class="btn-secondary" onclick="gotoReceive('PO','${po.po_id}')">收貨</button>
     `;
     const docLink = String(po.document_link || "").trim();

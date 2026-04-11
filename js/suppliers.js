@@ -17,6 +17,7 @@ async function suppliersInit(){
   ], () => searchSuppliers());
   await renderSuppliers();
   clearSupplierForm();
+  if(typeof bindStatusSelectLamp_ === "function") bindStatusSelectLamp_("s_status");
 }
 
 function setSupplierButtons_(){
@@ -145,11 +146,14 @@ function clearSupplierForm(){
   s_id.disabled=false;
 
   document.querySelectorAll(
-    "#s_id,#s_name,#s_contact,#s_phone,#s_email,#s_address,#s_country,#s_remark"
+    "#s_id,#s_name,#s_contact,#s_phone,#s_email,#s_address,#s_remark"
   ).forEach(el=>el.value="");
+
+  syncSelectWithLegacy_("s_country", "");
 
   s_status.value="ACTIVE";
   s_id.value = generateShortId("S");
+  if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("s_status");
   setSupplierButtons_();
 }
 
@@ -167,9 +171,10 @@ async function loadSupplier(id){
   s_phone.value = s.phone;
   s_email.value = s.email;
   s_address.value = s.address;
-  s_country.value = s.country;
+  syncSelectWithLegacy_("s_country", s.country);
   s_status.value = s.status;
   s_remark.value = s.remark;
+  if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("s_status");
 
   s_id.disabled=true;
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
@@ -195,9 +200,7 @@ async function renderSuppliers(list=null){
 
   list.forEach(s=>{
 
-    const badge = s.status==="ACTIVE"
-      ? `<span class="badge badge-active">${termLabel("ACTIVE")}</span>`
-      : `<span class="badge badge-inactive">${termLabel(s.status||"INACTIVE")}</span>`;
+    const badge = termStatusLampHtml(s.status);
 
     tbody.innerHTML+=`
       <tr>
@@ -205,10 +208,9 @@ async function renderSuppliers(list=null){
         <td>${s.supplier_name}</td>
         <td>${s.contact_person||""}</td>
         <td>${s.phone||""}</td>
-        <td>${badge}</td>
+        <td class="col-status">${badge}</td>
         <td>
-          <button class="btn-edit" onclick="loadSupplier('${s.supplier_id}')">Edit</button>
-          <button class="btn-secondary" onclick="openLogs('supplier','${s.supplier_id}','master')">Logs</button>
+          <button class="btn-edit" onclick="loadSupplier('${s.supplier_id}')">Load</button>
         </td>
       </tr>
     `;

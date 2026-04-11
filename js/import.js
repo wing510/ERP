@@ -385,6 +385,7 @@ async function importInit(){
 
   // 重新打開頁面時一律空白表單，不自動帶入上次草稿（避免誤以為是「最後一筆」）
   resetImportForm();
+  syncImportItemUnitSuffix_();
   setImportReceiptState_("收貨狀態：未載入 — 請先載入報單", "warn");
   importDocumentsCache = docList;
   renderImportDocuments(docList);
@@ -560,12 +561,22 @@ function initImportDropdownsWithData_(suppliers, products){
   }
 }
 
+function syncImportItemUnitSuffix_(){
+  syncErpQtyUnitSuffix_("import_item_declared_unit", "import_item_unit_suffix");
+}
+
 function onSelectImportItemProduct(){
   const productSelect = document.getElementById("import_item_product_id");
   const unitEl = document.getElementById("import_item_declared_unit");
   if(!productSelect || !unitEl) return;
   const opt = productSelect.selectedOptions?.[0];
-  unitEl.value = opt?.getAttribute("data-unit") || "";
+  if(!opt || !String(productSelect.value || "").trim()){
+    unitEl.value = "";
+    syncImportItemUnitSuffix_();
+    return;
+  }
+  unitEl.value = opt.getAttribute("data-unit") || "";
+  syncImportItemUnitSuffix_();
 }
 
 function isImportItemDraftRow_(it){
@@ -590,12 +601,12 @@ function selectImportItemDbRow_(importItemId){
   if(hs) hs.value = String(it.hs_code || "");
   const lot = document.getElementById("import_item_lot_id");
   if(lot) lot.value = String(it.lot_id || "");
-  const oc = document.getElementById("import_item_origin_country");
-  if(oc) oc.value = String(it.origin_country || "");
+  syncSelectWithLegacy_("import_item_origin_country", it.origin_country || "");
   const dq = document.getElementById("import_item_declared_qty");
   if(dq) dq.value = String(it.declared_qty ?? "");
   const du = document.getElementById("import_item_declared_unit");
   if(du) du.value = String(it.declared_unit || "");
+  syncImportItemUnitSuffix_();
   const rm = document.getElementById("import_item_remark");
   if(rm) rm.value = String(it.remark || "");
   showToast("已帶入明細（僅改備註請按「更新本筆備註」）");
@@ -635,7 +646,7 @@ function renderImportItemsDraft(){
   if(!tbody) return;
   tbody.innerHTML = "";
 
-  // 項次自動產生（1,2,3...）；順序：產品名稱、稅則號列、批號、原產地、數量、單位、備註、操作
+  // 項次自動產生（1,2,3...）；順序：產品名稱、稅則號列、批號、原產地、數量（含單位）、狀態、操作
   importItemsDraft.forEach((it, idx) => {
     const p = importProducts.find(x => x.product_id === it.product_id) || {};
     const meta = normalizeImportItemProductMeta_(it, p);
@@ -649,6 +660,10 @@ function renderImportItemsDraft(){
     const safeId = String(it.draft_id || "").replace(/\\/g, "\\\\").replace(/'/g, "\\'");
     const rowClick =
       importItemsReadOnly || isImportItemDraftRow_(it) ? "" : `onclick="selectImportItemDbRow_('${safeId}')"`;
+    const iu = String(it.declared_unit || "").trim();
+    const qtyUnitCell = iu
+      ? `${it.declared_qty} ${iu.replace(/</g, "")}`
+      : String(it.declared_qty);
     tbody.innerHTML += `
       <tr style="${rowClick ? "cursor:pointer;" : ""}" ${rowClick}>
         <td>${itemNo}</td>
@@ -656,8 +671,7 @@ function renderImportItemsDraft(){
         <td>${it.hs_code || ""}</td>
         <td>${lotId}</td>
         <td>${it.origin_country || ""}</td>
-        <td>${it.declared_qty}</td>
-        <td>${it.declared_unit || ""}</td>
+        <td>${qtyUnitCell}</td>
         <td>${formatImportItemLineStatus_(it)}</td>
         <td><button class="btn-secondary" ${importItemsReadOnly ? "disabled" : ""} onclick="event.stopPropagation(); removeImportItemDraft('${safeId}')">刪除</button></td>
       </tr>
@@ -701,13 +715,14 @@ function addImportItemDraft(){
     remark
   });
 
-  // 清空輸入（順序：產品、稅則號列、批號、原產地、數量、單位、備註）
+  // 清空輸入（順序：產品、稅則號列、批號、原產地、數量、備註）
   document.getElementById("import_item_product_id").value = "";
   document.getElementById("import_item_hs_code").value = "";
   document.getElementById("import_item_lot_id").value = "";
-  document.getElementById("import_item_origin_country").value = "";
+  syncSelectWithLegacy_("import_item_origin_country", "");
   document.getElementById("import_item_declared_qty").value = "";
   document.getElementById("import_item_declared_unit").value = "";
+  syncImportItemUnitSuffix_();
   document.getElementById("import_item_remark").value = "";
   importSelectedDbItemId_ = "";
 
@@ -763,6 +778,21 @@ function resetImportForm(clearLocalDraft = false){
   setImportReceiptState_("收貨狀態：未載入 — 請先載入報單", "warn");
   importLoadedSnapshot_ = importBuildSnapshot_();
   importLoadedStatus_ = "";
+
+  const impProd = document.getElementById("import_item_product_id");
+  if(impProd) impProd.value = "";
+  const impHs = document.getElementById("import_item_hs_code");
+  if(impHs) impHs.value = "";
+  const impLot = document.getElementById("import_item_lot_id");
+  if(impLot) impLot.value = "";
+  syncSelectWithLegacy_("import_item_origin_country", "");
+  const impQty = document.getElementById("import_item_declared_qty");
+  if(impQty) impQty.value = "";
+  const impUnit = document.getElementById("import_item_declared_unit");
+  if(impUnit) impUnit.value = "";
+  syncImportItemUnitSuffix_();
+  const impRm = document.getElementById("import_item_remark");
+  if(impRm) impRm.value = "";
 }
 
 async function createImportDocument(triggerEl){
@@ -1078,7 +1108,7 @@ async function renderImportDocuments(list=null){
     const s = supMap[doc.supplier_id] || null;
     const supplierNameOnly = (s && s.supplier_name) ? s.supplier_name : (doc.supplier_id || "");
     const btn = `
-      <button class="btn-edit" onclick="loadImportDocument('${doc.import_doc_id}')">Edit</button>
+      <button class="btn-edit" onclick="loadImportDocument('${doc.import_doc_id}')">Load</button>
       <button class="btn-secondary" onclick="gotoReceive('IMPORT','${doc.import_doc_id}')">收貨</button>
     `;
     const docLink = doc.document_link || "";

@@ -111,7 +111,7 @@ function mvFillTransferAllQty_(){
 
 async function refreshMovementData(){
   const mvTb = document.getElementById("movementTableBody");
-  if(mvTb) setTbodyLoading_(mvTb, 7);
+  if(mvTb) setTbodyLoading_(mvTb, 6);
   const [
     lots,
     products,
@@ -331,7 +331,7 @@ function mvSourceTypeLabel_(sourceType){
   return t || "未知來源";
 }
 
-/** 與 Lots 批次管理群組標題同一套文案 */
+/** 與 Lots 批次QA管理群組標題同一套文案 */
 function formatMvGroupHeaderFromLot_(lot){
   const st = String(lot.source_type || "").toUpperCase();
   const sid = lot.source_id || "";
@@ -389,6 +389,9 @@ function mvUpdateMvQtyState_(){
   const lotId = sel?.value || "";
   if(!lotId){
     qtyEl.disabled = false;
+    const uHid0 = document.getElementById("mv_lot_unit");
+    if(uHid0) uHid0.value = "";
+    syncErpQtyUnitSuffix_("mv_lot_unit", "mv_qty_unit_suffix");
     mvUpdateActionMode_();
     return;
   }
@@ -406,6 +409,11 @@ function mvUpdateMvQtyState_(){
   }
   qtyEl.disabled = !ok;
   if(!ok) qtyEl.value = "";
+  const uHid = document.getElementById("mv_lot_unit");
+  if(uHid){
+    uHid.value = lotId && lot ? String(lot.unit || "").trim() : "";
+  }
+  syncErpQtyUnitSuffix_("mv_lot_unit", "mv_qty_unit_suffix");
   mvUpdateActionMode_();
 }
 
@@ -786,7 +794,7 @@ function renderMovementTable(){
   });
 
   if(!rawFiltered.length){
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#64748b;padding:24px;">${
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#64748b;padding:24px;">${
       kw || qMt ? "沒有符合條件的異動紀錄。" : "尚無庫存異動紀錄。"
     }</td></tr>`;
     return;
@@ -859,8 +867,12 @@ function renderMovementTable(){
         <td>${escapeMvHtml_(productSpec)}</td>
         <td>${escapeMvHtml_(whText || "—")}</td>
         <td>${termLabel(m.movement_type)}</td>
-        <td>${escapeMvHtml_(String(m.qty ?? ""))}</td>
-        <td>${escapeMvHtml_(m.unit || "")}</td>
+        <td>${(function(){
+          const mq = String(m.qty ?? "").trim();
+          const mu = String(m.unit || "").trim();
+          if(!mu) return escapeMvHtml_(mq);
+          return escapeMvHtml_(mq) + " " + escapeMvHtml_(mu);
+        })()}</td>
         <td>${escapeMvHtml_(m.created_at || "")}</td>
       </tr>
     `;
@@ -880,7 +892,7 @@ function renderMovementTable(){
     }
     tbody.innerHTML += `
       <tr style="background:#f8fafc;">
-        <td colspan="7" style="font-weight:600;color:#334155;padding:10px 12px;">
+        <td colspan="6" style="font-weight:600;color:#334155;padding:10px 12px;">
           ${headerL1}（共 ${cnt} 筆異動）
         </td>
       </tr>
@@ -909,7 +921,7 @@ function renderMovementTable(){
       const label = rk === "__EMPTY__" ? "—" : rk;
       tbody.innerHTML += `
         <tr style="background:#f1f5f9;">
-          <td colspan="7" style="font-weight:600;color:#475569;padding:8px 12px;font-size:13px;">
+          <td colspan="6" style="font-weight:600;color:#475569;padding:8px 12px;font-size:13px;">
             收貨單ID：${escapeMvHtml_(label)}（共 ${subCnt} 筆）
           </td>
         </tr>

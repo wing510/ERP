@@ -1,8 +1,8 @@
-<!-- ===== 委外加工單（PROCESS） ===== -->
+<!-- ===== Outsource 委外加工單（PROCESS） ===== -->
 <div class="card">
   <div class="card-header card-header-flex">
     <span>
-      委外加工單
+      Outsource 委外加工單
       <button type="button" class="btn-sheet" onclick="openSheetLink('process_order')" title="在 Google Sheets 開啟對應工作表">Sheet</button>
       <span id="procStatusHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">加工流程：新單 — 填主檔後按下方「建立」</span>
       <span id="procInvHint" style="font-size:12px;color:#64748b;font-weight:500;margin-left:10px;">庫存狀態：未載入 — 請先建立或載入加工單</span>
@@ -47,11 +47,11 @@
       </div>
 
       <div class="form-group">
-        <label>預計日期</label>
+        <label>預計到貨日期</label>
         <input type="date" id="proc_planned_date">
       </div>
 
-      <div class="form-group full-width">
+      <div class="form-group form-group-span-3">
         <label>備註</label>
         <input type="text" id="proc_remark">
       </div>
@@ -59,7 +59,7 @@
 
     <div class="button-group">
       <button class="btn-primary" id="proc_create_btn" onclick="createProcessOrderOnly(this)">1) 建立加工單</button>
-      <button class="btn-secondary" id="proc_update_hdr_btn" onclick="updateProcessOrderHeader(this)">更新備註/預計日期</button>
+      <button class="btn-secondary" id="proc_update_hdr_btn" onclick="updateProcessOrderHeader(this)">更新備註/預計到貨日期</button>
       <button class="btn-secondary" id="proc_cancel_btn" onclick="cancelProcessOrder(this)">取消加工單（回沖）</button>
       <button class="btn-secondary" onclick="resetProcessForm()">清除</button>
       <button class="btn-secondary" onclick="openLogs('process_order', document.getElementById('proc_id')?.value || '', 'process')">Log</button>
@@ -99,12 +99,11 @@
 
       <div class="form-group">
         <label>投料數量 *</label>
-        <input type="number" id="proc_input_qty" min="0" step="0.01">
-      </div>
-
-      <div class="form-group">
-        <label>單位</label>
-        <input type="text" id="proc_input_unit" readonly>
+        <div class="erp-input-with-suffix">
+          <input type="number" id="proc_input_qty" min="0" step="0.01">
+          <span id="proc_input_unit_suffix" class="erp-input-suffix"></span>
+        </div>
+        <input type="hidden" id="proc_input_unit" value="">
       </div>
 
       <div class="form-group full-width">
@@ -130,7 +129,6 @@
             <th>產品（規格）</th>
             <th>倉別</th>
             <th>投料數量</th>
-            <th>單位</th>
             <th>狀態</th>
             <th>操作</th>
           </tr>
@@ -192,12 +190,11 @@
 
       <div class="form-group">
         <label>回收數量 *</label>
-        <input type="number" id="proc_output_qty" min="0" step="0.01">
-      </div>
-
-      <div class="form-group">
-        <label>單位</label>
-        <input type="text" id="proc_output_unit" readonly>
+        <div class="erp-input-with-suffix">
+          <input type="number" id="proc_output_qty" min="0" step="0.01">
+          <span id="proc_output_unit_suffix" class="erp-input-suffix"></span>
+        </div>
+        <input type="hidden" id="proc_output_unit" value="">
       </div>
 
       <div class="form-group">
@@ -236,7 +233,6 @@
             <th>項次</th>
             <th>產出產品（規格）</th>
             <th>回收數量</th>
-            <th>單位</th>
             <th>狀態</th>
             <th>操作</th>
           </tr>

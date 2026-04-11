@@ -17,6 +17,7 @@ async function warehousesInit(){
     ["search_wh_status", "change"]
   ], () => searchWarehouses());
   await renderWarehouses();
+  if(typeof bindStatusSelectLamp_ === "function") bindStatusSelectLamp_("wh_status");
 }
 
 function setWarehouseButtons_(){
@@ -42,6 +43,7 @@ function clearWarehouseForm(){
   if(catEl) catEl.value = "AMBIENT";
   const stEl = document.getElementById("wh_status");
   if(stEl) stEl.value = "ACTIVE";
+  if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("wh_status");
   const addrEl = document.getElementById("wh_address");
   if(addrEl) addrEl.value = "";
   const rmEl = document.getElementById("wh_remark");
@@ -99,6 +101,7 @@ async function loadWarehouse(id){
   if(catEl) catEl.value = (row.category || "AMBIENT");
   const stEl = document.getElementById("wh_status");
   if(stEl) stEl.value = row.status || "ACTIVE";
+  if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("wh_status");
   const addrEl = document.getElementById("wh_address");
   if(addrEl) addrEl.value = row.address || "";
   const rmEl = document.getElementById("wh_remark");
@@ -141,31 +144,31 @@ async function renderWarehouses(list=null){
   if(!tbody) return;
   let rows = list;
   if(rows == null){
-    setTbodyLoading_(tbody, 5);
+    setTbodyLoading_(tbody, 4);
     rows = await getAll("warehouse").catch(()=>[]);
   }
   const sorted = [...(rows || [])].sort((a,b)=>String(b.updated_at||"").localeCompare(String(a.updated_at||"")));
   tbody.innerHTML = "";
   if(sorted.length === 0){
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:24px;">尚無倉庫。請先在上方建立倉庫（例如 MAIN）。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b;padding:24px;">尚無倉庫。請先在上方建立倉庫（例如 MAIN）。</td></tr>';
     return;
   }
   sorted.forEach(w=>{
     const catLabel = (typeof termShortZh_ === "function" ? termShortZh_(w.category) : (termLabel(w.category) || w.category || ""));
+    const badge = termStatusLampHtml(w.status);
     tbody.innerHTML += `
       <tr>
         <td>${w.warehouse_id || ""}</td>
         <td>${w.warehouse_name || ""}${catLabel ? ` <span style="color:#64748b;font-size:12px;">(${catLabel})</span>` : ""}</td>
-        <td>${termLabel(w.status)}</td>
-        <td>${w.updated_at || w.created_at || ""}</td>
-        <td><button class="btn-edit" onclick="loadWarehouse('${String(w.warehouse_id||"").replace(/\\/g,"\\\\").replace(/'/g,"\\'")}')">Edit</button></td>
+        <td class="col-status">${badge}</td>
+        <td><button class="btn-edit" onclick="loadWarehouse('${String(w.warehouse_id||"").replace(/\\/g,"\\\\").replace(/'/g,"\\'")}')">Load</button></td>
       </tr>
     `;
   });
 }
 
 async function searchWarehouses(){
-  setTbodyLoading_("whTableBody", 5);
+  setTbodyLoading_("whTableBody", 4);
   const kw = (document.getElementById("search_wh_keyword")?.value || "").trim().toLowerCase();
   const status = (document.getElementById("search_wh_status")?.value || "").trim().toUpperCase();
   const list = await getAll("warehouse").catch(()=>[]);
