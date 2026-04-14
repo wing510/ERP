@@ -39,6 +39,7 @@
         <div class="form-group">
           <label>用途</label>
           <select id="mv_purpose">
+            <option value="">請選擇</option>
             <option value="INTERNAL_USE">內部領用</option>
             <option value="SAMPLE">樣品</option>
             <option value="SCRAP">報廢</option>
@@ -49,7 +50,7 @@
         <div class="form-group">
           <label>給誰（領用/交付）</label>
           <select id="mv_issued_to">
-            <option value="">（未指定）</option>
+            <option value="">請選擇</option>
           </select>
         </div>
 
@@ -74,7 +75,7 @@
       <select id="mv_filter_movement_type" title="依異動類型篩選列表">
         <option value="">全部異動類型</option>
         <option value="IN">IN（入庫）</option>
-        <option value="OUT">OUT（扣庫）</option>
+        <option value="OUT">OUT（手動扣庫）</option>
         <option value="ADJUST">ADJUST（調整）</option>
         <option value="SHIP_OUT">SHIP_OUT（出貨扣庫）</option>
         <option value="PROCESS_OUT">PROCESS_OUT（加工扣庫）</option>
@@ -93,6 +94,7 @@
             <th>異動類型</th>
             <th>數量</th>
             <th>時間</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody id="movementTableBody"></tbody>

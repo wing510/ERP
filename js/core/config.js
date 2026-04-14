@@ -6,7 +6,7 @@
 (function () {
   var defaults = {
     API_BASE:
-      "https://script.google.com/macros/s/AKfycbznFuq-blQh3iF23MbM2TlEcmww3-52YkHNLdfluSyvNxjJ0uYlFY1kyj3iru3uCCl0/exec"
+      "https://script.google.com/macros/s/AKfycbz3NEJbSRZXZqSI_HiSsncqSts9rMaYR9JCpYVTovXFvOW-xsjG1M1yvOZpcJ-ni21W/exec"
   };
   var prev = typeof window.__ERP_CONFIG__ === "object" && window.__ERP_CONFIG__ !== null ? window.__ERP_CONFIG__ : {};
   window.__ERP_CONFIG__ = Object.assign({}, defaults, prev);

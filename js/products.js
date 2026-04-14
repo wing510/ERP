@@ -379,7 +379,8 @@ function clearForm(){
   applyProductMultiUnitMode_();
 
   p_status.value = "ACTIVE";
-  p_type.value = "RM";
+  p_type.value = "";
+  p_unit.value = "";
   p_id.value = generateShortId("P");
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("p_status");
   setProductButtons_();

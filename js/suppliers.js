@@ -6,11 +6,138 @@ const SUPPLIER_RULES = {
   idMax: 30
 };
 
+/* ===== 類型/流程：逗號分隔存取 ===== */
+function supplierCsvFromGroup_(groupId){
+  const g = document.getElementById(groupId);
+  if(!g) return "";
+  const vals = Array.from(g.querySelectorAll('input[type="checkbox"]'))
+    .filter(x => x && x.checked)
+    .map(x => String(x.value || "").trim().toUpperCase())
+    .filter(Boolean);
+  // 去重 + 穩定排序（依出現順序）
+  const uniq = [];
+  vals.forEach(v => { if(!uniq.includes(v)) uniq.push(v); });
+  return uniq.join(",");
+}
+
+function supplierGroupFromCsv_(groupId, csv){
+  const g = document.getElementById(groupId);
+  if(!g) return;
+  const set = String(csv || "")
+    .split(",")
+    .map(x => String(x || "").trim().toUpperCase())
+    .filter(Boolean);
+  Array.from(g.querySelectorAll('input[type="checkbox"]')).forEach(cb=>{
+    const v = String(cb.value || "").trim().toUpperCase();
+    cb.checked = set.includes(v);
+  });
+}
+
+function supplierTypeLabelZh_(code){
+  const c = String(code || "").trim().toUpperCase();
+  if(c === "RM") return "原料";
+  if(c === "PK") return "包材";
+  if(c === "WIP") return "半成品";
+  if(c === "FG") return "成品";
+  if(c === "PROC") return "加工廠";
+  if(c === "LOG") return "物流/倉儲";
+  if(c === "OTHER") return "其他";
+  return c || "";
+}
+
+function supplierFlowLabelZh_(code){
+  const c = String(code || "").trim().toUpperCase();
+  if(c === "PO") return "採購";
+  if(c === "IMPORT") return "進口";
+  if(c === "OUTSOURCE") return "委外加工";
+  return c || "";
+}
+
+function supplierCsvToZh_(csv, mapper){
+  const arr = String(csv || "")
+    .split(",")
+    .map(x => String(x || "").trim().toUpperCase())
+    .filter(Boolean);
+  if(!arr.length) return "";
+  return arr.map(x => (typeof mapper === "function" ? mapper(x) : x)).filter(Boolean).join("、");
+}
+
+/* ===== 下拉式多選（點開勾選） ===== */
+function supplierMsUpdateText_(groupId, textId, mapper, placeholder){
+  const g = document.getElementById(groupId);
+  const t = document.getElementById(textId);
+  if(!g || !t) return;
+  const csv = supplierCsvFromGroup_(groupId);
+  const zh = supplierCsvToZh_(csv, mapper);
+  t.textContent = zh || (placeholder || "請選擇");
+  t.title = zh || "";
+}
+
+function supplierBindMultiSelect_(rootMsName, groupId, btnId, textId, mapper, placeholder){
+  const root = document.querySelector(`.erp-multiselect[data-ms="${rootMsName}"]`);
+  const btn = document.getElementById(btnId);
+  const panel = document.getElementById(groupId);
+  if(!root || !btn || !panel) return;
+
+  // toggle
+  btn.addEventListener("click", function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    const open = root.classList.contains("is-open");
+    document.querySelectorAll(".erp-multiselect.is-open").forEach(x=>{
+      x.classList.remove("is-open");
+      const b = x.querySelector(".erp-multiselect-btn");
+      if(b) b.setAttribute("aria-expanded", "false");
+    });
+    if(!open){
+      root.classList.add("is-open");
+      btn.setAttribute("aria-expanded", "true");
+    }
+  });
+
+  // update text on change
+  panel.addEventListener("change", function(){
+    supplierMsUpdateText_(groupId, textId, mapper, placeholder);
+  });
+
+  // close when clicking inside panel but not on checkbox/label
+  panel.addEventListener("click", function(e){
+    e.stopPropagation();
+  });
+
+  // init
+  supplierMsUpdateText_(groupId, textId, mapper, placeholder);
+}
+
+function supplierBindMultiSelectGlobalClose_(){
+  if(document.body && document.body.dataset && document.body.dataset.supplierMsBound) return;
+  if(document.body && document.body.dataset) document.body.dataset.supplierMsBound = "1";
+  document.addEventListener("click", function(){
+    document.querySelectorAll(".erp-multiselect.is-open").forEach(x=>{
+      x.classList.remove("is-open");
+      const b = x.querySelector(".erp-multiselect-btn");
+      if(b) b.setAttribute("aria-expanded", "false");
+    });
+  });
+  document.addEventListener("keydown", function(e){
+    if(e.key === "Escape"){
+      document.querySelectorAll(".erp-multiselect.is-open").forEach(x=>{
+        x.classList.remove("is-open");
+        const b = x.querySelector(".erp-multiselect-btn");
+        if(b) b.setAttribute("aria-expanded", "false");
+      });
+    }
+  });
+}
+
 // `bindUppercaseInput` 已移至 `js/core/utils.js`
 
 /* ===== 初始化 ===== */
 async function suppliersInit(){
   bindUppercaseInput("s_id");
+  supplierBindMultiSelectGlobalClose_();
+  supplierBindMultiSelect_("s_type", "s_type_group", "s_type_btn", "s_type_text", supplierTypeLabelZh_, "請選擇");
+  supplierBindMultiSelect_("s_flow", "s_flow_group", "s_flow_btn", "s_flow_text", supplierFlowLabelZh_, "請選擇");
   bindAutoSearchToolbar_([
     ["search_supplier_keyword", "input"],
     ["search_supplier_status", "change"]
@@ -63,6 +190,8 @@ async function createSupplier(triggerEl){
     email: s_email.value.trim(),
     address: s_address.value.trim(),
     country: s_country.value.trim(),
+    supplier_type: supplierCsvFromGroup_("s_type_group"),
+    supplier_flow: supplierCsvFromGroup_("s_flow_group"),
     status: s_status.value,
     remark: s_remark.value.trim(),
     created_by: getCurrentUser(),
@@ -124,6 +253,8 @@ async function updateSupplier(triggerEl){
     email: s_email.value.trim(),
     address: s_address.value.trim(),
     country: s_country.value.trim(),
+    supplier_type: supplierCsvFromGroup_("s_type_group"),
+    supplier_flow: supplierCsvFromGroup_("s_flow_group"),
     status: newStatus,
     remark: s_remark.value.trim(),
     updated_by: getCurrentUser(),
@@ -150,6 +281,10 @@ function clearSupplierForm(){
   ).forEach(el=>el.value="");
 
   syncSelectWithLegacy_("s_country", "");
+  supplierGroupFromCsv_("s_type_group", "");
+  supplierGroupFromCsv_("s_flow_group", "");
+  supplierMsUpdateText_("s_type_group", "s_type_text", supplierTypeLabelZh_, "請選擇");
+  supplierMsUpdateText_("s_flow_group", "s_flow_text", supplierFlowLabelZh_, "請選擇");
 
   s_status.value="ACTIVE";
   s_id.value = generateShortId("S");
@@ -172,6 +307,10 @@ async function loadSupplier(id){
   s_email.value = s.email;
   s_address.value = s.address;
   syncSelectWithLegacy_("s_country", s.country);
+  supplierGroupFromCsv_("s_type_group", s.supplier_type || "");
+  supplierGroupFromCsv_("s_flow_group", s.supplier_flow || "");
+  supplierMsUpdateText_("s_type_group", "s_type_text", supplierTypeLabelZh_, "請選擇");
+  supplierMsUpdateText_("s_flow_group", "s_flow_text", supplierFlowLabelZh_, "請選擇");
   s_status.value = s.status;
   s_remark.value = s.remark;
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("s_status");
@@ -201,11 +340,15 @@ async function renderSuppliers(list=null){
   list.forEach(s=>{
 
     const badge = termStatusLampHtml(s.status);
+    const typeZh = supplierCsvToZh_(s.supplier_type, supplierTypeLabelZh_);
+    const flowZh = supplierCsvToZh_(s.supplier_flow, supplierFlowLabelZh_);
 
     tbody.innerHTML+=`
       <tr>
         <td>${s.supplier_id}</td>
         <td>${s.supplier_name}</td>
+        <td>${typeZh || ""}</td>
+        <td>${flowZh || ""}</td>
         <td>${s.contact_person||""}</td>
         <td>${s.phone||""}</td>
         <td class="col-status">${badge}</td>
@@ -262,7 +405,9 @@ async function searchSuppliers(){
       s.supplier_name.toLowerCase().includes(kw) ||
       String(s.contact_person || "").toLowerCase().includes(kw) ||
       String(s.phone || "").toLowerCase().includes(kw) ||
-      String(s.email || "").toLowerCase().includes(kw);
+      String(s.email || "").toLowerCase().includes(kw) ||
+      String(s.supplier_type || "").toLowerCase().includes(kw) ||
+      String(s.supplier_flow || "").toLowerCase().includes(kw);
     return matchKw && (!status || s.status === status);
   });
 

@@ -96,11 +96,13 @@ function wsInitWarehouseDropdown_(){
     return;
   }
   sel.innerHTML =
+    '<option value="">請選擇</option>' +
     rows.map(w=>{
       const id = String(w.warehouse_id||"").toUpperCase();
       return `<option value="${id}">${wsEscapeHtml_(wsWarehouseLabel_(w))}</option>`;
     }).join("");
-  if(!sel.value) sel.value = String(rows[0].warehouse_id||"").toUpperCase();
+  // 不預設帶第一個倉別：強制讓使用者「請選擇」
+  if(!sel.value) sel.value = "";
 }
 
 function wsGetFilters_(){

@@ -215,7 +215,7 @@ async function rcvInitWarehouseDropdown_(){
     rows.sort((a,b)=>String(a.warehouse_id||"").localeCompare(String(b.warehouse_id||"")));
     if(rows.length){
       whEl.innerHTML =
-        '<option value="">請選擇倉別</option>' +
+        '<option value="">請選擇</option>' +
         rows
           .map(w=>{
             const id = String(w.warehouse_id || "").toUpperCase();
@@ -227,7 +227,8 @@ async function rcvInitWarehouseDropdown_(){
             return `<option value="${id}">${label}</option>`;
           })
           .join("");
-      whEl.value = rows[0]?.warehouse_id ? String(rows[0].warehouse_id).toUpperCase() : "";
+      // 不預設帶第一個倉庫：強制讓使用者「請選擇」
+      whEl.value = "";
     }else{
       whEl.innerHTML = '<option value="">尚無倉庫，請先至「Warehouses 倉庫」建立</option>';
     }
@@ -1145,7 +1146,7 @@ function rcvInitVoidModal_() {
   if (sel && !sel.dataset.bound) {
     sel.dataset.bound = "1";
     sel.innerHTML =
-      '<option value="">請選擇作廢原因</option>' +
+      '<option value="">請選擇</option>' +
       RCV_VOID_REASONS.map(
         (r) =>
           `<option value="${rcvEscOptAttr_(r.code)}">${rcvEscOptText_(r.label)}</option>`

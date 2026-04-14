@@ -160,7 +160,7 @@ async function initSalesDropdowns(){
   const cSel = document.getElementById("so_customer_id");
   if(cSel){
     cSel.innerHTML =
-      `<option value="">請選擇客戶</option>` +
+      `<option value="">請選擇</option>` +
       soCustomers.map(c => {
         const name = String(c.customer_name || "").trim();
         const label = name || c.customer_id;
@@ -171,7 +171,7 @@ async function initSalesDropdowns(){
   const pSel = document.getElementById("so_item_product_id");
   if(pSel){
     pSel.innerHTML =
-      `<option value="">請選擇產品</option>` +
+      `<option value="">請選擇</option>` +
       soProducts.map(p => {
         const name = String(p.product_name || "").trim();
         const spec = String(p.spec || "").trim();
@@ -183,15 +183,32 @@ async function initSalesDropdowns(){
 
   const spSel = document.getElementById("so_salesperson_id");
   if(spSel){
-    const salesUsers = (soUsers || [])
-      .filter(u => String(u.status || "").toUpperCase() === "ACTIVE")
-      .filter(u => String(u.role || "").toUpperCase() === "SALES");
-    salesUsers.sort((a,b)=>String(a.user_id||"").localeCompare(String(b.user_id||"")));
+    const roleZh = function(role){
+      const r = String(role || "").trim().toUpperCase();
+      if(r === "ADMIN") return "管理員";
+      if(r === "CEO") return "CEO";
+      if(r === "QA") return "品保";
+      if(r === "OP") return "作業";
+      if(r === "SL" || r === "SALES") return "業務";
+      if(r === "WH" || r === "WAREHOUSE") return "倉管";
+      if(r === "FN" || r === "FINANCE") return "財務";
+      if(r === "GA" || r === "GENERAL_AFFAIRS") return "總務";
+      return r || "—";
+    };
+    const salesUsers = (soUsers || []).filter(u => String(u.status || "").toUpperCase() === "ACTIVE");
+    salesUsers.sort((a,b)=>{
+      const an = String(a.user_name || "").trim();
+      const bn = String(b.user_name || "").trim();
+      if(an && bn && an !== bn) return an.localeCompare(bn);
+      return String(a.user_id || "").localeCompare(String(b.user_id || ""));
+    });
     spSel.innerHTML =
-      `<option value="">（未指定）</option>` +
+      `<option value="">請選擇</option>` +
       salesUsers.map(u => {
         const name = String(u.user_name || "").trim();
-        const label = name || u.user_id;
+        const rz = roleZh(u.role);
+        const id = String(u.user_id || "").trim();
+        const label = name ? `${rz}-${name}(${id})` : `${rz}(${id})`;
         return `<option value="${u.user_id}">${label}</option>`;
       }).join("");
   }

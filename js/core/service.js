@@ -30,7 +30,13 @@ function erpDbgSanitizeParams_(params) {
 
 function erpDbgLog_(payload) {
   try {
-    fetch("http://127.0.0.1:7691/ingest/9f180fc6-490e-4b37-95d1-7628a27b6a8b", {
+    // 預設關閉本機除錯上報；需要時請在載入 service.js 前設定：
+    // window.__ERP_CONFIG__ = { ... , DBG_INGEST_URL: "http://127.0.0.1:7691/ingest/..." }
+    var cfg = null;
+    try{ cfg = window.__ERP_CONFIG__ || null; }catch(_e2){}
+    var url = cfg && typeof cfg.DBG_INGEST_URL === "string" ? String(cfg.DBG_INGEST_URL || "").trim() : "";
+    if(!url) return;
+    fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -209,15 +215,28 @@ try{
 
 function getCurrentUser(){
   try{
-    return localStorage.getItem("erp_current_user") || "admin";
+    return (sessionStorage.getItem("erp_current_user") || localStorage.getItem("erp_current_user") || "");
   }catch(_e){
-    return "admin";
+    return "";
   }
 }
 
-function setCurrentUser(userId){
+function setCurrentUser(userId, options){
   try{
-    localStorage.setItem("erp_current_user", userId || "admin");
+    if(userId == null || String(userId).trim() === ""){
+      try{ sessionStorage.removeItem("erp_current_user"); }catch(_e2){}
+      localStorage.removeItem("erp_current_user");
+      return;
+    }
+    const uid = String(userId).trim();
+    const remember = options && options.remember === false ? false : true;
+    if(remember){
+      try{ sessionStorage.removeItem("erp_current_user"); }catch(_e3){}
+      localStorage.setItem("erp_current_user", uid);
+    }else{
+      localStorage.removeItem("erp_current_user");
+      try{ sessionStorage.setItem("erp_current_user", uid); }catch(_e4){}
+    }
   }catch(_e){}
 }
 

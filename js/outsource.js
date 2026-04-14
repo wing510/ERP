@@ -744,7 +744,13 @@ async function loadProcMasterData(){
     getAll("import_document").catch(() => [])
   ]);
   procProducts = products || [];
-  procSuppliers = (suppliersRaw || []).filter(s => s.status === "ACTIVE");
+  procSuppliers = (suppliersRaw || [])
+    .filter(s => s.status === "ACTIVE")
+    .filter(s => {
+      const flows = String(s.supplier_flow || "").toUpperCase();
+      // 未填 flow 視為可用（避免舊資料突然消失）
+      return !flows || flows.split(",").map(x=>x.trim()).includes("OUTSOURCE");
+    });
   procLots = lots || [];
   procWarehouses = (warehouses || []).filter(w => String(w.status || "ACTIVE").toUpperCase() === "ACTIVE");
   procAvailableByLotId = avail?.map || {};
@@ -799,7 +805,7 @@ function initProcDropdowns(){
   const supplierSel = document.getElementById("proc_supplier_id");
   if(supplierSel){
     supplierSel.innerHTML =
-      `<option value="">請選擇加工廠</option>` +
+      `<option value="">請選擇</option>` +
       procSuppliers.map(s => {
         const name = String(s.supplier_name || "").trim();
         const label = name || s.supplier_id;
@@ -825,7 +831,7 @@ function initProcDropdowns(){
   if(outSel){
     const activeProducts = (procProducts || []).filter(p => p.status === "ACTIVE");
     outSel.innerHTML =
-      `<option value="">請選擇產出產品</option>` +
+      `<option value="">請選擇</option>` +
       activeProducts.map(p => {
         const name = String(p.product_name || "").trim();
         const spec = String(p.spec || "").trim();
@@ -886,7 +892,7 @@ function resetProcessForm(){
   }
   const type = document.getElementById("proc_type");
   if(type){
-    type.value = "PROCESS";
+    type.value = "";
     type.disabled = false;
   }
   const srcType = document.getElementById("proc_source_type");

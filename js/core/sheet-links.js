@@ -9,6 +9,8 @@ const SHEET_LINKS = {
     "https://docs.google.com/spreadsheets/d/17CFX0_mgvGaaOoxRub9mw33LuukzhwrEGK5se8LbwTw/edit?gid=99221118#gid=99221118",
   customer:
     "https://docs.google.com/spreadsheets/d/17CFX0_mgvGaaOoxRub9mw33LuukzhwrEGK5se8LbwTw/edit?gid=1601673747#gid=1601673747",
+  warehouse:
+    "https://docs.google.com/spreadsheets/d/17CFX0_mgvGaaOoxRub9mw33LuukzhwrEGK5se8LbwTw/edit?gid=267971627#gid=267971627",
   user:
     "https://docs.google.com/spreadsheets/d/17CFX0_mgvGaaOoxRub9mw33LuukzhwrEGK5se8LbwTw/edit?gid=1751545572#gid=1751545572",
 

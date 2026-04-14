@@ -32,7 +32,7 @@ async function loadSplitCaches(){
   if(sel){
     const lots = splitLots.filter(l => (l.inventory_status || "ACTIVE") === "ACTIVE" && (l.status || "PENDING") === "APPROVED");
     sel.innerHTML =
-      `<option value="">請選擇來源 Lot</option>` +
+      `<option value="">請選擇</option>` +
       lots.map(l => {
         const av = splitGetAvailable(l.lot_id);
         return `<option value="${l.lot_id}" data-product="${l.product_id}" data-unit="${l.unit}" data-av="${av}">${l.lot_id} 可用:${av}</option>`;

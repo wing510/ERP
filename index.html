@@ -55,6 +55,8 @@ body{
 }
 
 .topbar{
+  position:relative;
+  z-index:10020;
   background:white;
   padding:15px 25px;
   border-bottom:1px solid #e0e0e0;
@@ -85,6 +87,14 @@ body{
   flex-shrink:0;
   flex-wrap:wrap;
   justify-content:flex-end;
+}
+.topbar-user-id{
+  font-size:13px;
+  color:#334155;
+  max-width:min(240px, 40vw);
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
 }
 /* 小螢幕抽屜：漢堡鈕（桌面隱藏） */
 .sidebar-toggle{
@@ -195,6 +205,92 @@ input,select{
   padding:0 10px;
   border:1px solid #ddd;
   border-radius:6px;
+}
+
+/* checkbox 群組（供應商類型/流程等）：不影響 input/select 樣式 */
+.erp-checkset{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 10px;
+  padding:8px 10px;
+  border:1px solid #ddd;
+  border-radius:6px;
+  background:#fff;
+  box-sizing:border-box;
+  min-height:36px;
+}
+.erp-checkset-item{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  margin:0;
+  font-size:13px;
+  color:#0f172a;
+  line-height:1.2;
+  user-select:none;
+}
+.erp-checkset-item input[type="checkbox"]{
+  width:14px;
+  height:14px;
+  margin:0;
+}
+
+/* 下拉式多選（點開勾選） */
+.erp-multiselect{
+  position:relative;
+}
+.erp-multiselect-btn{
+  width:100%;
+  height:36px;
+  padding:0 10px;
+  border:1px solid #ddd;
+  border-radius:6px;
+  background:#fff;
+  color:#0f172a;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  box-sizing:border-box;
+}
+.erp-multiselect-text{
+  flex:1 1 auto;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  text-align:left;
+  font-size:13px;
+}
+.erp-multiselect-caret{
+  flex:0 0 auto;
+  color:#64748b;
+  font-size:12px;
+}
+.erp-multiselect-panel{
+  display:none;
+  position:absolute;
+  left:0;
+  right:0;
+  top:calc(100% + 6px);
+  z-index:50;
+  max-height:220px;
+  overflow:auto;
+  padding:10px;
+  background:#fff;
+  border:1px solid #e2e8f0;
+  border-radius:8px;
+  box-shadow:0 10px 30px rgba(2,6,23,0.12);
+  box-sizing:border-box;
+}
+.erp-multiselect.is-open .erp-multiselect-panel{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px 10px;
+}
+.erp-multiselect.is-open .erp-multiselect-btn{
+  border-color:#94a3b8;
+  box-shadow:0 0 0 2px rgba(148,163,184,0.2);
 }
 
 /* 數量 + 單位：同一邊框內（採購／進口品項等），寬度與同列欄位一致 */
@@ -996,11 +1092,186 @@ th span{
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  pointer-events: none;
 }
 
 .loading-overlay.active {
   display: flex;
+  pointer-events: auto;
 }
+
+.login-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(15,23,42,0.55);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9998;
+  padding:16px;
+  box-sizing:border-box;
+}
+.login-overlay.active{ display:flex; }
+
+/* 未登入：整個系統不顯示（只留登入遮罩） */
+body.erp-locked .sidebar,
+body.erp-locked .main,
+body.erp-locked .sidebar-backdrop{
+  display:none !important;
+}
+.login-card{
+  width:min(440px, 94vw);
+  background:#fff;
+  border-radius:10px;
+  border:1px solid #e5e7eb;
+  box-shadow:0 12px 28px rgba(2,6,23,0.18);
+  padding:22px 22px 18px 22px;
+  box-sizing:border-box;
+}
+.login-form{
+  margin:0;
+  padding:0;
+  border:none;
+  display:block;
+}
+.login-brand{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  margin-bottom:18px;
+}
+.login-logo{
+  display:block;
+  width:100%;
+  max-width:320px;
+  height:auto;
+  max-height:min(28vh, 200px);
+  object-fit:contain;
+}
+.login-logo.login-logo--broken{ display:none; }
+.login-brand-fallback{
+  display:none;
+  flex-direction:column;
+  align-items:center;
+  gap:4px;
+  text-align:center;
+}
+.login-brand-fallback.show{ display:flex; }
+.login-brand-fallback .login-brand-title{
+  font-size:14px;
+  font-weight:700;
+  letter-spacing:0.4px;
+  color:#0f172a;
+}
+.login-brand-fallback .login-brand-sub{
+  font-size:13px;
+  font-weight:800;
+  color:#0f172a;
+}
+.login-title{
+  font-size:18px;
+  font-weight:800;
+  color:#0f172a;
+  margin:0 0 14px 0;
+}
+.login-row{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+.login-row input[type="text"]{
+  flex:1 1 auto;
+  min-width:0;
+}
+ .login-row input[type="password"]{
+  flex:1 1 auto;
+  min-width:0;
+}
+.login-field{
+  width:100%;
+  height:40px;
+  padding:0 12px;
+  border:1px solid #dbe3ee;
+  border-radius:6px;
+  background:#fff;
+  font-size:14px;
+  color:#0f172a;
+  box-sizing:border-box;
+  outline:none;
+}
+.login-field:focus{
+  border-color:#2563eb;
+  box-shadow:0 0 0 3px rgba(37,99,235,0.15);
+}
+.login-pw-wrap{
+  display:flex;
+  width:100%;
+  gap:8px;
+  align-items:center;
+}
+.login-eye{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:40px;
+  height:40px;
+  padding:0;
+  flex-shrink:0;
+  border:1px solid #dbe3ee;
+  border-radius:6px;
+  background:#fff;
+  color:#334155;
+  cursor:pointer;
+  line-height:0;
+}
+.login-eye-icon{
+  display:none;
+}
+/* 密碼隱藏：斜線遮眼（閉起）；密碼顯示：睜眼 */
+.login-eye[data-state="hidden"] .login-eye-icon--slashed{ display:block; }
+.login-eye[data-state="visible"] .login-eye-icon--open{ display:block; }
+.login-eye svg{
+  display:block;
+  vertical-align:middle;
+}
+.login-eye:focus-visible{
+  outline:2px solid #2563eb;
+  outline-offset:2px;
+}
+.login-meta{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:10px;
+  margin-top:10px;
+}
+.login-remember{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:13px;
+  color:#334155;
+  user-select:none;
+}
+.login-actions{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  margin-top:14px;
+}
+.login-actions .btn-primary{
+  min-width:96px;
+}
+.login-error{
+  margin-top:10px;
+  font-size:12px;
+  color:#b91c1c;
+  display:none;
+  line-height:1.4;
+}
+.login-error.show{ display:block; }
 
 .spinner {
   width: 50px;
@@ -1168,7 +1439,7 @@ th span{
 </style>
 </head>
 
-<body>
+<body class="erp-locked">
 
 <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 
@@ -1222,11 +1493,9 @@ th span{
     </div>
     <div class="topbar-right">
       <div class="topbar-version-label">Version 3.1</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <div style="font-size:13px;color:#64748b;">User</div>
-        <select id="currentUserSelect" style="height:32px;">
-          <option value="admin">admin</option>
-        </select>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span id="topbarCurrentUser" class="topbar-user-id" title="">—</span>
+        <button type="button" class="btn-secondary" id="logoutBtn" style="height:32px;padding:0 10px;" title="清除登入並重新登入">登出</button>
       </div>
     </div>
   </div>
@@ -1238,6 +1507,48 @@ th span{
   <div class="spinner"></div>
 </div>
 
+<div id="loginOverlay" class="login-overlay" role="dialog" aria-modal="true" aria-labelledby="loginTitle" aria-hidden="true">
+  <div class="login-card">
+    <form id="loginForm" class="login-form" action="#" method="post" autocomplete="on" novalidate>
+      <div class="login-brand">
+        <img class="login-logo" src="assets/dingli-logo.png" width="320" height="120" alt="DINGLI BIOTECH 鼎立生技" decoding="async" onerror="this.classList.add('login-logo--broken');var fb=document.getElementById('loginBrandFallback');if(fb)fb.classList.add('show');">
+        <div id="loginBrandFallback" class="login-brand-fallback" aria-hidden="true">
+          <span class="login-brand-title">DINGLI BIOTECH</span>
+          <span class="login-brand-sub">鼎立生技</span>
+        </div>
+      </div>
+      <div id="loginTitle" class="login-title">登入</div>
+      <div class="login-row">
+        <input type="text" class="login-field" id="loginUserId" name="username" placeholder="使用者ID" autocomplete="username" required>
+      </div>
+      <div class="login-row" style="margin-top:10px;">
+        <div class="login-pw-wrap">
+          <input type="password" class="login-field" id="loginPassword" name="password" autocomplete="current-password" required>
+          <button type="button" class="login-eye" id="loginPwToggle" data-state="hidden" title="顯示密碼" aria-label="顯示密碼">
+            <span class="login-eye-icon login-eye-icon--open" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </span>
+            <span class="login-eye-icon login-eye-icon--slashed" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88"/></svg>
+            </span>
+          </button>
+        </div>
+      </div>
+      <div class="login-meta">
+        <label class="login-remember">
+          <input type="checkbox" id="loginRemember" checked>
+          保持登入
+        </label>
+      </div>
+      <div id="loginError" class="login-error"></div>
+      <div class="login-actions">
+        <button type="button" class="btn-secondary" id="loginClearBtn">清除</button>
+        <button type="submit" class="btn-primary" id="loginSubmitBtn">登入</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <script src="js/core/schema.js"></script>
 <script src="js/core/utils.js"></script>
 <script src="js/core/inventory-utils.js"></script>
@@ -1245,6 +1556,7 @@ th span{
 <script src="js/core/sheet-links.js"></script>
 <script src="js/core/config.js"></script>
 <script src="js/core/service.js"></script>
+<script src="js/core/login.js"></script>
 <script src="js/help.js"></script>
 <script src="js/router.js"></script>
 <script src="js/dashboard.js"></script>
@@ -1318,28 +1630,18 @@ th span{
     });
   })();
 
-  // Topbar user selector: load from sheet if possible
-  (async function(){
-    const sel = document.getElementById("currentUserSelect");
-    if(!sel) return;
-    const saved = (function(){ try{return localStorage.getItem("erp_current_user");}catch(_e){return "";} })();
+  // 頂欄：顯示目前登入者（僅文字，不可切換帳號）
+  (function(){
+    var lab = document.getElementById("topbarCurrentUser");
+    if(!lab) return;
+    var uid = "";
     try{
-      const users = await getAll("user");
-      if(Array.isArray(users) && users.length){
-        sel.innerHTML = users
-          .filter(u => (u.status || "ACTIVE") === "ACTIVE")
-          .map(u => `<option value="${u.user_id}">${u.user_id} (${u.role || ""})</option>`)
-          .join("");
-      }
-    }catch(_e){
-      // ignore; fallback to default option
+      uid = (sessionStorage.getItem("erp_current_user") || localStorage.getItem("erp_current_user") || "").trim();
+    }catch(_e){}
+    if(uid){
+      lab.textContent = uid;
+      lab.title = "目前登入：" + uid;
     }
-    sel.value = saved || sel.value || "admin";
-    if(typeof setCurrentUser === "function") setCurrentUser(sel.value);
-    sel.addEventListener("change", ()=>{
-      if(typeof setCurrentUser === "function") setCurrentUser(sel.value);
-      showToast("已切換使用者：" + sel.value);
-    });
   })();
 </script>
 

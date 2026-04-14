@@ -310,43 +310,70 @@ async function runTrace(){
   const lotId = (document.getElementById("trace_lot_id")?.value || "").trim().toUpperCase();
   if(!lotId) return showToast("請輸入 Lot ID","error");
 
-  await loadTraceCaches();
-  // 逐層按需載入：relations/shipments/movements 都以 lot 為單位查詢，避免全表下載
-  try{
-    const g = await buildTraceGraph_(lotId, 150);
-    traceRelations = g.relations || [];
-    traceShipmentItems = g.shipmentItems || [];
-    traceAvailByLotId = g.availByLotId || {};
-    traceMovements = []; // 不再依賴全表 movements
-    if(g.truncated){
-      showToast("追溯範圍過大，已限制最多 150 個 Lot（可再優化成後端一次查詢）。","error");
-    }
-  }catch(_e0){
-    // fallback：不要直接全表下載；只取此 lot 的必要資料
-    try{
-      const [up, down, ships, av] = await Promise.all([
-        fetchLotRelationsByLot_(lotId, "UP").catch(() => []),
-        fetchLotRelationsByLot_(lotId, "DOWN").catch(() => []),
-        fetchShipmentItemsByLot_(lotId).catch(() => []),
-        fetchAvailByLot_(lotId).catch(() => 0)
-      ]);
-      traceRelations = ([]).concat(up || [], down || []);
-      traceShipmentItems = ships || [];
-      traceAvailByLotId = { [String(lotId || "").trim().toUpperCase()]: Number(av || 0) };
-      traceMovements = [];
-    }catch(_e1){
-      // 最後最後才全表（極端情況）
-      try{ traceRelations = await getAll("lot_relation").catch(() => []); }catch(_e2){ traceRelations = []; }
-      try{ traceShipmentItems = await getAll("shipment_item").catch(() => []); }catch(_e3){ traceShipmentItems = []; }
-      try{ traceMovements = await getAll("inventory_movement").catch(() => []); }catch(_e4){ traceMovements = []; }
-      traceAvailByLotId = {};
-    }
-  }
+  const runBtn = document.getElementById("trace_run_btn");
+  const hint = document.getElementById("traceRunHint");
+  const resetBtn = (function(){
+    const btns = Array.from(document.querySelectorAll(".search-toolbar button"));
+    return btns.find(b => (b && b.textContent || "").includes("重設")) || null;
+  })();
+  const logBtn = (function(){
+    const btns = Array.from(document.querySelectorAll(".search-toolbar button"));
+    return btns.find(b => (b && b.textContent || "").trim() === "Log") || null;
+  })();
 
-  const lot = getLot(lotId);
+  if(runBtn) runBtn.disabled = true;
+  if(resetBtn) resetBtn.disabled = true;
+  if(logBtn) logBtn.disabled = true;
+  if(hint){ hint.style.display = "inline-block"; hint.textContent = "查詢中…"; }
+
   const summaryEl = document.getElementById("traceSummary");
   const upEl = document.getElementById("traceUp");
   const downEl = document.getElementById("traceDown");
+  if(summaryEl) summaryEl.textContent = "查詢中…";
+  if(upEl) upEl.textContent = "";
+  if(downEl) downEl.textContent = "";
+
+  try{
+    await loadTraceCaches();
+    // 逐層按需載入：relations/shipments/movements 都以 lot 為單位查詢，避免全表下載
+    try{
+      const g = await buildTraceGraph_(lotId, 150);
+      traceRelations = g.relations || [];
+      traceShipmentItems = g.shipmentItems || [];
+      traceAvailByLotId = g.availByLotId || {};
+      traceMovements = []; // 不再依賴全表 movements
+      if(g.truncated){
+        showToast("追溯範圍過大，已限制最多 150 個 Lot（可再優化成後端一次查詢）。","error");
+      }
+    }catch(_e0){
+      // fallback：不要直接全表下載；只取此 lot 的必要資料
+      try{
+        const [up, down, ships, av] = await Promise.all([
+          fetchLotRelationsByLot_(lotId, "UP").catch(() => []),
+          fetchLotRelationsByLot_(lotId, "DOWN").catch(() => []),
+          fetchShipmentItemsByLot_(lotId).catch(() => []),
+          fetchAvailByLot_(lotId).catch(() => 0)
+        ]);
+        traceRelations = ([]).concat(up || [], down || []);
+        traceShipmentItems = ships || [];
+        traceAvailByLotId = { [String(lotId || "").trim().toUpperCase()]: Number(av || 0) };
+        traceMovements = [];
+      }catch(_e1){
+        // 最後最後才全表（極端情況）
+        try{ traceRelations = await getAll("lot_relation").catch(() => []); }catch(_e2){ traceRelations = []; }
+        try{ traceShipmentItems = await getAll("shipment_item").catch(() => []); }catch(_e3){ traceShipmentItems = []; }
+        try{ traceMovements = await getAll("inventory_movement").catch(() => []); }catch(_e4){ traceMovements = []; }
+        traceAvailByLotId = {};
+      }
+    }
+  } finally {
+    if(runBtn) runBtn.disabled = false;
+    if(resetBtn) resetBtn.disabled = false;
+    if(logBtn) logBtn.disabled = false;
+    if(hint) hint.style.display = "none";
+  }
+
+  const lot = getLot(lotId);
 
   if(!lot){
     if(summaryEl) summaryEl.textContent = "找不到批次";

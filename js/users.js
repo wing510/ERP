@@ -16,9 +16,20 @@ function userRoleLabelZh_(role){
   const r = String(role || "").trim().toUpperCase();
   const map = {
     ADMIN: "管理員",
+    CEO: "CEO",
+    // 新代碼（兩字母縮寫）
+    FN: "財務",
+    GA: "總務",
+    SL: "業務",
+    WH: "倉管",
+    // 舊代碼（相容歷史資料）
+    FINANCE: "財務",
+    GENERAL_AFFAIRS: "總務",
+    SALES: "業務",
+    WAREHOUSE: "倉管",
     QA: "品保",
     OP: "作業",
-    SALES: "業務"
+    // 仍保留 ADMIN/CEO/QA/OP
   };
   return map[r] || String(role || "").trim() || "—";
 }
@@ -52,8 +63,10 @@ function resetUserForm(){
   if(id){ id.value = ""; id.disabled = false; }
   const name = document.getElementById("u_name");
   if(name) name.value = "";
+  const pw = document.getElementById("u_password");
+  if(pw) pw.value = "";
   const role = document.getElementById("u_role");
-  if(role) role.value = "OP";
+  if(role) role.value = "";
   const st = document.getElementById("u_status");
   if(st) st.value = "ACTIVE";
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("u_status");
@@ -65,12 +78,15 @@ function resetUserForm(){
 async function createUser(triggerEl){
   const user_id = (document.getElementById("u_id")?.value || "").trim();
   const user_name = (document.getElementById("u_name")?.value || "").trim();
-  const role = document.getElementById("u_role")?.value || "OP";
+  const password = (document.getElementById("u_password")?.value || "").trim();
+  const role = (document.getElementById("u_role")?.value || "").trim();
   const status = document.getElementById("u_status")?.value || "ACTIVE";
   const remark = (document.getElementById("u_remark")?.value || "").trim();
 
   if(!user_id) return showToast("User ID 必填","error");
   if(!user_name) return showToast("姓名必填","error");
+  if(!password) return showToast("密碼必填","error");
+  if(!role) return showToast("請選擇角色","error");
 
   showSaveHint(triggerEl);
   try {
@@ -80,6 +96,7 @@ async function createUser(triggerEl){
   await createRecord("user", {
     user_id,
     user_name,
+    password,
     role,
     status,
     remark,
@@ -103,6 +120,7 @@ async function loadUser(userId){
   id.value = u.user_id;
   id.disabled = true;
   document.getElementById("u_name").value = u.user_name || "";
+  try{ const pw = document.getElementById("u_password"); if(pw) pw.value = ""; }catch(_e){}
   document.getElementById("u_role").value = u.role || "OP";
   document.getElementById("u_status").value = u.status || "ACTIVE";
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("u_status");
@@ -115,16 +133,20 @@ async function updateUser(triggerEl){
   if(!userEditing) return showToast("請先載入使用者再更新","error");
   const user_id = (document.getElementById("u_id")?.value || "").trim();
   const user_name = (document.getElementById("u_name")?.value || "").trim();
-  const role = document.getElementById("u_role")?.value || "OP";
+  const passwordRaw = (document.getElementById("u_password")?.value || "");
+  const password = String(passwordRaw).trim();
+  const role = (document.getElementById("u_role")?.value || "").trim();
   const status = document.getElementById("u_status")?.value || "ACTIVE";
   const remark = (document.getElementById("u_remark")?.value || "").trim();
 
   if(!user_name) return showToast("姓名必填","error");
+  if(!role) return showToast("請選擇角色","error");
 
   showSaveHint(triggerEl);
   try {
   await updateRecord("user","user_id",user_id,{
     user_name,
+    ...(password ? { password } : {}),
     role,
     status,
     remark,

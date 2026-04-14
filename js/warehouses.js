@@ -40,7 +40,7 @@ function clearWarehouseForm(){
   const nameEl = document.getElementById("wh_name");
   if(nameEl) nameEl.value = "";
   const catEl = document.getElementById("wh_category");
-  if(catEl) catEl.value = "AMBIENT";
+  if(catEl) catEl.value = "";
   const stEl = document.getElementById("wh_status");
   if(stEl) stEl.value = "ACTIVE";
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("wh_status");
@@ -54,12 +54,13 @@ function clearWarehouseForm(){
 async function createWarehouse(triggerEl){
   const warehouse_id = (document.getElementById("wh_id")?.value || "").trim().toUpperCase();
   const warehouse_name = (document.getElementById("wh_name")?.value || "").trim();
-  const category = (document.getElementById("wh_category")?.value || "AMBIENT").trim().toUpperCase();
+  const category = (document.getElementById("wh_category")?.value || "").trim().toUpperCase();
   const address = (document.getElementById("wh_address")?.value || "").trim();
   const status = document.getElementById("wh_status")?.value || "ACTIVE";
   const remark = (document.getElementById("wh_remark")?.value || "").trim();
 
   if(!warehouse_id || !warehouse_name) return showToast("倉庫ID / 名稱 必填", "error");
+  if(!category) return showToast("請選擇類別", "error");
   if(warehouse_id.length > WAREHOUSE_RULES.idMax) return showToast("倉庫ID 長度過長", "error");
   if(!WAREHOUSE_RULES.idRegex.test(warehouse_id)) return showToast("倉庫ID 只能使用 A-Z 0-9 _ -", "error");
 
@@ -114,11 +115,12 @@ async function updateWarehouse(triggerEl){
   if(!whEditing) return showToast("請先載入倉庫再更新", "error");
   const warehouse_id = (document.getElementById("wh_id")?.value || "").trim().toUpperCase();
   const warehouse_name = (document.getElementById("wh_name")?.value || "").trim();
-  const category = (document.getElementById("wh_category")?.value || "AMBIENT").trim().toUpperCase();
+  const category = (document.getElementById("wh_category")?.value || "").trim().toUpperCase();
   const address = (document.getElementById("wh_address")?.value || "").trim();
   const status = document.getElementById("wh_status")?.value || "ACTIVE";
   const remark = (document.getElementById("wh_remark")?.value || "").trim();
   if(!warehouse_name) return showToast("倉庫名稱必填", "error");
+  if(!category) return showToast("請選擇類別", "error");
 
   showSaveHint(triggerEl);
   try{

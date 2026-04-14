@@ -102,7 +102,7 @@ var TERM_LABELS = {
   PROCESS_IN: "PROCESS_IN（加工入庫）",
   SHIP_OUT: "SHIP_OUT（出貨扣庫）",
   IN: "IN（入庫）",
-  OUT: "OUT（扣庫）",
+  OUT: "OUT（手動扣庫）",
   ADJUST: "ADJUST（調整）",
   PASSED: "PASSED（已通過）",
   FAILED: "FAILED（未通過）",

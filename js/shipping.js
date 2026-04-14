@@ -574,7 +574,7 @@ function initShipDropdowns(){
   const cSel = document.getElementById("ship_customer_id");
   if(cSel){
     cSel.innerHTML =
-      `<option value="">請選擇客戶</option>` +
+      `<option value="">請選擇</option>` +
       shipCustomers.map(c => {
         const name = String(c.customer_name || "").trim();
         const label = name || c.customer_id;

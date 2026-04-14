@@ -46,7 +46,7 @@
       <div class="form-group">
         <label>國家</label>
         <select id="s_country">
-          <option value="">（未選）</option>
+          <option value="">請選擇</option>
           <option value="台灣">台灣</option>
           <option value="中國">中國</option>
           <option value="日本">日本</option>
@@ -63,6 +63,40 @@
           <option value="澳洲">澳洲</option>
           <option value="其他">其他</option>
         </select>
+      </div>
+
+      <div class="form-group">
+        <label>供應商類型(可複選)</label>
+        <div class="erp-multiselect" data-ms="s_type">
+          <button type="button" class="erp-multiselect-btn" id="s_type_btn" aria-haspopup="listbox" aria-expanded="false">
+            <span id="s_type_text" class="erp-multiselect-text">請選擇</span>
+            <span class="erp-multiselect-caret" aria-hidden="true">▾</span>
+          </button>
+          <div id="s_type_group" class="erp-multiselect-panel" role="listbox" aria-multiselectable="true">
+            <label class="erp-checkset-item"><input type="checkbox" value="RM"> 原料</label>
+            <label class="erp-checkset-item"><input type="checkbox" value="WIP"> 半成品</label>
+            <label class="erp-checkset-item"><input type="checkbox" value="FG"> 成品</label>
+            <label class="erp-checkset-item"><input type="checkbox" value="PK"> 包材</label>
+            <label class="erp-checkset-item"><input type="checkbox" value="PROC"> 加工廠</label>
+            <label class="erp-checkset-item"><input type="checkbox" value="LOG"> 物流/倉儲</label>
+            <label class="erp-checkset-item"><input type="checkbox" value="OTHER"> 其他</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>可用流程(可複選)</label>
+        <div class="erp-multiselect" data-ms="s_flow">
+          <button type="button" class="erp-multiselect-btn" id="s_flow_btn" aria-haspopup="listbox" aria-expanded="false">
+            <span id="s_flow_text" class="erp-multiselect-text">請選擇</span>
+            <span class="erp-multiselect-caret" aria-hidden="true">▾</span>
+          </button>
+          <div id="s_flow_group" class="erp-multiselect-panel" role="listbox" aria-multiselectable="true">
+            <label class="erp-checkset-item"><input type="checkbox" value="PO"> 採購</label>
+            <label class="erp-checkset-item"><input type="checkbox" value="IMPORT"> 進口</label>
+            <label class="erp-checkset-item"><input type="checkbox" value="OUTSOURCE"> 委外加工</label>
+          </div>
+        </div>
       </div>
 
       <div class="form-group">
@@ -126,6 +160,8 @@
           <tr>
             <th onclick="sortSuppliers('supplier_id')">ID <span id="sort-supplierId"></span></th>
             <th onclick="sortSuppliers('supplier_name')">名稱 <span id="sort-supplierName"></span></th>
+            <th onclick="sortSuppliers('supplier_type')">類型</th>
+            <th onclick="sortSuppliers('supplier_flow')">流程</th>
             <th onclick="sortSuppliers('contact_person')">聯絡人 <span id="sort-contactPerson"></span></th>
             <th onclick="sortSuppliers('phone')">電話 <span id="sort-phone"></span></th>
             <th class="col-status" onclick="sortSuppliers('status')">狀態 <span id="sort-status"></span></th>

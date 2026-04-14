@@ -191,14 +191,20 @@ async function initPurchaseDropdowns(){
     getAll("supplier"),
     getAll("product")
   ]);
-  const suppliers = (suppliersRaw || []).filter(s => s.status === "ACTIVE");
+  const suppliers = (suppliersRaw || [])
+    .filter(s => s.status === "ACTIVE")
+    .filter(s => {
+      const flows = String(s.supplier_flow || "").toUpperCase();
+      // 未填 flow 視為可用（避免舊資料突然消失）
+      return !flows || flows.split(",").map(x=>x.trim()).includes("PO");
+    });
   const products = (productsRaw || []).filter(p => p.status === "ACTIVE");
   poProducts = products;
   poSuppliers = suppliers;
 
   if(supplierSelect){
     supplierSelect.innerHTML =
-      `<option value="">請選擇供應商</option>` +
+      `<option value="">請選擇</option>` +
       suppliers.map(s=>{
         const name = String(s.supplier_name || "").trim();
         const label = name || s.supplier_id;
@@ -208,7 +214,7 @@ async function initPurchaseDropdowns(){
 
   if(productSelect){
     productSelect.innerHTML =
-      `<option value="">請選擇產品</option>` +
+      `<option value="">請選擇</option>` +
       products.map(p=>{
         const name = String(p.product_name || "").trim();
         const spec = String(p.spec || "").trim();

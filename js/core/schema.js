@@ -36,6 +36,10 @@ const SCHEMA = {
     "email",
     "address",
     "country",
+    // 供應商類型（可多選）：RM/PK/WIP/FG/PROC/LOG/OTHER...（逗號分隔）
+    "supplier_type",
+    // 可用流程（可多選）：PO/IMPORT/OUTSOURCE...（逗號分隔）
+    "supplier_flow",
     "status",
     "remark",
     "created_by",
@@ -462,6 +466,8 @@ const SCHEMA = {
   user: [
     "user_id",
     "user_name",
+    // 密碼（供 login action 驗證；建議至少 6 碼）
+    "password",
     "role",
     "status",
     "remark",
@@ -504,7 +510,8 @@ const ENUMS = {
     status: ["OPEN", "POSTED", "CANCELLED"]
   },
   user: {
-    role: ["ADMIN", "QA", "OP", "SALES"],
+    // 角色代碼（新：兩字母縮寫；舊代碼保留相容歷史資料）
+    role: ["CEO", "FN", "GA", "OP", "QA", "SL", "WH", "ADMIN", "FINANCE", "GENERAL_AFFAIRS", "SALES", "WAREHOUSE"],
     status: ["ACTIVE", "INACTIVE"]
   },
   lot_relation: {

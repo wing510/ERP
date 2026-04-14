@@ -535,14 +535,20 @@ async function initImportDropdowns(){
 function initImportDropdownsWithData_(suppliers, products){
   const supplierSelect = document.getElementById("import_supplier_id");
   const productSelect = document.getElementById("import_item_product_id");
-  const supList = (suppliers || []).filter(s => (s.status || "ACTIVE") === "ACTIVE");
+  const supList = (suppliers || [])
+    .filter(s => (s.status || "ACTIVE") === "ACTIVE")
+    .filter(s => {
+      const flows = String(s.supplier_flow || "").toUpperCase();
+      // 未填 flow 視為可用（避免舊資料突然消失）
+      return !flows || flows.split(",").map(x=>x.trim()).includes("IMPORT");
+    });
   const prodList = (products || []).filter(p => (p.status || "ACTIVE") === "ACTIVE");
   importProducts = prodList;
   importSuppliers = supList;
 
   if(supplierSelect){
     supplierSelect.innerHTML =
-      `<option value="">請選擇供應商</option>` +
+      `<option value="">請選擇</option>` +
       supList.map(s=>{
         const name = String(s.supplier_name || "").trim();
         const label = name || s.supplier_id;
@@ -551,7 +557,7 @@ function initImportDropdownsWithData_(suppliers, products){
   }
   if(productSelect){
     productSelect.innerHTML =
-      `<option value="">請選擇產品</option>` +
+      `<option value="">請選擇</option>` +
       prodList.map(p=>{
         const name = String(p.product_name || "").trim();
         const spec = String(p.spec || "").trim();

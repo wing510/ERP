@@ -31,7 +31,11 @@ function mvRoleLabel_(role){
   if(r === "ADMIN") return "管理員";
   if(r === "QA") return "品保";
   if(r === "OP") return "作業";
-  if(r === "SALES") return "業務";
+  if(r === "SL" || r === "SALES") return "業務";
+  if(r === "WH" || r === "WAREHOUSE") return "倉管";
+  if(r === "FN" || r === "FINANCE") return "財務";
+  if(r === "GA" || r === "GENERAL_AFFAIRS") return "總務";
+  if(r === "CEO") return "CEO";
   return r || "未指定";
 }
 
@@ -226,26 +230,19 @@ function mvInitIssuedToDropdown_(){
   const sel = document.getElementById("mv_issued_to");
   if(!sel) return;
   const users = (mvUsers || []).filter(u => String(u.status || "").toUpperCase() === "ACTIVE");
-  const customers = (mvCustomers || []).filter(c => String(c.status || "").toUpperCase() === "ACTIVE");
   users.sort((a,b)=>String(a.user_name||"").localeCompare(String(b.user_name||"")));
-  customers.sort((a,b)=>String(a.customer_name||"").localeCompare(String(b.customer_name||"")));
 
   const userOpts = users.map(u => {
     const name = String(u.user_name || "").trim();
     const role = mvRoleLabel_(u.role);
-    const label = name ? `${role}-${name}` : `U:${u.user_id}`;
+    const id = String(u.user_id || "").trim();
+    const label = name ? `${role}-${name}(${id})` : `${role}(${id})`;
     return `<option value="U:${u.user_id}">${escapeMvHtml_(label)}</option>`;
-  }).join("");
-  const custOpts = customers.map(c => {
-    const name = String(c.customer_name || "").trim();
-    const label = name || c.customer_id;
-    return `<option value="C:${c.customer_id}">${escapeMvHtml_(label)}</option>`;
   }).join("");
 
   sel.innerHTML =
-    `<option value="">（未指定）</option>` +
-    (userOpts ? `<optgroup label="內部（Users）">${userOpts}</optgroup>` : "") +
-    (custOpts ? `<optgroup label="對外（Customers）">${custOpts}</optgroup>` : "");
+    `<option value="">請選擇</option>` +
+    userOpts;
 }
 
 function mvFindLot_(lotId){
@@ -516,6 +513,87 @@ function mvSelectLotFromRow(el){
   }catch(_e){}
 }
 
+function mvIsManualOutMovement_(m){
+  const mt = String(m?.movement_type || "").trim().toUpperCase();
+  if(mt !== "OUT") return false;
+  const sys = String(m?.system_remark || "");
+  if(sys.toLowerCase().includes("manual out")) return true;
+  const rt = String(m?.ref_type || "").trim().toUpperCase();
+  // 本頁 createMovement 會把 ref_type 設為用途（INTERNAL_USE/SAMPLE/...）；視為手動扣庫
+  if(["MANUAL","INTERNAL_USE","SAMPLE","SCRAP","OTHER"].includes(rt)) return true;
+  return false;
+}
+
+function mvReversalKey_(movementId){
+  return `REVERSAL:${String(movementId || "").trim()}`;
+}
+
+function mvHasReversal_(movementId){
+  const id = String(movementId || "").trim();
+  if(!id) return false;
+  const key = mvReversalKey_(id);
+  return (mvMovements || []).some(x => {
+    const mt = String(x?.movement_type || "").trim().toUpperCase();
+    const rt = String(x?.ref_type || "").trim().toUpperCase();
+    const rid = String(x?.ref_id || "").trim();
+    return mt === "ADJUST" && rt === "REVERSAL" && rid === key;
+  });
+}
+
+async function mvReverseManualOutFromList_(movementId, triggerEl){
+  const id = String(movementId || "").trim();
+  if(!id) return;
+  const m = (mvMovements || []).find(x => String(x?.movement_id || "").trim() === id) || null;
+  if(!m) return showToast("找不到異動紀錄", "error");
+  if(!mvIsManualOutMovement_(m)) return showToast("此筆非手動扣庫，請勿用回沖（請走對應流程作廢/回沖）", "error");
+  if(mvHasReversal_(id)) return showToast("此筆已回沖過", "warn");
+
+  const lotId = String(m.lot_id || "").trim();
+  const qtyNum = Number(m.qty || 0);
+  const unit = String(m.unit || "").trim();
+  const delta = Math.abs(qtyNum); // 原本 OUT 為負數；回沖 ADJUST 補回正數
+  if(!(delta > 0)) return showToast("此筆異動數量不正確，無法回沖", "error");
+
+  const reason = (prompt("回沖原因（會寫入備註，可供追查）") || "").trim();
+  if(!reason) return showToast("請先填寫回沖原因", "error");
+
+  showSaveHint(triggerEl || null);
+  try{
+    const actor = getCurrentUser();
+    const now = nowIso16();
+    const revKey = mvReversalKey_(id);
+    const remark = `回沖原因：${reason}（對應 ${id}）`;
+    const systemRemark = `Reverse Manual OUT: ${id}`;
+    await createRecord("inventory_movement", {
+      movement_id: generateId("MV"),
+      movement_type: "ADJUST",
+      lot_id: lotId,
+      product_id: String(m.product_id || "").trim(),
+      warehouse_id: String(m.warehouse_id || "").trim().toUpperCase(),
+      qty: String(delta),
+      unit: unit,
+      ref_type: "REVERSAL",
+      ref_id: revKey,
+      issued_to: String(m.issued_to || "").trim(),
+      remark: remark,
+      created_by: actor,
+      created_at: now,
+      updated_by: "",
+      updated_at: "",
+      system_remark: systemRemark
+    });
+    try{ localStorage.setItem("erp_inventory_dirty_at", String(Date.now())); }catch(_e){}
+
+    await refreshMovementData();
+    await initMovementLotDropdown();
+    mvInitIssuedToDropdown_();
+    renderMovementTable();
+    showToast("已回沖（ADJUST）");
+  }finally{
+    hideSaveHint();
+  }
+}
+
 async function initMovementLotDropdown(){
   const sel = document.getElementById("mv_lot");
   if(!sel) return;
@@ -533,7 +611,7 @@ async function initMovementLotDropdown(){
   });
 
   sel.innerHTML =
-    `<option value="">請選擇 Lot</option>` +
+    `<option value="">請選擇</option>` +
     lots.map(l => {
       const available = getMovementAvailableByLotId(l.lot_id);
       const text = mvFormatLotOptionText_(l, available);
@@ -796,7 +874,7 @@ function renderMovementTable(){
   });
 
   if(!rawFiltered.length){
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#64748b;padding:24px;">${
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#64748b;padding:24px;">${
       kw || qMt ? "沒有符合條件的異動紀錄。" : "尚無庫存異動紀錄。"
     }</td></tr>`;
     return;
@@ -863,6 +941,17 @@ function renderMovementTable(){
     const lidCell = escapeMvHtml_(lotIdRaw);
     const clickAttr = canClick ? `onclick="mvSelectLotFromRow(this)"` : "";
     const whText = mvWarehouseLabelById_(m.warehouse_id) || (m.warehouse_id ? String(m.warehouse_id) : "");
+    const mid = String(m.movement_id || "").trim();
+    const isManualOut = mvIsManualOutMovement_(m) && !!mid;
+    const canReverse = isManualOut && !mvHasReversal_(mid);
+    const reverseTitle = (function(){
+      if(!isManualOut) return "";
+      if(mvHasReversal_(mid)) return "已回沖過";
+      return "回沖：建立一筆反向 ADJUST（需填原因）";
+    })();
+    const reverseBtn = isManualOut
+      ? `<button type="button" class="btn-secondary" ${canReverse ? "" : "disabled"} title="${escapeMvAttr_(reverseTitle)}" onclick="event.stopPropagation();mvReverseManualOutFromList_('${escapeMvAttr_(mid)}', this)">回沖</button>`
+      : "";
     tbody.innerHTML += `
       <tr data-mv-lot-id="${lidAttr}" ${clickAttr} style="border-bottom:1px solid #eee;cursor:${rowCursor};opacity:${rowOp};" title="${titleLot}">
         <td>${lidCell}</td>
@@ -876,6 +965,7 @@ function renderMovementTable(){
           return escapeMvHtml_(mq) + " " + escapeMvHtml_(mu);
         })()}</td>
         <td>${escapeMvHtml_(m.created_at || "")}</td>
+        <td style="white-space:nowrap;">${reverseBtn}</td>
       </tr>
     `;
   }
@@ -894,7 +984,7 @@ function renderMovementTable(){
     }
     tbody.innerHTML += `
       <tr style="background:#f8fafc;">
-        <td colspan="6" style="font-weight:600;color:#334155;padding:10px 12px;">
+        <td colspan="7" style="font-weight:600;color:#334155;padding:10px 12px;">
           ${headerL1}（共 ${cnt} 筆異動）
         </td>
       </tr>
@@ -923,7 +1013,7 @@ function renderMovementTable(){
       const label = rk === "__EMPTY__" ? "—" : rk;
       tbody.innerHTML += `
         <tr style="background:#f1f5f9;">
-          <td colspan="6" style="font-weight:600;color:#475569;padding:8px 12px;font-size:13px;">
+          <td colspan="7" style="font-weight:600;color:#475569;padding:8px 12px;font-size:13px;">
             收貨單ID：${escapeMvHtml_(label)}（共 ${subCnt} 筆）
           </td>
         </tr>
