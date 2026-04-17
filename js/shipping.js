@@ -295,7 +295,7 @@ async function shipRefreshSoItemDropdown_(soId){
   const soiSel = document.getElementById("ship_so_item_id");
   if(!soiSel) return;
   if(!id){
-    soiSel.innerHTML = `<option value="">（不指定銷售品項）</option>`;
+    soiSel.innerHTML = `<option value="">請先選擇銷售單</option>`;
     try{ shipUpdateAllocModeUI_(); }catch(_e){}
     return;
   }
@@ -304,7 +304,7 @@ async function shipRefreshSoItemDropdown_(soId){
   shipSalesItems = Array.isArray(items) ? items : [];
 
   soiSel.innerHTML =
-    `<option value="">（不指定銷售品項）</option>` +
+    `<option value="">請選擇</option>` +
     (shipSalesItems || []).map(it => {
       const ordered = Number(it.order_qty || 0);
       const shipped = Number(it.shipped_qty || 0);
@@ -567,7 +567,7 @@ function initShipDropdowns(){
   if(soSel){
     const open = shipSalesOrders.filter(so => ["OPEN","PARTIAL"].includes(so.status));
     soSel.innerHTML =
-      `<option value="">（不指定銷售單）</option>` +
+      `<option value="">請選擇</option>` +
       open.map(so => `<option value="${so.so_id}">${so.so_id} - ${so.customer_id}</option>`).join("");
   }
 
@@ -584,7 +584,7 @@ function initShipDropdowns(){
 
   const soiSel = document.getElementById("ship_so_item_id");
   if(soiSel){
-    soiSel.innerHTML = `<option value="">（不指定銷售品項）</option>`;
+    soiSel.innerHTML = `<option value="">請先選擇銷售單</option>`;
   }
 }
 
@@ -706,11 +706,13 @@ async function updateSelectedShipItemRemark(triggerEl){
   if(shipReadOnlyDraft){
     showSaveHint(triggerEl || document.getElementById("shipPostButtonGroup"));
     try{
-      await updateRecord("shipment_item", "shipment_item_id", selId, {
-        remark,
+      await callAPI({
+        action: "update_shipment_item_remark",
+        shipment_item_id: selId,
+        remark: remark,
         updated_by: getCurrentUser(),
         updated_at: nowIso16()
-      });
+      }, { method: "POST" });
       const row = shipDraft.find(x => x.draft_id === selId);
       if(row) row.remark = remark;
       renderShipDraft();
@@ -753,7 +755,7 @@ function onSelectShipSO(){
   if(!soiSel) return;
 
   if(!soId){
-    soiSel.innerHTML = `<option value="">（不指定銷售品項）</option>`;
+    soiSel.innerHTML = `<option value="">請先選擇銷售單</option>`;
     return;
   }
 
@@ -764,7 +766,7 @@ function onSelectShipSO(){
 
   // 銷售品項改為按 SO 載入（非同步更新 dropdown）
   shipRefreshSoItemDropdown_(soId).catch(() => {
-    soiSel.innerHTML = `<option value="">（不指定銷售品項）</option>`;
+    soiSel.innerHTML = `<option value="">請先選擇銷售單</option>`;
   });
 }
 
@@ -792,6 +794,8 @@ async function addShipItemDraft(){
   const qty = Number(document.getElementById("ship_qty")?.value || 0);
   const remark = (document.getElementById("ship_item_remark")?.value || "").trim();
 
+  if(!String(so_id || "").trim()) return showToast("請選擇 銷售單", "error");
+  if(!String(so_item_id || "").trim()) return showToast("請選擇 銷售品項", "error");
   if(!qty || qty <= 0) return showToast("出貨數量需大於 0","error");
   const auto = shipIsAutoAlloc_();
   if(so_id){
@@ -801,10 +805,10 @@ async function addShipItemDraft(){
       if(Array.isArray(shipSalesItemsBySoId_?.[id])) shipSalesItems = shipSalesItemsBySoId_[id];
     }catch(_e){}
   }
-  const soi = so_item_id ? (shipSalesItems || []).find(x => x.so_item_id === so_item_id) : null;
+  const soi = (shipSalesItems || []).find(x => x.so_item_id === so_item_id) || null;
+  if(!soi) return showToast("找不到該銷售品項（請重新選擇銷售單/品項）", "error");
 
   if(auto){
-    if(!so_item_id || !soi) return showToast("自動分配需要先選擇 銷售品項", "error");
     const pid = String(soi.product_id || "").trim();
     if(!pid) return showToast("銷售品項缺少 product_id", "error");
     const remain = Math.max(0, Number(soi.order_qty||0) - Number(soi.shipped_qty||0));
@@ -1078,6 +1082,7 @@ async function postShipment(triggerEl){
   const remark = (document.getElementById("ship_remark")?.value || "").trim();
 
   if(!shipment_id) return showToast("出貨單ID 必填","error");
+  if(!String(so_id || "").trim()) return showToast("請選擇 銷售單","error");
   if(!customer_id) return showToast("請選擇客戶","error");
   if(!ship_date) return showToast("出貨日期必填","error");
   if(shipDraft.length === 0) return showToast("請至少新增 1 筆出貨明細","error");

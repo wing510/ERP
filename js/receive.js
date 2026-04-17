@@ -855,132 +855,36 @@ async function postReceipt(triggerEl) {
 
 async function postGoodsReceiptUnified(gr_id, receipt_date, warehouse, remark, qtys, lotDates) {
   const po_id = rcvSourceId;
-  const poHeader = await getOne("purchase_order", "po_id", po_id).catch(() => null);
-  if (!poHeader) return showToast("找不到此 PO", "error");
-  if (String(poHeader.status || "").toUpperCase() === "CANCELLED") {
-    return showToast("此 PO 已取消，不能建立收貨單", "error");
-  }
-  const allItems = await getAll("purchase_order_item");
-  const currentItems = (allItems || []).filter((it) => it.po_id === po_id);
-  const itemMap = new Map(currentItems.map((it) => [it.po_item_id, it]));
-
-  const gr = {
-    gr_id,
-    po_id,
-    receipt_date,
-    warehouse,
-    status: "OPEN",
-    remark,
-    created_by: getCurrentUser(),
-    created_at: nowIso16(),
-    updated_by: "",
-    updated_at: "",
-  };
-  await createRecord("goods_receipt", gr);
-
-  let created = 0;
+  const lines = [];
   for (let idx = 0; idx < rcvLines.length; idx++) {
     const qty = qtys[idx] || 0;
     if (qty <= 0) continue;
     const row = rcvLines[idx];
-    const it = itemMap.get(row.po_item_id);
-    if (!it) continue;
-    const ordered = Number(it.order_qty || 0);
-    const received = Number(it.received_qty || 0);
-    const remain = Math.max(0, ordered - received);
-    if (qty > remain) {
-      showToast(`項次 ${row.item_no}（${row.po_item_id}）超過剩餘可收`, "error");
-      continue;
-    }
-
-    const p = (rcvProducts || []).find((x) => x.product_id === row.product_id);
-    const lotType = p?.type || "RM";
-    const lot_id = generateId("LOT");
     const dates = lotDates?.[idx] || {};
-
-    await createRecord("lot", {
-      lot_id,
-      product_id: row.product_id,
-      warehouse_id: String(warehouse || "").trim().toUpperCase() || "MAIN",
-      source_type: "PURCHASE",
-      source_id: gr_id,
-      qty: String(qty),
-      unit: row.unit,
-      type: lotType,
-      status: "",
-      inventory_status: "ACTIVE",
-      received_date: receipt_date,
-      manufacture_date: dates.manufacture_date || "",
-      expiry_date: dates.expiry_date || "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: "",
-      remark: "",
-      system_remark: `PO:${po_id} / ITEM:${row.po_item_id}`,
-    });
-
-    await createRecord("inventory_movement", {
-      movement_id: generateId("MV"),
-      movement_type: "IN",
-      lot_id,
-      product_id: row.product_id,
-      warehouse_id: String(warehouse || "").trim().toUpperCase() || "MAIN",
-      qty: String(qty),
-      unit: row.unit,
-      ref_type: "GOODS_RECEIPT",
-      ref_id: gr_id,
-      remark: "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: "",
-      system_remark: `PO IN: ${po_id}`,
-    });
-
-    await createRecord("goods_receipt_item", {
-      gr_item_id: `GRI-${gr_id}-${String(created + 1).padStart(3, "0")}`,
-      gr_id,
-      po_id,
+    lines.push({
       po_item_id: row.po_item_id,
-      product_id: row.product_id,
       received_qty: String(qty),
       unit: row.unit,
-      lot_id,
-      remark: "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: "",
-    });
-
-    await updateRecord("purchase_order_item", "po_item_id", row.po_item_id, {
-      received_qty: String(received + qty),
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16(),
-    });
-    created++;
-  }
-
-  // 規則（與進口一致）：只要有「未作廢收貨單」→ PO 狀態視為 CLOSED
-  // - 避免手動改狀態造成不一致
-  // - 若本次沒有任何明細入庫（created=0），不改 PO 狀態，避免空收貨單誤關單
-  if (created > 0) {
-    const grAll = await getAll("goods_receipt").catch(() => []);
-    const hasActive = (grAll || []).some((r) =>
-      String(r.po_id || "") === String(po_id) &&
-      String(r.status || "").toUpperCase() !== "CANCELLED"
-    );
-    await updateRecord("purchase_order", "po_id", po_id, {
-      status: hasActive ? "CLOSED" : "OPEN",
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16(),
+      manufacture_date: dates.manufacture_date || "",
+      expiry_date: dates.expiry_date || ""
     });
   }
+  const res = await callAPI({
+    action: "post_goods_receipt_bundle",
+    gr_id,
+    po_id,
+    receipt_date,
+    warehouse,
+    remark,
+    lines_json: JSON.stringify(lines),
+    created_by: getCurrentUser(),
+    created_at: nowIso16()
+  }, { method: "POST" });
 
+  const created = Number(res?.data?.created_lots || 0);
   const poMsg = created === 0
-    ? "本次沒有可收數量（本次收貨未填或超過可收量），未產生 Lot。"
-    : `收貨完成：已產生 ${created} 個 Lot（PENDING）`;
+    ? "本次沒有可收數量，未產生 Lot。"
+    : `收貨完成：已產生 ${created} 個 Lot（待QA）`;
   showToast(poMsg);
   setRcvLotState_(created === 0 ? "批次狀態：未產生" : `批次狀態：已產生 — ${created} 個（待QA）`, created === 0 ? "warn" : "ok");
   resetRcvForm();
@@ -989,116 +893,36 @@ async function postGoodsReceiptUnified(gr_id, receipt_date, warehouse, remark, q
 
 async function postImportReceiptUnified(import_receipt_id, receipt_date, warehouse, remark, qtys, lotDates) {
   const import_doc_id = rcvSourceId;
-  const doc = await getOne("import_document", "import_doc_id", import_doc_id).catch(() => null);
-  if (!doc) return showToast("找不到此報單", "error");
-  if (String(doc.status || "").toUpperCase() === "CANCELLED") {
-    return showToast("此報單已取消，不能建立收貨單", "error");
-  }
-  const docNo = doc.import_no || "";
-
-  const receipt = {
-    import_receipt_id,
-    import_doc_id,
-    receipt_date,
-    warehouse,
-    status: "OPEN",
-    remark,
-    created_by: getCurrentUser(),
-    created_at: nowIso16(),
-    updated_by: "",
-    updated_at: "",
-  };
-  await createRecord("import_receipt", receipt);
-
-  let created = 0;
+  const lines = [];
   for (let idx = 0; idx < rcvLines.length; idx++) {
     const qty = qtys[idx] || 0;
     if (qty <= 0) continue;
     const row = rcvLines[idx];
-    if (qty > row.remaining) {
-      showToast(`項次 ${row.item_no}（${row.import_item_id}）超過剩餘可收`, "error");
-      continue;
-    }
-
-    const p = (rcvProducts || []).find((x) => x.product_id === row.product_id);
-    const lotType = p?.type || "RM";
-    const lot_id = generateId("LOT");
     const dates = lotDates?.[idx] || {};
-
-    await createRecord("lot", {
-      lot_id,
-      product_id: row.product_id,
-      warehouse_id: String(warehouse || "").trim().toUpperCase() || "MAIN",
-      source_type: "IMPORT",
-      source_id: import_receipt_id,
-      qty: String(qty),
-      unit: row.unit,
-      type: lotType,
-      status: "",
-      inventory_status: "ACTIVE",
-      received_date: receipt_date,
-      manufacture_date: dates.manufacture_date || "",
-      expiry_date: dates.expiry_date || "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: "",
-      remark: "",
-      system_remark: `Import: ${import_doc_id}${docNo ? " / " + docNo : ""}`.trim(),
-    });
-
-    await createRecord("inventory_movement", {
-      movement_id: generateId("MV"),
-      movement_type: "IN",
-      lot_id,
-      product_id: row.product_id,
-      warehouse_id: String(warehouse || "").trim().toUpperCase() || "MAIN",
-      qty: String(qty),
-      unit: row.unit,
-      ref_type: "IMPORT_RECEIPT",
-      ref_id: import_receipt_id,
-      remark: "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: "",
-      system_remark: `Import IN: ${import_doc_id}`,
-    });
-
-    await createRecord("import_receipt_item", {
-      import_receipt_item_id: `IRI-${import_receipt_id}-${String(created + 1).padStart(3, "0")}`,
-      import_receipt_id,
+    lines.push({
       import_item_id: row.import_item_id || "",
-      product_id: row.product_id,
       received_qty: String(qty),
       unit: row.unit,
-      lot_id,
-      remark: "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: "",
-    });
-    created++;
-  }
-
-  // 規則：只要有「未作廢收貨單」→ 報單狀態視為 CLOSED
-  if (created > 0) {
-    const irAll = await getAll("import_receipt").catch(() => []);
-    const hasActive = (irAll || []).some((r) =>
-      String(r.import_doc_id || "") === String(import_doc_id) &&
-      String(r.status || "").toUpperCase() !== "CANCELLED"
-    );
-    await updateRecord("import_document", "import_doc_id", import_doc_id, {
-      status: hasActive ? "CLOSED" : "OPEN",
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16(),
+      manufacture_date: dates.manufacture_date || "",
+      expiry_date: dates.expiry_date || ""
     });
   }
+  const res = await callAPI({
+    action: "post_import_receipt_bundle",
+    import_receipt_id,
+    import_doc_id,
+    receipt_date,
+    warehouse,
+    remark,
+    lines_json: JSON.stringify(lines),
+    created_by: getCurrentUser(),
+    created_at: nowIso16()
+  }, { method: "POST" });
 
+  const created = Number(res?.data?.created_lots || 0);
   const irMsg = created === 0
-    ? "本次沒有可收數量（本次收貨未填或超過可收量），未產生 Lot。"
-    : `進口收貨完成：已產生 ${created} 個 Lot（PENDING）`;
+    ? "本次沒有可收數量，未產生 Lot。"
+    : `進口收貨完成：已產生 ${created} 個 Lot（待QA）`;
   showToast(irMsg);
   resetRcvForm();
   await onRcvSourceTypeChange();
@@ -1204,265 +1028,42 @@ async function voidPostedReceipt(triggerEl, explicitReceiptId) {
  * 僅當各 Lot 之 movements 加總仍 ≥ 該筆入庫量（未被下游扣用）時允許。
  */
 async function cancelGoodsReceiptUnified(gr_id, triggerEl, voidCtx) {
-  const gr = await getOne("goods_receipt", "gr_id", gr_id).catch(() => null);
-  if (!gr) return showToast("找不到收貨單", "error");
-  if (String(gr.status || "").toUpperCase() === "CANCELLED") return showToast("此收貨單已作廢", "error");
-  if (String(gr.po_id || "") !== String(rcvSourceId)) return showToast("收貨單與目前選擇的 PO 不符", "error");
-
-  const [voidData, itemsAll] = await Promise.all([
-    rcvFetchVoidData_({ refreshMovements: true }),
-    getAll("goods_receipt_item").catch(() => [])
-  ]);
-  const movements = voidData.movements;
-  const availMap = voidData.availMap;
-  const availOk = voidData.availOk;
-  const items = (itemsAll || []).filter((x) => x.gr_id === gr_id);
-  if (items.length === 0) return showToast("無收貨明細，無法作廢", "error");
-
-  const dupCancel = (movements || []).some(
-    (m) => String(m.ref_type || "") === "GOODS_RECEIPT_CANCEL" && String(m.ref_id || "") === gr_id
-  );
-  if (dupCancel) return showToast("此收貨單已有作廢沖銷記錄", "error");
-
-  const plan = [];
-  for (const it of items) {
-    const lotId = it.lot_id || "";
-    const inMv = (movements || []).find(
-      (m) =>
-        m.lot_id === lotId &&
-        String(m.movement_type || "").toUpperCase() === "IN" &&
-        String(m.ref_type || "").toUpperCase() === "GOODS_RECEIPT" &&
-        String(m.ref_id || "") === gr_id
-    );
-    if (!inMv) {
-      return showToast(`批號 ${lotId}：找不到對應之採購入庫異動（IN），無法作廢`, "error");
-    }
-    const inQty = Math.abs(Number(inMv.qty || 0));
-    const net = rcvNetQtyForLot_(movements, lotId, availMap, availOk);
-    if (net + 1e-9 < inQty) {
-      return showToast(
-        `批號 ${lotId}：可用量不足（已有出庫／加工／調整等），無法作廢整張收貨單`,
-        "error"
-      );
-    }
-    plan.push({ it, inMv, lotId, inQty });
-  }
-
-  if (!voidCtx) {
-    const ok = confirm(
-      `確定作廢採購收貨單 ${gr_id}？\n\n將以庫存調整（ADJUST）沖銷入庫、Lot 標為不可用（VOID），並回退 PO 已收數量。`
-    );
-    if (!ok) return;
-  }
-
-  const adjRemark = voidCtx ? rcvBuildVoidAuditLine_(voidCtx) : "作廢沖銷";
-  const voidTag = voidCtx ? ` | VOID:${voidCtx.reasonCode}` : "";
-
   showSaveHint(triggerEl);
-  try {
-    for (const { inMv, lotId, inQty } of plan) {
-      await createRecord("inventory_movement", {
-        movement_id: generateId("MV"),
-        movement_type: "ADJUST",
-        lot_id: lotId,
-        product_id: inMv.product_id || "",
-        warehouse_id: String(gr.warehouse || inMv.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
-        qty: String(-Math.abs(inQty)),
-        unit: inMv.unit || "",
-        ref_type: "GOODS_RECEIPT_CANCEL",
-        ref_id: gr_id,
-        remark: adjRemark,
-        created_by: getCurrentUser(),
-        created_at: nowIso16(),
-        updated_by: "",
-        updated_at: "",
-        system_remark: `REVERSAL(IN) of ${inMv.movement_id || ""}${voidTag}`,
-      });
-    }
-    for (const { it } of plan) {
-      await updateRecord("lot", "lot_id", it.lot_id, {
-        inventory_status: "VOID",
-        status: "REJECTED",
-        updated_by: getCurrentUser(),
-        updated_at: nowIso16(),
-      });
-    }
-    for (const it of items) {
-      const poi = await getOne("purchase_order_item", "po_item_id", it.po_item_id).catch(() => null);
-      if (!poi) continue;
-      const dec = Number(it.received_qty || 0);
-      const next = Math.max(0, Number(poi.received_qty || 0) - dec);
-      await updateRecord("purchase_order_item", "po_item_id", it.po_item_id, {
-        received_qty: String(next),
-        updated_by: getCurrentUser(),
-        updated_at: nowIso16(),
-      });
-    }
-
-    // 與進口一致：只要有「未作廢收貨單」→ PO 狀態視為 CLOSED；否則 OPEN（除非 PO 已取消）
-    const po_id = gr.po_id;
-    try{
-      const po = await getOne("purchase_order", "po_id", po_id).catch(() => null);
-      if (po && String(po.status || "").toUpperCase() !== "CANCELLED") {
-        const grAll = await getAll("goods_receipt").catch(() => []);
-        const hasActive = (grAll || []).some((r) =>
-          String(r.po_id || "") === String(po_id) &&
-          String(r.status || "").toUpperCase() !== "CANCELLED"
-        );
-        await updateRecord("purchase_order", "po_id", po_id, {
-          status: hasActive ? "CLOSED" : "OPEN",
-          updated_by: getCurrentUser(),
-          updated_at: nowIso16(),
-        });
-      }
-    }catch(_e){}
-
-    const voidLine = voidCtx ? rcvFormatVoidRemarkForReceipt_(voidCtx) : "";
-    const prevRemark = String(gr.remark || "").trim();
-    const nextRemark = voidLine ? (prevRemark ? `${prevRemark}\n${voidLine}` : voidLine) : prevRemark;
-
-    await updateRecord("goods_receipt", "gr_id", gr_id, {
-      status: "CANCELLED",
-      ...(voidLine ? { remark: nextRemark || voidLine } : {}),
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16(),
-    });
-
+  try{
+    await callAPI({
+      action: "cancel_goods_receipt_bundle",
+      gr_id: gr_id,
+      void_reason_code: voidCtx?.reasonCode || "",
+      void_reason_label: voidCtx?.reasonLabel || "",
+      void_reason_note: voidCtx?.reasonNote || "",
+      updated_by: getCurrentUser()
+    }, { method: "POST" });
     showToast("作廢完成：已沖銷入庫、Lot 已標示 VOID，並回退 PO 已收");
     await refreshRcvVoidReceiptOptions();
     await onRcvSourceSelect();
     const ppGr = document.getElementById("rcvPostedPanel");
     if (ppGr && ppGr.open) await renderRcvPostedReceipts_();
-  } finally {
-    hideSaveHint();
-  }
+  } finally { hideSaveHint(); }
 }
 
 /**
  * 作廢進口收貨：同上，但不涉及 PO（進口已收由 import_receipt_item 匯總）。
  */
 async function cancelImportReceiptUnified(import_receipt_id, triggerEl, voidCtx) {
-  const ir = await getOne("import_receipt", "import_receipt_id", import_receipt_id).catch(() => null);
-  if (!ir) return showToast("找不到進口收貨單", "error");
-  if (String(ir.status || "").toUpperCase() === "CANCELLED") return showToast("此收貨單已作廢", "error");
-  if (String(ir.import_doc_id || "") !== String(rcvSourceId)) {
-    return showToast("收貨單與目前選擇的報單不符", "error");
-  }
-
-  const [voidDataIr, itemsAll] = await Promise.all([
-    rcvFetchVoidData_({ refreshMovements: true }),
-    getAll("import_receipt_item").catch(() => [])
-  ]);
-  const movements = voidDataIr.movements;
-  const availMap = voidDataIr.availMap;
-  const availOk = voidDataIr.availOk;
-  const items = (itemsAll || []).filter((x) => x.import_receipt_id === import_receipt_id);
-  if (items.length === 0) return showToast("無收貨明細，無法作廢", "error");
-
-  const dupCancel = (movements || []).some(
-    (m) => String(m.ref_type || "") === "IMPORT_RECEIPT_CANCEL" && String(m.ref_id || "") === import_receipt_id
-  );
-  if (dupCancel) return showToast("此收貨單已有作廢沖銷記錄", "error");
-
-  const plan = [];
-  for (const it of items) {
-    const lotId = it.lot_id || "";
-    const inMv = (movements || []).find(
-      (m) =>
-        m.lot_id === lotId &&
-        String(m.movement_type || "").toUpperCase() === "IN" &&
-        String(m.ref_type || "").toUpperCase() === "IMPORT_RECEIPT" &&
-        String(m.ref_id || "") === import_receipt_id
-    );
-    if (!inMv) {
-      return showToast(`批號 ${lotId}：找不到對應之進口入庫異動（IN），無法作廢`, "error");
-    }
-    const inQty = Math.abs(Number(inMv.qty || 0));
-    const net = rcvNetQtyForLot_(movements, lotId, availMap, availOk);
-    if (net + 1e-9 < inQty) {
-      return showToast(
-        `批號 ${lotId}：可用量不足（已有出庫／加工／調整等），無法作廢整張收貨單`,
-        "error"
-      );
-    }
-    plan.push({ it, inMv, lotId, inQty });
-  }
-
-  if (!voidCtx) {
-    const ok = confirm(
-      `確定作廢進口收貨單 ${import_receipt_id}？\n\n將以庫存調整（ADJUST）沖銷入庫，並將 Lot 標為不可用（VOID）。`
-    );
-    if (!ok) return;
-  }
-
-  const adjRemark = voidCtx ? rcvBuildVoidAuditLine_(voidCtx) : "作廢沖銷";
-  const voidTag = voidCtx ? ` | VOID:${voidCtx.reasonCode}` : "";
-
   showSaveHint(triggerEl);
-  try {
-    for (const { inMv, lotId, inQty } of plan) {
-      await createRecord("inventory_movement", {
-        movement_id: generateId("MV"),
-        movement_type: "ADJUST",
-        lot_id: lotId,
-        product_id: inMv.product_id || "",
-        warehouse_id: String(ir.warehouse || inMv.warehouse_id || "MAIN").trim().toUpperCase() || "MAIN",
-        qty: String(-Math.abs(inQty)),
-        unit: inMv.unit || "",
-        ref_type: "IMPORT_RECEIPT_CANCEL",
-        ref_id: import_receipt_id,
-        remark: adjRemark,
-        created_by: getCurrentUser(),
-        created_at: nowIso16(),
-        updated_by: "",
-        updated_at: "",
-        system_remark: `REVERSAL(IN) of ${inMv.movement_id || ""}${voidTag}`,
-      });
-    }
-    for (const { it } of plan) {
-      await updateRecord("lot", "lot_id", it.lot_id, {
-        inventory_status: "VOID",
-        status: "REJECTED",
-        updated_by: getCurrentUser(),
-        updated_at: nowIso16(),
-      });
-    }
-
-    const voidLineIr = voidCtx ? rcvFormatVoidRemarkForReceipt_(voidCtx) : "";
-    const prevIrRemark = String(ir.remark || "").trim();
-    const nextIrRemark = voidLineIr ? (prevIrRemark ? `${prevIrRemark}\n${voidLineIr}` : voidLineIr) : prevIrRemark;
-
-    await updateRecord("import_receipt", "import_receipt_id", import_receipt_id, {
-      status: "CANCELLED",
-      ...(voidLineIr ? { remark: nextIrRemark || voidLineIr } : {}),
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16(),
-    });
-
-    // 規則：若此報單已無任何「未作廢收貨單」→ 報單狀態回到 OPEN（除非報單已取消）
-    try{
-      const docId = ir.import_doc_id;
-      const doc = await getOne("import_document", "import_doc_id", docId).catch(() => null);
-      if (doc && String(doc.status || "").toUpperCase() !== "CANCELLED") {
-        const irAll = await getAll("import_receipt").catch(() => []);
-        const hasActive = (irAll || []).some((r) =>
-          String(r.import_doc_id || "") === String(docId) &&
-          String(r.status || "").toUpperCase() !== "CANCELLED"
-        );
-        await updateRecord("import_document", "import_doc_id", docId, {
-          status: hasActive ? "CLOSED" : "OPEN",
-          updated_by: getCurrentUser(),
-          updated_at: nowIso16(),
-        });
-      }
-    }catch(_e){}
-
+  try{
+    await callAPI({
+      action: "cancel_import_receipt_bundle",
+      import_receipt_id: import_receipt_id,
+      void_reason_code: voidCtx?.reasonCode || "",
+      void_reason_label: voidCtx?.reasonLabel || "",
+      void_reason_note: voidCtx?.reasonNote || "",
+      updated_by: getCurrentUser()
+    }, { method: "POST" });
     showToast("作廢完成：已沖銷入庫、Lot 已標示 VOID");
     await refreshRcvVoidReceiptOptions();
     await onRcvSourceSelect();
     const ppIr = document.getElementById("rcvPostedPanel");
     if (ppIr && ppIr.open) await renderRcvPostedReceipts_();
-  } finally {
-    hideSaveHint();
-  }
+  } finally { hideSaveHint(); }
 }

@@ -166,9 +166,14 @@ async function createSupplier(triggerEl){
   const supplier_id = s_id.value.trim().toUpperCase();
   s_id.value = supplier_id;
   const supplier_name = s_name.value.trim();
+  const country = s_country.value.trim();
+  const supplier_type = supplierCsvFromGroup_("s_type_group");
+  const remark = s_remark.value.trim();
 
   if(!supplier_id || !supplier_name)
     return showToast("ID / 名稱 必填","error");
+  if((country === "其他" || String(supplier_type || "").split(",").map(x=>x.trim().toUpperCase()).includes("OTHER")) && !remark)
+    return showToast("國家/供應商類型 選「其他」時，請填寫備註/原因","error");
 
   if(supplier_id.length > SUPPLIER_RULES.idMax)
     return showToast("ID 長度過長（最多 30 字元）","error");
@@ -189,11 +194,11 @@ async function createSupplier(triggerEl){
     phone: s_phone.value.trim(),
     email: s_email.value.trim(),
     address: s_address.value.trim(),
-    country: s_country.value.trim(),
-    supplier_type: supplierCsvFromGroup_("s_type_group"),
+    country,
+    supplier_type,
     supplier_flow: supplierCsvFromGroup_("s_flow_group"),
     status: s_status.value,
-    remark: s_remark.value.trim(),
+    remark,
     created_by: getCurrentUser(),
     created_at: nowIso16(),
     updated_by: "",
@@ -225,6 +230,11 @@ async function updateSupplier(triggerEl){
     return showToast("找不到供應商","error");
 
   const newStatus = s_status.value;
+  const country = s_country.value.trim();
+  const supplier_type = supplierCsvFromGroup_("s_type_group");
+  const remark = s_remark.value.trim();
+  if((country === "其他" || String(supplier_type || "").split(",").map(x=>x.trim().toUpperCase()).includes("OTHER")) && !remark)
+    return showToast("國家/供應商類型 選「其他」時，請填寫備註/原因","error");
 
   // 停用策略建議：允許停用，但若已被使用則提醒確認（不再硬性阻擋）
   if(supplier.status==="ACTIVE" && newStatus==="INACTIVE"){
@@ -252,11 +262,11 @@ async function updateSupplier(triggerEl){
     phone: s_phone.value.trim(),
     email: s_email.value.trim(),
     address: s_address.value.trim(),
-    country: s_country.value.trim(),
-    supplier_type: supplierCsvFromGroup_("s_type_group"),
+    country,
+    supplier_type,
     supplier_flow: supplierCsvFromGroup_("s_flow_group"),
     status: newStatus,
-    remark: s_remark.value.trim(),
+    remark,
     updated_by: getCurrentUser(),
     updated_at: nowIso16()
   };

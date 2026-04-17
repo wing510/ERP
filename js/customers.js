@@ -44,9 +44,13 @@ async function createCustomer(triggerEl){
   c_id.value = customer_id;
   const customer_name = c_name.value.trim();
   const category = (document.getElementById("c_category")?.value || "").trim();
+  const country = c_country.value.trim();
+  const remark = c_remark.value.trim();
 
   if(!customer_id || !customer_name)
     return showToast("ID / 名稱 必填","error");
+  if((category === "其他" || country === "其他") && !remark)
+    return showToast("分類/國家 選「其他」時，請填寫備註/原因","error");
 
   if(customer_id.length > CUSTOMER_RULES.idMax)
     return showToast("ID 長度過長（最多 30 字元）","error");
@@ -68,9 +72,9 @@ async function createCustomer(triggerEl){
     phone: c_phone.value.trim(),
     email: c_email.value.trim(),
     address: c_address.value.trim(),
-    country: c_country.value.trim(),
+    country,
     status: c_status.value,
-    remark: c_remark.value.trim(),
+    remark,
     created_by: getCurrentUser(),
     created_at: nowIso16(),
     updated_by: "",
@@ -102,6 +106,11 @@ async function updateCustomer(triggerEl){
     return showToast("找不到客戶","error");
 
   const newStatus = c_status.value;
+  const category = (document.getElementById("c_category")?.value || "").trim();
+  const country = c_country.value.trim();
+  const remark = c_remark.value.trim();
+  if((category === "其他" || country === "其他") && !remark)
+    return showToast("分類/國家 選「其他」時，請填寫備註/原因","error");
 
   // 停用策略建議：允許停用，但若已被使用則提醒確認（不再硬性阻擋）
   if(customer.status==="ACTIVE" && newStatus==="INACTIVE"){
@@ -123,14 +132,14 @@ async function updateCustomer(triggerEl){
 
   const newData = {
     customer_name: c_name.value.trim(),
-    category: (document.getElementById("c_category")?.value || "").trim(),
+    category,
     contact_person: c_contact.value.trim(),
     phone: c_phone.value.trim(),
     email: c_email.value.trim(),
     address: c_address.value.trim(),
-    country: c_country.value.trim(),
+    country,
     status: newStatus,
-    remark: c_remark.value.trim(),
+    remark,
     updated_by: getCurrentUser(),
     updated_at: nowIso16()
   };

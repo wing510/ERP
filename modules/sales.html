@@ -18,18 +18,41 @@
       </div>
 
       <div class="form-group">
+        <label>類型/用途 *</label>
+        <select id="so_type">
+          <option value="NORMAL">正常訂單</option>
+          <option value="SAMPLE">樣品</option>
+          <option value="GIFT">贈品</option>
+          <option value="RESHIP">補寄</option>
+          <option value="OTHER">其他</option>
+        </select>
+      </div>
+
+      <div class="form-group">
         <label>客戶 *</label>
         <select id="so_customer_id"></select>
       </div>
 
       <div class="form-group">
-        <label>銷售人員</label>
+        <label>銷售人員 *</label>
         <select id="so_salesperson_id"></select>
       </div>
 
       <div class="form-group">
         <label>下單日期 *</label>
         <input type="date" id="so_order_date">
+      </div>
+
+      <div id="soReshipRefBlock" class="form-group" style="display:none;grid-column:span 3;">
+        <label>補寄參考（原 SO / 原出貨） *</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <select id="so_reship_ref_type" style="min-width:180px;">
+            <option value="">請選擇</option>
+            <option value="SO">原銷售單（SO）</option>
+            <option value="SHIPMENT">原出貨單（SHIP）</option>
+          </select>
+          <input type="text" id="so_reship_ref_id" placeholder="請輸入原 SO ID 或原出貨單 ID" style="flex:1;min-width:240px;">
+        </div>
       </div>
 
       <div class="form-group full-width">

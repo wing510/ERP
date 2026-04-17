@@ -1068,7 +1068,13 @@ async function updateSelectedProcInputRemark(){
   setProcRowBusy_("input", inId, "儲存中…");
   setProcActionInlineHint_("updateSelectedProcInputRemark()", "儲存中，請稍等…");
   try{
-    await updateRecord("process_order_input","process_input_id",inId,{ remark });
+    await callAPI({
+      action: "update_process_order_input_remark",
+      process_input_id: inId,
+      remark: remark,
+      updated_by: getCurrentUser(),
+      updated_at: nowIso16()
+    }, { method: "POST" });
     invalidateProcCaches_();
     await loadProcMasterData();
     await loadProcessOrder(procId);
@@ -1092,7 +1098,13 @@ async function updateSelectedProcOutputRemark(){
   setProcActionInlineHint_("updateSelectedProcOutputRemark()", "儲存中，請稍等…");
   try{
     // 更新回收明細備註
-    await updateRecord("process_order_output","process_output_id",outId,{ remark });
+    await callAPI({
+      action: "update_process_order_output_remark",
+      process_output_id: outId,
+      remark: remark,
+      updated_by: getCurrentUser(),
+      updated_at: nowIso16()
+    }, { method: "POST" });
 
     // 同步更新該產出 lot 的備註（避免兩邊不同步）
     const outputsAll = await getAll("process_order_output").catch(()=>[]);
@@ -1531,22 +1543,17 @@ async function createProcessOrderOnly(triggerEl){
 
   showSaveHint(triggerEl);
   try {
-    const existed = await getOne("process_order","process_order_id",process_order_id).catch(()=>null);
-    if(existed) return showToast("加工單ID 已存在，請改用載入後操作。","error");
-
-    await createRecord("process_order", {
+    await callAPI({
+      action: "create_process_order_cmd",
       process_order_id,
       process_type,
       ...(source_type ? { source_type } : {}),
       supplier_id,
       planned_date,
-      status: "OPEN",
       remark,
       created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: ""
-    });
+      created_at: nowIso16()
+    }, { method: "POST" });
     await renderProcessOrders();
     await loadProcessOrder(process_order_id);
     showToast("加工單已建立（OPEN）");
@@ -2078,13 +2085,15 @@ async function updateProcessOrderHeader(triggerEl){
   const source_type = document.getElementById("proc_source_type")?.value || "";
   const remark = (document.getElementById("proc_remark")?.value || "").trim();
 
-  await updateRecord("process_order","process_order_id",id,{
+  await callAPI({
+    action: "update_process_order_header_cmd",
+    process_order_id: id,
     planned_date,
-    ...(source_type ? { source_type } : { source_type: null }),
+    // command 只允許改 planned_date/remark；source_type 仍保留在 UI，但不透過 header cmd 修改
     remark,
     updated_by: getCurrentUser(),
     updated_at: nowIso16()
-  });
+  }, { method: "POST" });
 
   await renderProcessOrders();
   await loadProcessOrder(id);

@@ -18,6 +18,25 @@
 
       <div class="mv-editor-fields mv-editor-fields-full mv-row-meta" style="margin-top:10px;">
         <div class="form-group">
+          <label>用途 *</label>
+          <select id="mv_purpose">
+            <option value="">請選擇</option>
+            <option value="INTERNAL_USE">內部領用</option>
+            <option value="SAMPLE">樣品</option>
+            <option value="SCRAP">報廢</option>
+            <option value="OTHER">其他</option>
+            <option value="TRANSFER">轉倉</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>給誰（領用/交付） *</label>
+          <select id="mv_issued_to">
+            <option value="">請選擇</option>
+          </select>
+        </div>
+
+        <div class="form-group">
           <label>扣庫數量 *</label>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <div class="erp-input-with-suffix" style="flex:1;min-width:140px;">
@@ -32,30 +51,12 @@
         <div class="form-group">
           <label>轉倉到</label>
           <select id="mv_transfer_wh">
-            <option value="">（不轉倉）</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label>用途</label>
-          <select id="mv_purpose">
-            <option value="">請選擇</option>
-            <option value="INTERNAL_USE">內部領用</option>
-            <option value="SAMPLE">樣品</option>
-            <option value="SCRAP">報廢</option>
-            <option value="OTHER">其他</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label>給誰（領用/交付）</label>
-          <select id="mv_issued_to">
             <option value="">請選擇</option>
           </select>
         </div>
 
         <div class="form-group" style="grid-column:1/-1;">
-          <label>備註</label>
+          <label>原因 *</label>
           <input type="text" id="mv_remark">
         </div>
       </div>
@@ -63,6 +64,7 @@
       <div class="button-group mv-button-group">
         <button class="btn-primary" id="mv_create_btn" onclick="createMovement(this)">確認扣庫</button>
         <button class="btn-primary" id="mv_transfer_btn" onclick="transferMovement(this)">轉倉</button>
+        <button class="btn-secondary" type="button" onclick="clearMovementForm()">清除</button>
         <button class="btn-secondary" onclick="movementsInit()">重新整理</button>
         <button class="btn-secondary" onclick="openLogs('inventory_movement','', 'inventory')">Log</button>
       </div>

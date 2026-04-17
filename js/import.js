@@ -707,6 +707,7 @@ function addImportItemDraft(){
   if(!lot_id) return showToast("批號（Inv No）必填，請依文件發票號填寫","error");
   if(!declared_qty || declared_qty <= 0) return showToast("數量需大於 0","error");
   if(!declared_unit) return showToast("找不到產品單位，請先確認產品主檔","error");
+  if(origin_country === "其他" && !remark) return showToast("原產地選「其他」時，請填寫備註/原因", "error");
 
   importItemsDraft.push({
     draft_id: "DRAFT-" + Date.now() + "-" + Math.floor(Math.random()*1000),
@@ -962,6 +963,19 @@ function resetImportReceiptForm(){
 }
 
 async function createImportReceiptAndLots(){
+  // 舊版「進口收貨 + 建 Lot + 建 movement」流程已停用（避免分段寫入造成資料不同步/可繞過 bundle）
+  // 請改用：到報單列表按「收貨」→ 進入 Receive 模組，用「產生批次」走後端 bundle 過帳。
+  try{
+    const docId = (document.getElementById("import_doc_id")?.value || "").trim().toUpperCase();
+    if(docId){
+      try{ window.__ERP_PREFILL_RCV_SOURCE_TYPE__ = "IMPORT"; }catch(_e1){}
+      try{ window.__ERP_PREFILL_RCV_SOURCE_ID__ = docId; }catch(_e2){}
+    }
+  }catch(_e3){}
+  showToast("此舊收貨流程已停用，請改用 Receive →「產生批次」進行收貨過帳。", "error");
+  try{ if(typeof navigate === "function") navigate("receive"); }catch(_e4){}
+  return;
+
   const import_doc_id = (document.getElementById("import_doc_id")?.value || "").trim();
   if(!import_doc_id) return showToast("請先載入或建立一張報單","error");
   if(importItemsDraft.length === 0) return showToast("請至少新增 1 筆報單品項","error");

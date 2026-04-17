@@ -44,6 +44,14 @@ async function movementsInit(){
   await initMovementLotDropdown();
   await mvInitWarehouseDropdown_();
   mvInitIssuedToDropdown_();
+  // 用途切換：轉倉/扣庫模式互鎖（避免切換後欄位仍維持 disabled）
+  try{
+    const p = document.getElementById("mv_purpose");
+    if(p && !p.dataset.mvBound){
+      p.dataset.mvBound = "1";
+      p.addEventListener("change", function(){ mvUpdateActionMode_(); });
+    }
+  }catch(_e){}
   bindAutoSearchToolbar_([
     ["mv_search_keyword", "input"],
     ["mv_filter_movement_type", "change"]
@@ -57,6 +65,30 @@ function resetMvListSearch(){
   if(el) el.value = "";
   if(mt) mt.value = "";
   renderMovementTable();
+}
+
+/** 只清上方輸入區（不影響列表/資料） */
+function clearMovementForm(){
+  try{
+    const lot = document.getElementById("mv_lot");
+    if(lot) lot.value = "";
+    const purpose = document.getElementById("mv_purpose");
+    if(purpose) purpose.value = "";
+    const issuedTo = document.getElementById("mv_issued_to");
+    if(issuedTo) issuedTo.value = "";
+    const qty = document.getElementById("mv_qty");
+    if(qty) qty.value = "";
+    const wh = document.getElementById("mv_transfer_wh");
+    if(wh) wh.value = "";
+    const rm = document.getElementById("mv_remark");
+    if(rm) rm.value = "";
+  }catch(_e){}
+  try{ mvUpdateMvQtyState_(); }catch(_e2){}
+  try{ mvUpdateActionMode_(); }catch(_e3){}
+  try{
+    const sel = document.getElementById("mv_lot");
+    if(sel) sel.focus();
+  }catch(_e4){}
 }
 
 function mvGetMovementSearchKw_(){
@@ -99,13 +131,14 @@ function mvMovementRowMatchesKeyword_(m, kw){
 }
 
 function mvIsTransferMode_(){
-  return !!String(document.getElementById("mv_transfer_wh")?.value || "").trim();
+  const purpose = String(document.getElementById("mv_purpose")?.value || "").trim().toUpperCase();
+  return purpose === "TRANSFER";
 }
 
 function mvFillTransferAllQty_(){
   // 轉倉修正用：一鍵帶入目前 Lot 的「全部可用量」
   if(!mvIsTransferMode_()){
-    return showToast("請先選擇「轉倉到」才可使用『轉全部』", "error");
+    return showToast("請先將用途選為「轉倉」才可使用『轉全部』", "error");
   }
   const lotId = String(document.getElementById("mv_lot")?.value || "").trim();
   if(!lotId) return showToast("請先選擇 Lot（可從下方列表點選）", "error");
@@ -216,7 +249,7 @@ async function mvInitWarehouseDropdown_(){
   const list = (mvWarehouses || []).slice();
   list.sort((a,b)=>String(a.warehouse_id||"").localeCompare(String(b.warehouse_id||"")));
   sel.innerHTML =
-    `<option value="">（不轉倉）</option>` +
+    `<option value="">請選擇</option>` +
     list.map(w=>{
       const id = String(w.warehouse_id || "").trim().toUpperCase();
       const label = mvWarehouseLabelById_(id) || id;
@@ -426,7 +459,13 @@ function mvUpdateActionMode_(){
   const lotId = String(document.getElementById("mv_lot")?.value || "").trim();
   const qty = Number(document.getElementById("mv_qty")?.value || 0);
 
-  const isTransfer = !!toWh;
+  const purpose = String(purposeEl?.value || "").trim().toUpperCase();
+  const isTransfer = purpose === "TRANSFER";
+  // 非轉倉：清空目標倉（避免資料打架）
+  if(!isTransfer){
+    const whEl = document.getElementById("mv_transfer_wh");
+    if(whEl && whEl.value) whEl.value = "";
+  }
   if(createBtn){
     createBtn.disabled = isTransfer;
     createBtn.title = isTransfer
@@ -434,13 +473,21 @@ function mvUpdateActionMode_(){
       : (!lotId ? "請先選擇 Lot" : (!(qty > 0) ? "請先輸入數量（>0）" : "確認扣庫"));
   }
   if(transferBtn){
-    transferBtn.disabled = !isTransfer;
+    transferBtn.disabled = !isTransfer || !toWh;
     transferBtn.title = !isTransfer
       ? "目前為手動扣庫模式，請用「確認扣庫」"
-      : (!lotId ? "請先選擇 Lot" : (!(qty > 0) ? "請先輸入數量（>0）" : "轉倉"));
+      : (!lotId ? "請先選擇 Lot" : (!(qty > 0) ? "請先輸入數量（>0）" : (!toWh ? "請選擇 轉倉到 哪個倉別" : "轉倉")));
   }
-  if(purposeEl) purposeEl.disabled = isTransfer;
-  if(issuedToEl) issuedToEl.disabled = isTransfer;
+  // 轉倉：給誰不適用；扣庫：轉倉到不適用
+  if(issuedToEl){
+    issuedToEl.disabled = isTransfer;
+    if(isTransfer) issuedToEl.value = "";
+  }
+  const whEl2 = document.getElementById("mv_transfer_wh");
+  if(whEl2){
+    whEl2.disabled = !isTransfer;
+    if(!isTransfer) whEl2.value = "";
+  }
   if(transferAllBtn){
     transferAllBtn.disabled = !isTransfer || !lotId;
     transferAllBtn.title = !isTransfer ? "僅轉倉模式可用" : (!lotId ? "請先選擇 Lot" : "一鍵帶入全部可用量");
@@ -641,11 +688,15 @@ async function initMovementLotDropdown(){
 async function createMovement(triggerEl){
   const lot_id = document.getElementById("mv_lot")?.value || "";
   const qty = Number(document.getElementById("mv_qty")?.value || 0);
-  const purpose = (document.getElementById("mv_purpose")?.value || "INTERNAL_USE").trim().toUpperCase();
+  const purpose = (document.getElementById("mv_purpose")?.value || "").trim().toUpperCase();
   const userRemark = (document.getElementById("mv_remark")?.value || "").trim();
   const issuedTo = (document.getElementById("mv_issued_to")?.value || "").trim();
 
   if(!lot_id) return showToast("請選擇 Lot","error");
+  if(!purpose) return showToast("請先選擇 用途", "error");
+  if(purpose === "TRANSFER") return showToast("用途為轉倉時，請改按「轉倉」", "error");
+  if(!issuedTo) return showToast("請先選擇 給誰（領用/交付）", "error");
+  if(!userRemark) return showToast("請先填寫原因", "error");
   if(!qty || qty <= 0) return showToast("數量需大於 0","error");
 
   const lot = (mvLots || []).find(l => l.lot_id === lot_id);
@@ -712,6 +763,9 @@ async function transferMovement(triggerEl){
   const userRemark = (document.getElementById("mv_remark")?.value || "").trim();
 
   if(!lot_id) return showToast("請選擇 Lot","error");
+  const purpose = String(document.getElementById("mv_purpose")?.value || "").trim().toUpperCase();
+  if(purpose !== "TRANSFER") return showToast("請先將 用途 選為「轉倉」", "error");
+  if(!userRemark) return showToast("請先填寫原因", "error");
   if(!qty || qty <= 0) return showToast("數量需大於 0","error");
   if(!toWh) return showToast("請選擇 轉倉到 哪個倉別","error");
 

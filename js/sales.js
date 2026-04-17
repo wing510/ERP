@@ -15,6 +15,36 @@ let soEditingShippedQtyHold = 0;
 /** 點選已存檔列（so_item_id）供「更新本筆備註」 */
 let soSelectedDbItemId_ = "";
 
+function soSyncReshipRefUI_(){
+  const tp = String(document.getElementById("so_type")?.value || "NORMAL").trim().toUpperCase();
+  const block = document.getElementById("soReshipRefBlock");
+  const refType = document.getElementById("so_reship_ref_type");
+  const refId = document.getElementById("so_reship_ref_id");
+  const on = tp === "RESHIP";
+  if(block) block.style.display = on ? "" : "none";
+  if(!on){
+    if(refType) refType.value = "";
+    if(refId) refId.value = "";
+  }
+}
+
+function soReadReshipRef_(){
+  return {
+    reship_ref_type: String(document.getElementById("so_reship_ref_type")?.value || "").trim().toUpperCase(),
+    reship_ref_id: String(document.getElementById("so_reship_ref_id")?.value || "").trim().toUpperCase()
+  };
+}
+
+function soValidateReshipRef_(soType){
+  const t = String(soType || "").trim().toUpperCase();
+  if(t !== "RESHIP") return null;
+  const ref = soReadReshipRef_();
+  if(!ref.reship_ref_type) return "補寄：請選擇參考類型（原 SO / 原出貨）";
+  if(ref.reship_ref_type !== "SO" && ref.reship_ref_type !== "SHIPMENT") return "補寄：參考類型不正確";
+  if(!ref.reship_ref_id) return "補寄：請填寫參考ID（原 SO ID / 原出貨單 ID）";
+  return null;
+}
+
 async function hasSOShipments_(soId){
   const id = String(soId || "").trim().toUpperCase();
   if(!id) return false;
@@ -140,6 +170,14 @@ function money2(n){
 async function salesInit(){
   await initSalesDropdowns();
   resetSOForm();
+  try{
+    const tp = document.getElementById("so_type");
+    if(tp && !tp.dataset.bound){
+      tp.dataset.bound = "1";
+      tp.addEventListener("change", soSyncReshipRefUI_);
+    }
+  }catch(_e){}
+  try{ soSyncReshipRefUI_(); }catch(_e2){}
   bindAutoSearchToolbar_([
     ["so_search_keyword", "input"],
     ["so_search_status", "change"]
@@ -234,6 +272,15 @@ function resetSOForm(){
 
   const sp = document.getElementById("so_salesperson_id");
   if(sp) sp.value = "";
+
+  const tp = document.getElementById("so_type");
+  if(tp) tp.value = "NORMAL";
+
+  const rt = document.getElementById("so_reship_ref_type");
+  if(rt) rt.value = "";
+  const rid = document.getElementById("so_reship_ref_id");
+  if(rid) rid.value = "";
+  try{ soSyncReshipRefUI_(); }catch(_eSync){}
 
   const rm = document.getElementById("so_remark");
   if(rm) rm.value = "";
@@ -389,6 +436,12 @@ function addSOItemDraft(){
   if(!order_qty || order_qty <= 0) return showToast("訂購數量需大於 0","error");
   if(!unit) return showToast("產品單位缺失","error");
 
+  // 正常訂單：必須有單價（避免後續對帳/業績無法計算）
+  const soType = String(document.getElementById("so_type")?.value || "NORMAL").trim().toUpperCase();
+  if(soType === "NORMAL" && !(unit_price > 0)){
+    return showToast("正常訂單：單價必填且需大於 0", "error");
+  }
+
   const holdShip = Number(soEditingShippedQtyHold || 0);
   if(holdShip > 0 && order_qty + 1e-9 < holdShip){
     return showToast(`訂購數量不可小於已出貨量（${holdShip}）`, "error");
@@ -470,14 +523,26 @@ async function createSalesOrder(triggerEl){
   document.getElementById("so_id").value = so_id;
   const customer_id = document.getElementById("so_customer_id")?.value || "";
   const salesperson_id = document.getElementById("so_salesperson_id")?.value || "";
+  const so_type = String(document.getElementById("so_type")?.value || "NORMAL").trim().toUpperCase();
   const order_date = document.getElementById("so_order_date")?.value || "";
   const status = "OPEN"; // 狀態由系統依出貨自動維護
   const remark = (document.getElementById("so_remark")?.value || "").trim();
+  const reshipRef = soReadReshipRef_();
 
   if(!so_id) return showToast("銷售單ID 必填","error");
   if(!customer_id) return showToast("請選擇客戶","error");
+  if(!salesperson_id) return showToast("請選擇銷售人員","error");
   if(!order_date) return showToast("下單日期必填","error");
   if(soItemsDraft.length === 0) return showToast("請至少新增 1 筆品項","error");
+
+  if(!so_type) return showToast("請選擇 類型/用途", "error");
+  if(so_type === "OTHER" && !remark) return showToast("選擇「其他」時，請填寫備註/原因", "error");
+  const reshipErr = soValidateReshipRef_(so_type);
+  if(reshipErr) return showToast(reshipErr, "error");
+  if(so_type === "NORMAL"){
+    const bad = (soItemsDraft || []).some(x => !(Number(x?.unit_price || 0) > 0));
+    if(bad) return showToast("正常訂單：所有品項都必須有單價（>0）", "error");
+  }
 
   showSaveHint(triggerEl || document.getElementById("soItemsCommitGroup"));
   try {
@@ -488,6 +553,9 @@ async function createSalesOrder(triggerEl){
     so_id,
     customer_id,
     salesperson_id,
+    so_type,
+    reship_ref_type: reshipRef.reship_ref_type,
+    reship_ref_id: reshipRef.reship_ref_id,
     order_date,
     status,
     remark,
@@ -541,6 +609,13 @@ async function loadSalesOrder(soId){
   document.getElementById("so_customer_id").value = so.customer_id || "";
   const sp = document.getElementById("so_salesperson_id");
   if(sp) sp.value = so.salesperson_id || "";
+  const tp = document.getElementById("so_type");
+  if(tp) tp.value = String(so.so_type || "NORMAL").trim().toUpperCase() || "NORMAL";
+  const rt = document.getElementById("so_reship_ref_type");
+  if(rt) rt.value = String(so.reship_ref_type || "").trim().toUpperCase();
+  const rid = document.getElementById("so_reship_ref_id");
+  if(rid) rid.value = String(so.reship_ref_id || "").trim().toUpperCase();
+  try{ soSyncReshipRefUI_(); }catch(_eSync2){}
   document.getElementById("so_order_date").value = dateInputValue_(so.order_date);
   document.getElementById("so_remark").value = so.remark || "";
 
@@ -646,9 +721,15 @@ async function updateSalesOrder(triggerEl){
   const salesperson_id = document.getElementById("so_salesperson_id")?.value || "";
   const order_date = document.getElementById("so_order_date")?.value || "";
   const remark = (document.getElementById("so_remark")?.value || "").trim();
+  const so_type = String(document.getElementById("so_type")?.value || "NORMAL").trim().toUpperCase();
+  const reshipRef = soReadReshipRef_();
 
   if(!customer_id) return showToast("請選擇客戶","error");
+  if(!salesperson_id) return showToast("請選擇銷售人員","error");
   if(!order_date) return showToast("下單日期必填","error");
+  if(so_type === "OTHER" && !remark) return showToast("選擇「其他」時，請填寫備註/原因", "error");
+  const reshipErr = soValidateReshipRef_(so_type);
+  if(reshipErr) return showToast(reshipErr, "error");
 
    // SHIPPED / CANCELLED 的銷售單不允許再修改
   const header = await getOne("sales_order","so_id",so_id).catch(()=>null);
@@ -743,6 +824,9 @@ async function updateSalesOrder(triggerEl){
   await updateRecord("sales_order","so_id",so_id,{
     customer_id,
     salesperson_id,
+    so_type: String(document.getElementById("so_type")?.value || header?.so_type || "NORMAL").trim().toUpperCase(),
+    reship_ref_type: reshipRef.reship_ref_type,
+    reship_ref_id: reshipRef.reship_ref_id,
     order_date,
     // 狀態由系統依出貨單自動維護；此處維持原值
     status: header?.status || "OPEN",

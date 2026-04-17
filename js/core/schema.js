@@ -395,6 +395,11 @@ const SCHEMA = {
     "so_id",
     "customer_id",
     "salesperson_id",
+    // NORMAL / SAMPLE / GIFT / RESHIP / OTHER
+    "so_type",
+    // 當 so_type=RESHIP 時，必填原單參考（SO / SHIPMENT）
+    "reship_ref_type",
+    "reship_ref_id",
     "order_date",
     "status",
     "remark",
