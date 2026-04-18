@@ -108,6 +108,10 @@ var TERM_LABELS = {
   FAILED: "FAILED（未通過）",
   INTERNAL_USE: "INTERNAL_USE（內部領用）",
   SAMPLE: "SAMPLE（樣品）",
+  NORMAL: "NORMAL（正常訂單）",
+  GIFT: "GIFT（贈品）",
+  PR: "PR（公關）",
+  RESHIP: "RESHIP（補寄）",
   SCRAP: "SCRAP（報廢）",
   OTHER: "OTHER（其他）"
   ,AMBIENT: "AMBIENT（常溫）"

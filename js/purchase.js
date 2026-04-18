@@ -77,7 +77,7 @@ function updatePOFlowHint_(){
   }
   if(poEditing){
     el.textContent =
-      "採購流程：已載入 — 狀態由系統依收貨單自動維護（有未作廢收貨單→CLOSED；否則 OPEN）";
+      "採購流程：已載入 — 狀態由系統依收貨明細自動維護（OPEN／PARTIAL／CLOSED）";
     return;
   }
   el.textContent = "採購流程：新單 — 填主檔與明細後按下方「建立」開單";

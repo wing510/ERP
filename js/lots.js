@@ -530,6 +530,8 @@ async function renderLots(){
       const ptype = pObj ? String(pObj.type || "").toLowerCase() : "";
       const whId = String(l.warehouse_id || "").toLowerCase();
       const whLabel = String(lotsWarehouseLabelById_(l.warehouse_id) || "").toLowerCase();
+      const srcId = String(l.source_id || "").trim().toUpperCase();
+      const srcType = String(l.source_type || "").trim().toUpperCase();
       const hay = [
         l.lot_id,
         l.remark,
@@ -545,7 +547,16 @@ async function renderLots(){
         whId,
         whLabel
       ].filter(Boolean).join(" ").toLowerCase();
-      if(!hay.includes(qKw)) return false;
+      // 關鍵字若為收貨單/報單類單號：除了全文 hay.includes 外，也允許直接比對 lot.source_id
+      //（避免使用者輸入 GR-xxxx 但 hay 沒把 GR 單獨切出 token 導致永遠找不到）
+      const kw = String(qKw || "").trim();
+      const kwU = kw.toUpperCase();
+      const hitReceiptId =
+        (kwU.startsWith("GR-") || kwU.startsWith("IR-")) &&
+        srcId &&
+        srcId === kwU &&
+        (srcType === "PURCHASE" || srcType === "IMPORT");
+      if(!hitReceiptId && !hay.includes(qKw)) return false;
     }
     if(qInv && getLotInventoryStatusDerived_(l) !== qInv) return false;
     if(qQa && (l.status || "PENDING") !== qQa) return false;

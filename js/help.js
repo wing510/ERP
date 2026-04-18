@@ -404,6 +404,16 @@ const HelpConfig = {
     • 請輸入 Lot ID
   `,
 
+  traceTx: `
+    <strong>用途：</strong><br>
+    • 查「同一次過帳/同一次 bundle」影響到哪些表與庫存異動（稽核/對帳/除錯）<br>
+    <strong>怎麼用：</strong><br>
+    • 貼上 transaction_id（格式：TX-時間戳-隨機碼）後按「查詢交易鏈」<br>
+    • 結果會按表分類（SO/Shipment/Receipt/Process/Movement/lot_relation）<br>
+    <strong>常見提示：</strong><br>
+    • 查不到資料時，先確認該單據/異動是否已有填入 transaction_id（或是否已過帳）
+  `,
+
   splitMain: `
     <strong>流程：</strong><br>
     • 選來源 Lot，新增要拆出的新 Lot 與數量；明細表以「項次」對齊列；於表下方按「確認拆批（過帳）」送出後建立新批次<br>
@@ -512,6 +522,82 @@ function initHelpComponent(){
       summary.textContent = details.open ? hideText : showText;
     });
   }
+}
+
+function ensureHelpBoundForEl_(el){
+  if(!el) return null;
+  const key = el.getAttribute && el.getAttribute("data-help");
+  if(!key) return null;
+  const content = HelpConfig[key];
+  if(!content) return null;
+
+  // 已建立過就直接回傳
+  const existedId = el.getAttribute("data-help-box-id");
+  if(existedId){
+    const existed = document.getElementById(existedId);
+    if(existed) return existed;
+  }
+
+  // 找對應卡片 header
+  const header = (typeof el.closest === "function") ? el.closest(".card-header") : null;
+  if(!header) return null;
+
+  // 建立 icon 樣式（避免 initHelpComponent 沒跑到時是空白 span）
+  try{
+    el.classList.add("info-icon");
+    if(!String(el.textContent || "").trim()) el.textContent = "!";
+    el.setAttribute("title","注意事項");
+  }catch(_e0){}
+
+  const box = document.createElement("div");
+  box.className = "help-inline";
+  box.innerHTML = content;
+
+  // 產生唯一 id 供後續快速定位
+  const id = "helpBox-" + key + "-" + String(Date.now()) + "-" + String(Math.floor(Math.random()*1000));
+  box.id = id;
+  try{ el.setAttribute("data-help-box-id", id); }catch(_e1){}
+
+  header.insertAdjacentElement("afterend", box);
+  return box;
+}
+
+/**
+ * 兼容：部分環境可能讓 initHelpComponent 未執行到，
+ * 這裡用事件委派確保「藍色驚嘆號」永遠可點。
+ */
+function bindHelpDelegated_(){
+  try{
+    if(document.documentElement && document.documentElement.getAttribute("data-erp-helpbind") === "1") return;
+    if(document.documentElement) document.documentElement.setAttribute("data-erp-helpbind","1");
+  }catch(_e){}
+
+  document.addEventListener("click", function(ev){
+    const t = ev && ev.target;
+    if(!t) return;
+    const icon = (typeof t.closest === "function") ? t.closest("[data-help], .info-icon") : null;
+    if(!icon) return;
+
+    // 只處理有 data-help 的元素（避免誤傷別的 .info-icon）
+    const key = icon.getAttribute && icon.getAttribute("data-help");
+    if(!key) return;
+
+    const box = ensureHelpBoundForEl_(icon);
+    if(!box) return;
+
+    try{
+      ev.preventDefault();
+      ev.stopPropagation();
+    }catch(_e2){}
+
+    box.classList.toggle("show");
+  }, true);
+}
+
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded", bindHelpDelegated_);
+}else{
+  bindHelpDelegated_();
 }
 
 /*********************************

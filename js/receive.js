@@ -444,7 +444,34 @@ async function onRcvSourceTypeChange() {
   try {
     if (rcvSourceType === "PO") {
       const pos = await getAll("purchase_order");
-      const openPOs = (pos || []).filter((p) => (p.status || "").toUpperCase() !== "CLOSED");
+      const allItems = await getAll("purchase_order_item").catch(() => []);
+      const itemsByPo = {};
+      (allItems || []).forEach(function (it) {
+        const pid = String(it && it.po_id || "").trim().toUpperCase();
+        if (!pid) return;
+        if (!itemsByPo[pid]) itemsByPo[pid] = [];
+        itemsByPo[pid].push(it);
+      });
+      function poHasRemaining_(poId) {
+        const pid = String(poId || "").trim().toUpperCase();
+        const rows = itemsByPo[pid] || [];
+        if (!rows.length) return true; // 找不到明細時不擋（避免誤判）
+        return rows.some(function (x) {
+          const ordered = Number(x.order_qty || 0);
+          const received = Number(x.received_qty || 0);
+          return ordered + 1e-9 > received;
+        });
+      }
+      // 允許分批收貨：
+      // - OPEN / PARTIAL：可再收
+      // - 舊資料若 PO.status=CLOSED 但明細仍有剩餘量：仍顯示（避免被舊規則卡死）
+      // - 真正全收完：不顯示
+      const openPOs = (pos || []).filter((p) => {
+        const st = String(p.status || "").toUpperCase();
+        if (st === "CANCELLED") return false;
+        if (st === "CLOSED") return poHasRemaining_(p.po_id);
+        return true;
+      });
       openPOs.sort((a, b) => String(b.order_date || "").localeCompare(String(a.order_date || "")));
       sel.innerHTML =
         '<option value="">請選擇 PO</option>' +

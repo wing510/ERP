@@ -72,3 +72,44 @@ function openSheetLink(key) {
   }
   window.open(url, "_blank", "noopener,noreferrer");
 }
+
+/**
+ * 兼容：部分環境可能擋 inline onclick，導致 Sheet 按鈕無反應。
+ * 這裡用事件委派把 `.btn-sheet` 點擊導向 openSheetLink。
+ */
+function bindSheetButtons_(){
+  try{
+    if(document.documentElement && document.documentElement.getAttribute("data-erp-sheetbind") === "1") return;
+    if(document.documentElement) document.documentElement.setAttribute("data-erp-sheetbind","1");
+  }catch(_e){}
+
+  document.addEventListener("click", function(ev){
+    const t = ev && ev.target;
+    if(!t) return;
+    const btn = (typeof t.closest === "function") ? t.closest("button.btn-sheet") : null;
+    if(!btn) return;
+
+    // 支援：HTML 仍用 onclick="openSheetLink('xxx')"
+    const raw = String(btn.getAttribute("onclick") || "");
+    const m = raw.match(/openSheetLink\(\s*['"]([^'"]+)['"]\s*\)/i);
+    const key = m && m[1] ? String(m[1]).trim() : "";
+    if(!key) return;
+
+    try{
+      ev.preventDefault();
+      ev.stopPropagation();
+    }catch(_e2){}
+
+    try{
+      openSheetLink(key);
+    }catch(_e3){
+      if(typeof showToast === "function") showToast("開啟 Sheet 失敗", "error");
+    }
+  }, true);
+}
+
+if(document.readyState === "loading"){
+  document.addEventListener("DOMContentLoaded", bindSheetButtons_);
+}else{
+  bindSheetButtons_();
+}

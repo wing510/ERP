@@ -9,7 +9,7 @@
 
   <div class="card-body">
     <div class="search-toolbar" style="margin-bottom:16px;">
-      <input type="text" id="trace_lot_id" placeholder="請輸入 Lot ID（例如：LOT-20260413-0001）" title="輸入批次 Lot ID 後按「查詢」">
+      <input type="text" id="trace_lot_id" class="search-keyword-wide" placeholder="請輸入 Lot ID（例如：LOT-20260413-0001）" title="輸入批次 Lot ID 後按「查詢」">
       <button class="btn-primary" id="trace_run_btn" onclick="runTrace()">查詢</button>
       <span id="traceRunHint" style="font-size:12px;color:#64748b;font-weight:600;display:none;white-space:nowrap;">查詢中…</span>
       <button class="btn-secondary" onclick="resetTrace()">重設</button>
@@ -30,6 +30,29 @@
       <div class="form-group full-width">
         <label>向下追（流向）</label>
         <pre id="traceDown" class="logs-pre" style="max-height:260px;"></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header card-header-flex">
+    <span>交易鏈查詢（transaction_id）</span>
+    <span data-help="traceTx"></span>
+  </div>
+
+  <div class="card-body">
+    <div class="search-toolbar" style="margin-bottom:12px;">
+      <input type="text" id="trace_tx_id" class="search-keyword-wide" placeholder="請輸入 transaction_id（例如：TX-1713022333444-123）" title="輸入 transaction_id 後按「查詢交易鏈」">
+      <button class="btn-primary" id="trace_tx_run_btn" onclick="runTraceTx()">查詢交易鏈</button>
+      <span id="traceTxRunHint" style="font-size:12px;color:#64748b;font-weight:600;display:none;white-space:nowrap;">查詢中…</span>
+      <button class="btn-secondary" onclick="resetTraceTx()">清除交易鏈</button>
+    </div>
+
+    <div class="form-grid-4">
+      <div class="form-group full-width">
+        <label>查詢結果（依表分類）</label>
+        <pre id="traceTxResult" class="logs-pre" style="max-height:320px;"></pre>
       </div>
     </div>
   </div>

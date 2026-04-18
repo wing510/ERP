@@ -282,6 +282,14 @@ async function voidProcessInput(processInputId){
   setProcRowBusy_("input", inId, "儲存中…");
   showSaveHint();
   try{
+    // 後端已封鎖 direct delete_process_order_input；避免前端回沖扣庫後卡在刪除明細。
+    // 目前安全做法：提示使用者改用「撤回送加工」整單回沖（bundle 原子處理）。
+    showProcBlockNotice_("回沖本筆投料目前不支援", [
+      "為了避免交易一致性被繞過，系統已封鎖直接刪除投料明細（process_order_input）。",
+      "請改用下方功能「撤回送加工」：會一次回沖所有投料扣庫並清除投料明細（由後端 bundle 原子完成）。"
+    ]);
+    return showToast("回沖本筆投料：目前請改用「撤回送加工」", "error");
+
     const po = await getOne("process_order","process_order_id",procId).catch(()=>null);
     if(!po) return showToast("找不到加工單","error");
     if((po.status || "").toUpperCase() === "CANCELLED"){

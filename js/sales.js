@@ -565,6 +565,10 @@ async function createSalesOrder(triggerEl){
     updated_at: ""
   });
 
+  // 讓每筆銷售單明細與主單共用同一條 transaction_id（由後端若缺則自動產生）
+  const soAfter = await getOne("sales_order", "so_id", so_id).catch(() => null);
+  const txId = String(soAfter && soAfter.transaction_id || "").trim().toUpperCase();
+
   for(let idx=0; idx<soItemsDraft.length; idx++){
     const it = soItemsDraft[idx];
     const so_item_id = `SOI-${so_id}-${String(idx+1).padStart(3,"0")}`;
@@ -572,6 +576,9 @@ async function createSalesOrder(triggerEl){
       so_item_id,
       so_id,
       product_id: it.product_id,
+      transaction_id: txId,
+      parent_ref_type: "SO",
+      parent_ref_id: so_id,
       order_qty: String(it.order_qty),
       shipped_qty: "0",
       unit: it.unit,
@@ -842,36 +849,22 @@ async function updateSalesOrder(triggerEl){
     return;
   }
 
-  // 刪除後重建明細（尚未出貨才允許）
-  let items = [];
-  try{
-    const r = await callAPI({ action: "list_sales_order_item_by_so", so_id: so_id }, { method: "GET" });
-    items = (r && r.data) ? r.data : [];
-  }catch(_e){
-    items = (await getAll("sales_order_item")).filter(it => it.so_id === so_id);
-  }
-  for(const it of items){
-    await deleteRecord("sales_order_item","so_item_id",it.so_item_id);
-  }
-  for(let idx=0; idx<soItemsDraft.length; idx++){
-    const it = soItemsDraft[idx];
-    const so_item_id = `SOI-${so_id}-${String(idx+1).padStart(3,"0")}`;
-    await createRecord("sales_order_item", {
-      so_item_id,
-      so_id,
-      product_id: it.product_id,
-      order_qty: String(it.order_qty),
-      shipped_qty: "0",
-      unit: it.unit,
-      unit_price: String(it.unit_price),
-      amount: money2(it.amount).toFixed(2),
-      remark: it.remark || "",
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: ""
-    });
-  }
+  // 重建明細（尚未出貨才允許）：改由後端 command 一次完成（避免 direct delete 被禁止）
+  await callAPI({
+    action: "reset_sales_order_items_cmd",
+    so_id,
+    items_json: JSON.stringify((soItemsDraft || []).map(function (it) {
+      return {
+        product_id: it.product_id,
+        order_qty: String(it.order_qty),
+        unit: it.unit,
+        unit_price: String(it.unit_price),
+        amount: money2(it.amount).toFixed(2),
+        remark: it.remark || ""
+      };
+    })),
+    updated_by: getCurrentUser()
+  }, { method: "POST" });
 
   await renderSalesOrders();
   showToast("銷售單更新成功");
@@ -922,7 +915,7 @@ async function renderSalesOrders(){
   const sorted = [...filtered].sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||""));
   tbody.innerHTML = "";
   if (!sorted.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748b;padding:24px;">尚無銷售單。請先至「產品」「客戶」建立主檔，再於銷售單填妥主檔與明細後按明細下方「建立」。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;padding:24px;">尚無銷售單。請先至「產品」「客戶」建立主檔，再於銷售單填妥主檔與明細後按明細下方「建立」。</td></tr>';
     return;
   }
   sorted.forEach(so => {
@@ -930,6 +923,10 @@ async function renderSalesOrders(){
     const spLabel = so.salesperson_id
       ? (String(sp?.user_name || "").trim() || "—")
       : "";
+    const typeCode = String(so.so_type || "NORMAL").trim().toUpperCase() || "NORMAL";
+    const typeLabel = (typeof termLabelZhOnly === "function")
+      ? termLabelZhOnly(typeCode)
+      : typeCode;
     const c = customerMap[so.customer_id] || null;
     const customerNameOnly = (c && c.customer_name) ? c.customer_name : (so.customer_id || "");
     tbody.innerHTML += `
@@ -937,6 +934,7 @@ async function renderSalesOrders(){
         <td>${so.so_id || ""}</td>
         <td>${customerNameOnly}</td>
         <td>${spLabel}</td>
+        <td>${typeLabel}</td>
         <td>${termLabelZhOnly(so.status)}</td>
         <td>${so.created_at || ""}</td>
         <td>

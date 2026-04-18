@@ -16,6 +16,67 @@ let traceAvailByLotId = {};
 
 function upper_(s){ return String(s || "").trim().toUpperCase(); }
 
+async function copyTextFromEl(elId){
+  const el = document.getElementById(String(elId || ""));
+  const txt = String(el && ("value" in el ? el.value : el.textContent) || "").trim();
+  if(!txt) return showToast("沒有可複製的內容","error");
+  try{
+    if(navigator && navigator.clipboard && typeof navigator.clipboard.writeText === "function"){
+      await navigator.clipboard.writeText(txt);
+    }else{
+      // fallback：舊瀏覽器
+      const ta = document.createElement("textarea");
+      ta.value = txt;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
+    showToast("已複製","success");
+  }catch(_e){
+    showToast("複製失敗","error");
+  }
+}
+
+async function runTraceTx(){
+  const txId = upper_(document.getElementById("trace_tx_id")?.value || "");
+  if(!txId) return showToast("請輸入 transaction_id","error");
+
+  const runBtn = document.getElementById("trace_tx_run_btn");
+  const hint = document.getElementById("traceTxRunHint");
+  const outEl = document.getElementById("traceTxResult");
+
+  if(runBtn) runBtn.disabled = true;
+  if(hint){ hint.style.display = "inline-block"; hint.textContent = "查詢中…"; }
+  if(outEl) outEl.textContent = "查詢中…";
+
+  try{
+    const r = await callAPI({ action: "trace_transaction_bundle", transaction_id: txId, limit: 2000 }, { method:"POST" });
+    const d = (r && r.data) ? r.data : null;
+    if(!d){
+      if(outEl) outEl.textContent = "查無資料";
+      return;
+    }
+    if(outEl) outEl.textContent = JSON.stringify(d, null, 2);
+  }catch(e){
+    if(outEl) outEl.textContent = (e && e.message) ? e.message : String(e || "查詢失敗");
+    showToast("查詢失敗","error");
+  }finally{
+    if(runBtn) runBtn.disabled = false;
+    if(hint) hint.style.display = "none";
+  }
+}
+
+function resetTraceTx(){
+  const a = document.getElementById("trace_tx_id");
+  const b = document.getElementById("traceTxResult");
+  if(a) a.value = "";
+  if(b) b.textContent = "";
+}
+
 async function fetchLotRelationsByLot_(lotId, direction){
   const id = upper_(lotId);
   if(!id) return [];
