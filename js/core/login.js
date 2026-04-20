@@ -3,6 +3,25 @@
  * - 後端 action: login 驗證；成功後 setCurrentUser + 同步 topbar
  */
 (function(){
+  /**
+   * 後端 login 的 jsonSuccess 為 { success, user_id, user_name, role, status }（欄位在頂層）；
+   * 若未來改為 { success, data: {...} } 亦相容。
+   */
+  function erpNormalizeLoginResult_(r){
+    if(!r || r.success !== true) return null;
+    var d = r.data;
+    if(d && typeof d === "object" && !Array.isArray(d)) return d;
+    return {
+      user_id: r.user_id,
+      user_name: r.user_name,
+      role: r.role,
+      status: r.status,
+      remember: !!r.remember,
+      session_token: r.session_token,
+      session_expires_at: r.session_expires_at
+    };
+  }
+
   var overlay = null;
   var input = null;
   var pwInput = null;
@@ -95,8 +114,13 @@
         return;
       }
       try{
-        var r = await callAPI({ action: "login", user_id: id, password: pw }, { method: "POST", timeout_ms: 60000 });
-        var u = (r && r.data) ? r.data : null;
+        var remember = true;
+        try{ remember = rememberCk ? !!rememberCk.checked : true; }catch(_eRemember){ remember = true; }
+        var r = await callAPI(
+          { action: "login", user_id: id, password: pw, remember_me: remember ? "1" : "0" },
+          { method: "POST", timeout_ms: 60000 }
+        );
+        var u = erpNormalizeLoginResult_(r);
         var uid = String(u && u.user_id ? u.user_id : id).trim();
         var st = String(u && u.status ? u.status : "ACTIVE").trim().toUpperCase();
         if(st !== "ACTIVE"){
@@ -104,9 +128,10 @@
           return;
         }
         lastAuthedUserId = uid;
-        var remember = true;
-        try{ remember = rememberCk ? !!rememberCk.checked : true; }catch(_eRemember){ remember = true; }
-        if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember });
+        var roleFromServer = String(u && u.role != null ? u.role : "").trim();
+        var tok = String(u && u.session_token ? u.session_token : "").trim();
+        if(tok && typeof setSessionToken === "function") setSessionToken(tok, remember);
+        if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember, role: roleFromServer });
         syncTopbarUserLabel(uid);
         showError("");
         setOpen(false);
@@ -124,6 +149,10 @@
         }
         if(msg === "BAD_PASSWORD"){
           showError("密碼錯誤。");
+          return;
+        }
+        if(msg === "USE_SESSION_RESUME"){
+          showError("請重新整理頁面，或先登出再以密碼登入。");
           return;
         }
         if(msg === "NO_PASSWORD"){
@@ -183,19 +212,26 @@
 
     setLocked(true);
 
-    var saved = "";
+    var tokResume = "";
     try{
-      saved = (sessionStorage.getItem("erp_current_user") || localStorage.getItem("erp_current_user") || "");
-    }catch(_e){}
-    if(saved){
+      tokResume = typeof getSessionToken === "function" ? String(getSessionToken() || "").trim() : "";
+    }catch(_eTok){}
+    if(tokResume){
       try{
         if(typeof callAPI === "function"){
-          var rr = await callAPI({ action: "login", user_id: saved, password: "__SESSION__" }, { method: "POST", timeout_ms: 60000 });
-          var uu = (rr && rr.data) ? rr.data : null;
+          var rr = await callAPI(
+            { action: "session_resume", session_token: tokResume },
+            { method: "POST", timeout_ms: 60000 }
+          );
+          var uu = erpNormalizeLoginResult_(rr);
           var st2 = String(uu && uu.status ? uu.status : "").trim().toUpperCase();
-          if(st2 === "ACTIVE"){
-            lastAuthedUserId = String(uu.user_id || saved).trim();
-            if(typeof setCurrentUser === "function") setCurrentUser(lastAuthedUserId, { remember: true });
+          if(uu && uu.user_id && st2 === "ACTIVE"){
+            lastAuthedUserId = String(uu.user_id).trim();
+            var roleSess = String(uu.role != null ? uu.role : "").trim();
+            var remSess = !!uu.remember;
+            if(typeof setCurrentUser === "function"){
+              setCurrentUser(lastAuthedUserId, { remember: remSess, role: roleSess });
+            }
             syncTopbarUserLabel(lastAuthedUserId);
             setOpen(false);
             setLocked(false);
@@ -206,17 +242,30 @@
           }
         }
       }catch(_eSess){
-        // ignore
+        try{ if(typeof clearSessionToken === "function") clearSessionToken(); }catch(_c){}
       }
+      try{ if(typeof clearSessionToken === "function") clearSessionToken(); }catch(_c2){}
     }
 
     setOpen(true);
   }
 
-  function doLogout(){
-    try{ localStorage.removeItem("erp_current_user"); }catch(_e){}
-    try{ sessionStorage.removeItem("erp_current_user"); }catch(_eSess){}
+  async function doLogout(){
+    try{
+      if(typeof callAPI === "function" && typeof getSessionToken === "function"){
+        var t = String(getSessionToken() || "").trim();
+        if(t){
+          await callAPI({ action: "session_logout", session_token: t }, { method: "POST", timeout_ms: 30000 });
+        }
+      }
+    }catch(_eLo){}
     if(typeof setCurrentUser === "function") setCurrentUser("");
+    else{
+      try{ localStorage.removeItem("erp_current_user"); }catch(_e){}
+      try{ sessionStorage.removeItem("erp_current_user"); }catch(_eSess){}
+      try{ localStorage.removeItem("erp_current_role"); }catch(_eR){}
+      try{ sessionStorage.removeItem("erp_current_role"); }catch(_eR2){}
+    }
     syncTopbarUserLabel("");
     if(!overlay) overlay = document.getElementById("loginOverlay");
     if(!input) input = document.getElementById("loginUserId");
@@ -235,9 +284,14 @@
 
   /** doLogout 若拋錯時，仍強制清 session + 顯示登入遮罩（不依賴 closure 變數） */
   function fallbackLogoutDom_(){
-    try{ localStorage.removeItem("erp_current_user"); }catch(_e){}
-    try{ sessionStorage.removeItem("erp_current_user"); }catch(_e2){}
+    try{ if(typeof clearSessionToken === "function") clearSessionToken(); }catch(_cs){}
     if(typeof setCurrentUser === "function") setCurrentUser("");
+    else{
+      try{ localStorage.removeItem("erp_current_user"); }catch(_e){}
+      try{ sessionStorage.removeItem("erp_current_user"); }catch(_e2){}
+      try{ localStorage.removeItem("erp_current_role"); }catch(_eR){}
+      try{ sessionStorage.removeItem("erp_current_role"); }catch(_eR2){}
+    }
     try{ document.body.classList.add("erp-locked"); }catch(_e3){}
     try{ document.body.style.overflow = "hidden"; }catch(_e4){}
     var ov = document.getElementById("loginOverlay");
@@ -270,9 +324,9 @@
    * 登出改由腳本綁定（勿用 HTML onclick：部分環境 CSP 會擋 inline handler，導致按鈕完全沒反應）
    */
   function bindLogoutBtn_(){
-    function performLogout(){
+    async function performLogout(){
       try{
-        doLogout();
+        await doLogout();
       }catch(err){
         try{ console.error("[ERP] logout", err); }catch(_e2){}
         fallbackLogoutDom_();

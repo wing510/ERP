@@ -229,9 +229,33 @@ function renderDashboard(ctx) {
 
   var guide = document.getElementById("dashboardFirstTimeGuide");
   if (guide) guide.style.display = products.length === 0 ? "block" : "none";
+
+  syncDashboardDevClearVisibility_();
+}
+
+/** 「一鍵刪除」僅 ADMIN 可看見（角色來自登入回傳，存於 erp_current_role） */
+function syncDashboardDevClearVisibility_() {
+  var grp = document.getElementById("dev_clear_button_group");
+  if (!grp) return;
+  var role =
+    typeof getCurrentUserRole === "function"
+      ? String(getCurrentUserRole() || "").trim()
+      : "";
+  var isAdmin = role.toUpperCase() === "ADMIN";
+  grp.style.display = isAdmin ? "" : "none";
+  grp.setAttribute("aria-hidden", isAdmin ? "false" : "true");
 }
 
 function devClearNonMasterClick() {
+  if (
+    typeof getCurrentUserRole !== "function" ||
+    String(getCurrentUserRole() || "").trim().toUpperCase() !== "ADMIN"
+  ) {
+    if (typeof showToast === "function") {
+      showToast("僅管理員（ADMIN）可使用此功能。", "error");
+    }
+    return;
+  }
   if (
     !confirm(
       "確定要刪除「除主檔外」所有工作表的資料嗎？\n主檔（產品、供應商、客戶、倉庫、使用者）會保留。"
@@ -239,7 +263,13 @@ function devClearNonMasterClick() {
   )
     return;
   showSaveHint();
-  callAPI({ action: "dev_clear_non_master" })
+  var actor =
+    typeof getCurrentUser === "function" ? String(getCurrentUser() || "").trim() : "";
+  callAPI({
+    action: "dev_clear_non_master",
+    created_by: actor,
+    updated_by: actor
+  })
     .then(function (res) {
       if (typeof invalidateCache === "function") invalidateCache();
       if (typeof showToast === "function")

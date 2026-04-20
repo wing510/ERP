@@ -210,8 +210,57 @@ try{
 }catch(_e){}
 
 /* =========================================================
-   CURRENT USER (暫時固定)
+   SESSION TOKEN（伺服器通行證；與「保持登入」同層級儲存策略）
 ========================================================= */
+
+const ERP_SESSION_TOKEN_KEY = "erp_session_token";
+
+function clearSessionToken() {
+  try {
+    sessionStorage.removeItem(ERP_SESSION_TOKEN_KEY);
+  } catch (_e) {}
+  try {
+    localStorage.removeItem(ERP_SESSION_TOKEN_KEY);
+  } catch (_e2) {}
+}
+
+function getSessionToken() {
+  try {
+    const t = sessionStorage.getItem(ERP_SESSION_TOKEN_KEY);
+    if (t) return String(t).trim();
+    return String(localStorage.getItem(ERP_SESSION_TOKEN_KEY) || "").trim();
+  } catch (_e3) {
+    return "";
+  }
+}
+
+/** @param {string} token @param {boolean} remember true → localStorage（保持登入） */
+function setSessionToken(token, remember) {
+  clearSessionToken();
+  const t = String(token || "").trim();
+  if (!t) return;
+  if (remember) {
+    try {
+      localStorage.setItem(ERP_SESSION_TOKEN_KEY, t);
+    } catch (_e) {}
+  } else {
+    try {
+      sessionStorage.setItem(ERP_SESSION_TOKEN_KEY, t);
+    } catch (_e2) {}
+  }
+}
+
+/* =========================================================
+   CURRENT USER + ROLE（登入後寫入；供前端顯示／按鈕顯藏）
+========================================================= */
+
+function erpClearUserSessionStorage_(){
+  clearSessionToken();
+  try{ sessionStorage.removeItem("erp_current_user"); }catch(_e2){}
+  try{ localStorage.removeItem("erp_current_user"); }catch(_e3){}
+  try{ sessionStorage.removeItem("erp_current_role"); }catch(_e4){}
+  try{ localStorage.removeItem("erp_current_role"); }catch(_e5){}
+}
 
 function getCurrentUser(){
   try{
@@ -221,21 +270,40 @@ function getCurrentUser(){
   }
 }
 
+/** 與 getCurrentUser 相同儲存策略（remember me → localStorage） */
+function getCurrentUserRole(){
+  try{
+    return (sessionStorage.getItem("erp_current_role") || localStorage.getItem("erp_current_role") || "");
+  }catch(_e){
+    return "";
+  }
+}
+
+/**
+ * @param {string} userId
+ * @param {{ remember?: boolean, role?: string }} [options] role：後端 login 回傳之 role（如 ADMIN）
+ */
 function setCurrentUser(userId, options){
   try{
     if(userId == null || String(userId).trim() === ""){
-      try{ sessionStorage.removeItem("erp_current_user"); }catch(_e2){}
-      localStorage.removeItem("erp_current_user");
+      erpClearUserSessionStorage_();
       return;
     }
     const uid = String(userId).trim();
     const remember = options && options.remember === false ? false : true;
+    const role = options && options.role != null ? String(options.role).trim() : "";
     if(remember){
       try{ sessionStorage.removeItem("erp_current_user"); }catch(_e3){}
       localStorage.setItem("erp_current_user", uid);
+      try{ sessionStorage.removeItem("erp_current_role"); }catch(_eR){}
+      if(role) localStorage.setItem("erp_current_role", role);
+      else try{ localStorage.removeItem("erp_current_role"); }catch(_eR2){}
     }else{
       localStorage.removeItem("erp_current_user");
       try{ sessionStorage.setItem("erp_current_user", uid); }catch(_e4){}
+      try{ localStorage.removeItem("erp_current_role"); }catch(_eR3){}
+      if(role) try{ sessionStorage.setItem("erp_current_role", role); }catch(_eR4){}
+      else try{ sessionStorage.removeItem("erp_current_role"); }catch(_eR5){}
     }
   }catch(_e){}
 }
@@ -449,6 +517,23 @@ async function callAPI(params, options = {}){
       const v = params[k];
       if (v !== undefined) clean[k] = v;
     });
+    // 後端 doGet/doPost 統一驗人：除 login 外須帶有效操作者（與 getCurrentUser 一致）
+    const act = String(clean.action || "").trim();
+    if (act !== "login") {
+      const st =
+        typeof getSessionToken === "function" ? String(getSessionToken() || "").trim() : "";
+      if (st && !String(clean.session_token || "").trim()) {
+        clean.session_token = st;
+      }
+    }
+    if (act !== "login" && act !== "session_resume" && act !== "session_logout") {
+      const uid =
+        typeof getCurrentUser === "function" ? String(getCurrentUser() || "").trim() : "";
+      if (uid) {
+        if (!String(clean.created_by || "").trim()) clean.created_by = uid;
+        if (!String(clean.updated_by || "").trim()) clean.updated_by = uid;
+      }
+    }
     const payload = new URLSearchParams(clean);
 
     const response =
