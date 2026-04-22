@@ -258,5 +258,13 @@ function navigate(module) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-  navigate("dashboard");
+  // 尚未登入（無 session_token）時，不要自動載入任何模組，避免背景打 API 造成大量 session_token required 噪音。
+  try{
+    const tok = (typeof getSessionToken === "function") ? String(getSessionToken() || "").trim() : "";
+    if(tok){
+      navigate("dashboard");
+    }
+  }catch(_e){
+    // fallback：不自動導頁（讓 login overlay 接手）
+  }
 });

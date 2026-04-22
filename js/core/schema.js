@@ -511,6 +511,8 @@ const SCHEMA = {
   user: [
     "user_id",
     "user_name",
+    // Google 登入：對應名單用（建議存小寫 email）
+    "email",
     // 密碼（供 login action 驗證；建議至少 6 碼）
     "password",
     "role",

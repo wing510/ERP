@@ -1555,6 +1555,12 @@ body.erp-locked .sidebar-backdrop{
         </label>
       </div>
       <div id="loginError" class="login-error"></div>
+      <div class="login-meta" style="margin-top:10px;">
+        <div id="googleSignInWrap" style="display:none;">
+          <div style="font-size:12px;color:#64748b;margin-bottom:6px;">或使用 Google 登入</div>
+          <div id="googleSignInBtn"></div>
+        </div>
+      </div>
       <div class="login-actions">
         <button type="button" class="btn-secondary" id="loginClearBtn">清除</button>
         <button type="submit" class="btn-primary" id="loginSubmitBtn">登入</button>
@@ -1563,14 +1569,15 @@ body.erp-locked .sidebar-backdrop{
   </div>
 </div>
 
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="js/core/schema.js"></script>
 <script src="js/core/utils.js"></script>
 <script src="js/core/inventory-utils.js"></script>
 <script src="js/core/inventory-data.js"></script>
 <script src="js/core/sheet-links.js"></script>
-<script src="js/core/config.js"></script>
-<script src="js/core/service.js"></script>
-<script src="js/core/login.js"></script>
+<script src="js/core/config.js?v=20260420"></script>
+<script src="js/core/service.js?v=20260420"></script>
+<script src="js/core/login.js?v=20260420"></script>
 <script src="js/help.js"></script>
 <script src="js/router.js"></script>
 <script src="js/dashboard.js"></script>

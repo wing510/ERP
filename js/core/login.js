@@ -22,6 +22,16 @@
     };
   }
 
+  function getGoogleClientId_(){
+    try{
+      var cfg = window.__ERP_CONFIG__ || null;
+      var id = cfg && typeof cfg.GOOGLE_CLIENT_ID === "string" ? String(cfg.GOOGLE_CLIENT_ID || "").trim() : "";
+      return id;
+    }catch(_e){
+      return "";
+    }
+  }
+
   var overlay = null;
   var input = null;
   var pwInput = null;
@@ -176,6 +186,50 @@
     }
   }
 
+  async function doGoogleLogin(idToken){
+    var remember = true;
+    try{ remember = rememberCk ? !!rememberCk.checked : true; }catch(_eRemember){ remember = true; }
+    try{
+      if(typeof callAPI !== "function"){
+        showError("系統尚未初始化完成，請稍後再試。");
+        return;
+      }
+      var r = await callAPI(
+        { action: "google_login", id_token: String(idToken || ""), remember_me: remember ? "1" : "0" },
+        { method: "POST", timeout_ms: 60000 }
+      );
+      var u = erpNormalizeLoginResult_(r);
+      var uid = String(u && u.user_id ? u.user_id : "").trim();
+      var st = String(u && u.status ? u.status : "ACTIVE").trim().toUpperCase();
+      if(!uid || st !== "ACTIVE"){
+        showError("此帳號不可登入（未授權或停用）。");
+        return;
+      }
+      lastAuthedUserId = uid;
+      var roleFromServer = String(u && u.role != null ? u.role : "").trim();
+      var tok = String(u && u.session_token ? u.session_token : "").trim();
+      if(tok && typeof setSessionToken === "function") setSessionToken(tok, remember);
+      if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember, role: roleFromServer });
+      syncTopbarUserLabel(uid);
+      showError("");
+      setOpen(false);
+      setLocked(false);
+      try{ if(typeof navigate === "function") navigate("dashboard"); }catch(_eNav){}
+      try{ if(typeof showToast === "function") showToast("已登入：" + uid); }catch(_e2){}
+    }catch(err){
+      var msg = String(err && err.message != null ? err.message : err || "").trim();
+      if(msg === "NOT_ALLOWED"){
+        showError("此 Google 帳號不在允許名單內。");
+        return;
+      }
+      if(msg === "BAD_ID_TOKEN" || msg === "BAD_AUD"){
+        showError("Google 登入驗證失敗（請聯絡管理員）。");
+        return;
+      }
+      showError(msg || "Google 登入失敗，請稍後再試。");
+    }
+  }
+
   async function ensureLoggedIn(){
     overlay = document.getElementById("loginOverlay");
     input = document.getElementById("loginUserId");
@@ -211,6 +265,42 @@
     syncPwToggleIcon_();
 
     setLocked(true);
+
+    // Google Sign-In button（若有設定 client id）
+    try{
+      var gWrap = document.getElementById("googleSignInWrap");
+      var gBtn = document.getElementById("googleSignInBtn");
+      var cid = getGoogleClientId_();
+      // 只要設定了 client id，就先顯示區塊；等 Google 腳本載入完成再 render（避免 async defer timing 造成「看不到按鈕」）
+      if(gWrap) gWrap.style.display = cid ? "" : "none";
+      if(gBtn && cid && !gBtn.dataset.inited){
+        (function tryInitGoogleBtn_(){
+          try{
+            if(!(window.google && google.accounts && google.accounts.id)){
+              // 最多等 10 秒（100 * 100ms），避免無限輪詢
+              var left = Number(gBtn.dataset.gsiWaitLeft || "100");
+              if(left <= 0) return;
+              gBtn.dataset.gsiWaitLeft = String(left - 1);
+              setTimeout(tryInitGoogleBtn_, 100);
+              return;
+            }
+            // 避免重複 init/render
+            gBtn.dataset.inited = "1";
+            google.accounts.id.initialize({
+              client_id: cid,
+              callback: function(resp){
+                try{
+                  var tok = resp && resp.credential ? String(resp.credential || "").trim() : "";
+                  if(!tok) return;
+                  doGoogleLogin(tok);
+                }catch(_e){}
+              }
+            });
+            google.accounts.id.renderButton(gBtn, { theme: "outline", size: "large", text: "signin_with" });
+          }catch(_e2){}
+        })();
+      }
+    }catch(_eG){}
 
     var tokResume = "";
     try{
