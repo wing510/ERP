@@ -247,7 +247,11 @@
         return;
       }
       if(msg === "BAD_ID_TOKEN" || msg === "BAD_AUD"){
-        showError("Google 登入驗證失敗（請聯絡管理員）。");
+        showError("Google 登入驗證失敗（ID Token 無效或 Client ID 不匹配）。請重新整理後再試；若仍失敗請聯絡管理員檢查 Google OAuth 設定。");
+        return;
+      }
+      if(/session_token\s+required/i.test(msg)){
+        showError("登入流程未完成或登入狀態已過期。請重新登入或重新整理頁面後再試。");
         return;
       }
       showError(msg || "Google 登入失敗，請稍後再試。");
@@ -333,7 +337,10 @@
             if(!(window.google && google.accounts && google.accounts.id)){
               // 最多等 10 秒（100 * 100ms），避免無限輪詢
               var left = Number(gBtn.dataset.gsiWaitLeft || "100");
-              if(left <= 0) return;
+              if(left <= 0){
+                showError("Google 登入元件載入逾時。可能被瀏覽器外掛、網路政策或公司防火牆阻擋。請重新整理頁面後再試。");
+                return;
+              }
               gBtn.dataset.gsiWaitLeft = String(left - 1);
               setTimeout(tryInitGoogleBtn_, 100);
               return;

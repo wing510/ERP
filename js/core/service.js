@@ -98,6 +98,16 @@ function formatCallApiUserMessage_(err) {
   const httpStatus = err && err.httpStatus != null ? err.httpStatus : null;
   const backendErrors = err && Array.isArray(err.backendErrors) ? err.backendErrors : null;
 
+  if (
+    /session_token\s+required/i.test(msg) ||
+    (backendErrors && backendErrors.some(e => /session_token\s+required/i.test(String(e || ""))))
+  ) {
+    return (
+      "登入狀態已過期或尚未完成登入。\n\n" +
+      "建議：請重新登入（或重新整理頁面後再試）；若仍持續出現，請回報管理員檢查後端 session 設定。"
+    );
+  }
+
   if (err && err.apiBaseMissing) {
     return (
       "未設定 API 網址（API_BASE）。\n\n" +
@@ -544,16 +554,16 @@ async function callAPI(params, options = {}){
       const v = params[k];
       if (v !== undefined) clean[k] = v;
     });
-    // 後端 doGet/doPost 統一驗人：除 login 外須帶有效操作者（與 getCurrentUser 一致）
+    // 後端 doGet/doPost 統一驗人：除 login/google_login 外須帶有效操作者（與 getCurrentUser 一致）
     const act = String(clean.action || "").trim();
-    if (act !== "login") {
+    if (act !== "login" && act !== "google_login") {
       const st =
         typeof getSessionToken === "function" ? String(getSessionToken() || "").trim() : "";
       if (st && !String(clean.session_token || "").trim()) {
         clean.session_token = st;
       }
     }
-    if (act !== "login" && act !== "session_resume" && act !== "session_logout") {
+    if (act !== "login" && act !== "google_login" && act !== "session_resume" && act !== "session_logout") {
       const uid =
         typeof getCurrentUser === "function" ? String(getCurrentUser() || "").trim() : "";
       if (uid) {
@@ -629,6 +639,24 @@ async function callAPI(params, options = {}){
 
   } catch(err){
     console.error("API ERROR:", err);
+    // session 過期/缺失：清除 token 並喚起登入（避免整站一直噴 session_token required）
+    try{
+      const backendErrors = Array.isArray(err && err.backendErrors) ? err.backendErrors : null;
+      const msg = String(err && err.message != null ? err.message : err || "");
+      const hasSessionRequired =
+        (backendErrors && backendErrors.some(e => /session_token\s+required/i.test(String(e || "")))) ||
+        /session_token\s+required/i.test(msg);
+      if(hasSessionRequired){
+        try{ if(typeof clearSessionToken === "function") clearSessionToken(); }catch(_e0){}
+        try{ invalidateCache(); }catch(_e1){}
+        // 讓 login overlay 接手（login.js 會綁在 window.erpEnsureLoggedIn）
+        try{
+          if(typeof window !== "undefined" && typeof window.erpEnsureLoggedIn === "function"){
+            setTimeout(function(){ try{ window.erpEnsureLoggedIn(); }catch(_e2){} }, 0);
+          }
+        }catch(_e3){}
+      }
+    }catch(_eSessGuard){}
     // #region agent log
     try{
       const t1 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
