@@ -68,18 +68,23 @@ async function createWarehouse(triggerEl){
   try{
     const exists = await getOne("warehouse","warehouse_id",warehouse_id).catch(()=>null);
     if(exists) return showToast("倉庫ID 已存在", "error");
-    await createRecord("warehouse", {
-      warehouse_id,
-      warehouse_name,
-      category,
-      address,
-      status,
-      remark,
-      created_by: getCurrentUser(),
-      created_at: nowIso16(),
-      updated_by: "",
-      updated_at: ""
-    });
+    try{
+      await createRecord("warehouse", {
+        warehouse_id,
+        warehouse_name,
+        category,
+        address,
+        status,
+        remark,
+        created_by: getCurrentUser(),
+        created_at: nowIso16(),
+        updated_by: "",
+        updated_at: ""
+      });
+    }catch(err){
+      // callAPI 會自己 toast（含 Permission denied）；這裡避免未捕捉 Promise 造成 Console 紅字
+      return;
+    }
     showToast("倉庫建立成功");
     clearWarehouseForm();
     await renderWarehouses();
@@ -124,15 +129,20 @@ async function updateWarehouse(triggerEl){
 
   showSaveHint(triggerEl);
   try{
-    await updateRecord("warehouse","warehouse_id",warehouse_id,{
-      warehouse_name,
-      category,
-      address,
-      status,
-      remark,
-      updated_by: getCurrentUser(),
-      updated_at: nowIso16()
-    });
+    try{
+      await updateRecord("warehouse","warehouse_id",warehouse_id,{
+        warehouse_name,
+        category,
+        address,
+        status,
+        remark,
+        updated_by: getCurrentUser(),
+        updated_at: nowIso16()
+      });
+    }catch(err){
+      // callAPI 會自己 toast（含 Permission denied）；這裡避免未捕捉 Promise 造成 Console 紅字
+      return;
+    }
     showToast("倉庫更新成功");
     await renderWarehouses();
   }finally{
