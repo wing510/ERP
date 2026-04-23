@@ -83,6 +83,32 @@ function syncErpQtyUnitSuffix_(hiddenId, suffixId){
 }
 
 /* =========================================================
+   主檔狀態（ACTIVE/INACTIVE）修改權限：僅 CEO/GA/ADMIN
+========================================================= */
+
+function erpCanChangeMasterStatus_(){
+  try{
+    var r = (typeof getCurrentUserRole === "function") ? String(getCurrentUserRole() || "").trim().toUpperCase() : "";
+    return r === "CEO" || r === "GA" || r === "ADMIN";
+  }catch(_e){
+    return false;
+  }
+}
+
+function erpLockStatusSelect_(selectId){
+  var el = document.getElementById(String(selectId || ""));
+  if(!el) return;
+  var ok = erpCanChangeMasterStatus_();
+  el.disabled = !ok;
+  el.setAttribute("aria-disabled", ok ? "false" : "true");
+  if(!ok){
+    el.setAttribute("title","僅 CEO／GA／ADMIN 可修改狀態（ACTIVE/INACTIVE）");
+  }else{
+    try{ el.removeAttribute("title"); }catch(_e2){}
+  }
+}
+
+/* =========================================================
    QA / 批次 / 異動 名詞：雙語或白話（新手友善）
 ========================================================= */
 var TERM_LABELS = {
@@ -307,7 +333,8 @@ async function isIdUsedInAny(idValue, refs){
     if(!type || !field) continue;
 
     if(!cache[type]){
-      cache[type] = await getAll(type).catch(()=>[]);
+      // 這是「停用前的提醒用檢查」：若因權限不足/網路等原因讀不到，不應噴錯干擾主流程
+      cache[type] = await getAll(type, { silent: true }).catch(()=>[]);
     }
     const rows = cache[type] || [];
     if(rows.some(x => String(x[field] || "") === id)){

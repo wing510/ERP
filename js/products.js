@@ -47,6 +47,7 @@ async function productsInit(){
   await renderProducts();
   clearForm();
   if(typeof bindStatusSelectLamp_ === "function") bindStatusSelectLamp_("p_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("p_status");
 }
 
 function setProductButtons_(){
@@ -304,6 +305,12 @@ async function updateProduct(triggerEl){
     return showToast("找不到產品","error");
 
   const newStatus = p_status.value;
+  // 狀態（ACTIVE/INACTIVE）僅 CEO/GA/ADMIN 可改（主檔）
+  if(String(product.status||"") !== String(newStatus||"")){
+    if(typeof erpCanChangeMasterStatus_ === "function" && !erpCanChangeMasterStatus_()){
+      return showToast("僅 CEO／GA／ADMIN 可修改產品狀態（ACTIVE/INACTIVE）。", "error");
+    }
+  }
 
   // 停用策略：允許停用，但若已被使用則提醒確認（不再硬性阻擋）
   if(product.status === "ACTIVE" && newStatus === "INACTIVE"){
@@ -383,6 +390,7 @@ function clearForm(){
   p_unit.value = "";
   p_id.value = generateShortId("P");
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("p_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("p_status");
   setProductButtons_();
 }
 
@@ -410,6 +418,7 @@ async function loadProduct(id){
   p_remark.value = stripProductUomRemark(p.remark);
   p_status.value = p.status;
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("p_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("p_status");
 
   p_id.disabled = true;
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();

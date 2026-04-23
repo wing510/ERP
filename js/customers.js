@@ -22,6 +22,7 @@ async function customersInit(){
   await renderCustomers();
   clearCustomerForm();
   if(typeof bindStatusSelectLamp_ === "function") bindStatusSelectLamp_("c_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("c_status");
 }
 
 function setCustomerButtons_(){
@@ -106,6 +107,12 @@ async function updateCustomer(triggerEl){
     return showToast("找不到客戶","error");
 
   const newStatus = c_status.value;
+  // 狀態（ACTIVE/INACTIVE）僅 CEO/GA/ADMIN 可改（主檔）
+  if(String(customer.status||"") !== String(newStatus||"")){
+    if(typeof erpCanChangeMasterStatus_ === "function" && !erpCanChangeMasterStatus_()){
+      return showToast("僅 CEO／GA／ADMIN 可修改客戶狀態（ACTIVE/INACTIVE）。", "error");
+    }
+  }
   const category = (document.getElementById("c_category")?.value || "").trim();
   const country = c_country.value.trim();
   const remark = c_remark.value.trim();
@@ -169,6 +176,7 @@ function clearCustomerForm(){
   c_status.value="ACTIVE";
   c_id.value = generateShortId("C");
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("c_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("c_status");
   setCustomerButtons_();
 }
 
@@ -191,6 +199,7 @@ async function loadCustomer(id){
   c_status.value = c.status;
   c_remark.value = c.remark;
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("c_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("c_status");
 
   c_id.disabled=true;
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();

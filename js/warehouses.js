@@ -3,6 +3,7 @@
  */
 
 let whEditing = false;
+let whLoadedStatus_ = "";
 
 const WAREHOUSE_RULES = {
   idRegex: /^[A-Z0-9_-]+$/,
@@ -18,6 +19,7 @@ async function warehousesInit(){
   ], () => searchWarehouses());
   await renderWarehouses();
   if(typeof bindStatusSelectLamp_ === "function") bindStatusSelectLamp_("wh_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("wh_status");
 }
 
 function setWarehouseButtons_(){
@@ -35,6 +37,7 @@ function setWarehouseButtons_(){
 
 function clearWarehouseForm(){
   whEditing = false;
+  whLoadedStatus_ = "";
   const idEl = document.getElementById("wh_id");
   if(idEl){ idEl.value = (typeof generateShortId === "function" ? generateShortId("WH") : ""); idEl.disabled = false; }
   const nameEl = document.getElementById("wh_name");
@@ -44,6 +47,7 @@ function clearWarehouseForm(){
   const stEl = document.getElementById("wh_status");
   if(stEl) stEl.value = "ACTIVE";
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("wh_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("wh_status");
   const addrEl = document.getElementById("wh_address");
   if(addrEl) addrEl.value = "";
   const rmEl = document.getElementById("wh_remark");
@@ -99,6 +103,7 @@ async function loadWarehouse(id){
   const row = await getOne("warehouse","warehouse_id",wid).catch(()=>null);
   if(!row) return;
   whEditing = true;
+  whLoadedStatus_ = String(row.status || "ACTIVE");
   const idEl = document.getElementById("wh_id");
   if(idEl){ idEl.value = row.warehouse_id || wid; idEl.disabled = true; }
   const nameEl = document.getElementById("wh_name");
@@ -108,6 +113,7 @@ async function loadWarehouse(id){
   const stEl = document.getElementById("wh_status");
   if(stEl) stEl.value = row.status || "ACTIVE";
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("wh_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("wh_status");
   const addrEl = document.getElementById("wh_address");
   if(addrEl) addrEl.value = row.address || "";
   const rmEl = document.getElementById("wh_remark");
@@ -127,6 +133,13 @@ async function updateWarehouse(triggerEl){
   if(!warehouse_name) return showToast("倉庫名稱必填", "error");
   if(!category) return showToast("請選擇類別", "error");
 
+  // 狀態（ACTIVE/INACTIVE）僅 CEO/GA/ADMIN 可改（主檔）
+  if(String(whLoadedStatus_||"") !== String(status||"")){
+    if(typeof erpCanChangeMasterStatus_ === "function" && !erpCanChangeMasterStatus_()){
+      return showToast("僅 CEO／GA／ADMIN 可修改倉庫狀態（ACTIVE/INACTIVE）。", "error");
+    }
+  }
+
   showSaveHint(triggerEl);
   try{
     try{
@@ -143,6 +156,7 @@ async function updateWarehouse(triggerEl){
       // callAPI 會自己 toast（含 Permission denied）；這裡避免未捕捉 Promise 造成 Console 紅字
       return;
     }
+    whLoadedStatus_ = String(status || "");
     showToast("倉庫更新成功");
     await renderWarehouses();
   }finally{

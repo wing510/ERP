@@ -548,6 +548,7 @@ function erpParseArrayDataResponse_(r) {
 async function callAPI(params, options = {}){
 
   const method = String(options?.method || "GET").toUpperCase();
+  const silent = options && (options.silent === true || options.quiet === true);
   const actionName = String(params?.action || "");
   const t0 = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
   const timeoutMs = Number(options?.timeout_ms || 60000);
@@ -721,7 +722,7 @@ async function callAPI(params, options = {}){
           err.erpUserMessage = userMsg;
           err.erpApiToastShown = true;
         } catch (_e2) {}
-        showToast(userMsg, "error");
+        if(!silent) showToast(userMsg, "error");
       }
     }catch(_e){}
     throw err;
@@ -782,6 +783,7 @@ function invalidateCache(type) {
 async function getAll(type, options) {
   const key = String(type || "").toLowerCase();
   const refresh = options && options.refresh === true;
+  const silent = options && (options.silent === true || options.quiet === true);
   const ttl = getCacheTtlMs_(key);
   const now = Date.now();
   if (refresh) delete API_CACHE[key];
@@ -792,7 +794,7 @@ async function getAll(type, options) {
 
   const fetchId = Symbol();
   const p = (async () => {
-    const result = await callAPI({ action: `list_${type}` });
+    const result = await callAPI({ action: `list_${type}` }, silent ? { silent: true } : undefined);
     const data = result.data;
     const cur = API_CACHE[key];
     if (!cur || cur.fetchId !== fetchId) return data;

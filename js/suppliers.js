@@ -145,6 +145,7 @@ async function suppliersInit(){
   await renderSuppliers();
   clearSupplierForm();
   if(typeof bindStatusSelectLamp_ === "function") bindStatusSelectLamp_("s_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("s_status");
 }
 
 function setSupplierButtons_(){
@@ -230,6 +231,12 @@ async function updateSupplier(triggerEl){
     return showToast("找不到供應商","error");
 
   const newStatus = s_status.value;
+  // 狀態（ACTIVE/INACTIVE）僅 CEO/GA/ADMIN 可改（主檔）
+  if(String(supplier.status||"") !== String(newStatus||"")){
+    if(typeof erpCanChangeMasterStatus_ === "function" && !erpCanChangeMasterStatus_()){
+      return showToast("僅 CEO／GA／ADMIN 可修改供應商狀態（ACTIVE/INACTIVE）。", "error");
+    }
+  }
   const country = s_country.value.trim();
   const supplier_type = supplierCsvFromGroup_("s_type_group");
   const remark = s_remark.value.trim();
@@ -299,6 +306,7 @@ function clearSupplierForm(){
   s_status.value="ACTIVE";
   s_id.value = generateShortId("S");
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("s_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("s_status");
   setSupplierButtons_();
 }
 
@@ -324,6 +332,7 @@ async function loadSupplier(id){
   s_status.value = s.status;
   s_remark.value = s.remark;
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("s_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("s_status");
 
   s_id.disabled=true;
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
