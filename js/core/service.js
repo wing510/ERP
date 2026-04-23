@@ -108,6 +108,17 @@ function formatCallApiUserMessage_(err) {
     );
   }
 
+  if (
+    /permission\s+denied/i.test(msg) ||
+    (backendErrors && backendErrors.some(e => /permission\s+denied/i.test(String(e || ""))))
+  ) {
+    return (
+      "權限不足：您目前的帳號無法存取此資料。\n\n" +
+      "可能原因：未被分配該模組權限（allowed_modules）或角色限制。\n\n" +
+      "建議：請聯絡管理員於 Users 設定可用模組，或改用有權限的帳號登入。"
+    );
+  }
+
   if (err && err.apiBaseMissing) {
     return (
       "未設定 API 網址（API_BASE）。\n\n" +

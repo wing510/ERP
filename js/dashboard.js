@@ -95,30 +95,43 @@ function dbDerivedInventoryStatus_(lot, availableQty, movementLoadFailed) {
 async function dashboardInit() {
   if (!window.DB) window.DB = {};
 
-  // 重要：避免全量下載 inventory_movement（很慢）
-  const core = typeof loadInventoryCoreData_ === "function"
-    ? await loadInventoryCoreData_({ needWarehouses: false, needMovementDetails: false })
+  function can_(k){
+    try{
+      return (typeof erpIsModuleAllowed_ === "function") ? !!erpIsModuleAllowed_(k) : true;
+    }catch(_e){
+      return true;
+    }
+  }
+
+  // 重要：避免在「無庫存權限」時仍去打 lot/movement 造成 Permission denied
+  const canInventory = can_("lots") || can_("movements");
+  const core = (canInventory && typeof loadInventoryCoreData_ === "function")
+    ? await loadInventoryCoreData_({ needWarehouses: false, needMovementDetails: false }).catch(function(){ return { lots: [], products: [], movementAvailableByLotId: {}, movementLoadFailed: true }; })
     : { lots: [], products: [], movementAvailableByLotId: {}, movementLoadFailed: true };
 
   const [pos, imports, shipments, salesOrders] = await Promise.all([
-    getAll("purchase_order").catch(function () { return []; }),
-    getAll("import_document").catch(function () { return []; }),
-    (async function(){
-      try{
-        const r = await callAPI({ action: "list_shipment_recent", days: 365, _ts: String(Date.now()) }, { method: "POST" });
-        return (r && r.data) ? r.data : [];
-      }catch(_e){
-        return await getAll("shipment").catch(function () { return []; });
-      }
-    })(),
-    (async function(){
-      try{
-        const r = await callAPI({ action: "list_sales_order_recent", days: 365, _ts: String(Date.now()) }, { method: "POST" });
-        return (r && r.data) ? r.data : [];
-      }catch(_e){
-        return await getAll("sales_order").catch(function () { return []; });
-      }
-    })()
+    can_("purchase") ? getAll("purchase_order").catch(function () { return []; }) : Promise.resolve([]),
+    can_("import") ? getAll("import_document").catch(function () { return []; }) : Promise.resolve([]),
+    can_("shipping")
+      ? (async function(){
+          try{
+            const r = await callAPI({ action: "list_shipment_recent", days: 365, _ts: String(Date.now()) }, { method: "POST" });
+            return (r && r.data) ? r.data : [];
+          }catch(_e){
+            return await getAll("shipment").catch(function () { return []; });
+          }
+        })()
+      : Promise.resolve([]),
+    can_("sales")
+      ? (async function(){
+          try{
+            const r = await callAPI({ action: "list_sales_order_recent", days: 365, _ts: String(Date.now()) }, { method: "POST" });
+            return (r && r.data) ? r.data : [];
+          }catch(_e){
+            return await getAll("sales_order").catch(function () { return []; });
+          }
+        })()
+      : Promise.resolve([])
   ]);
 
   window.DB.products = core.products || [];
