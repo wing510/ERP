@@ -513,8 +513,8 @@ const SCHEMA = {
     "user_name",
     // Google 登入：對應名單用（建議存小寫 email）
     "email",
-    // 密碼（供 login action 驗證；建議至少 6 碼）
-    "password",
+    // 可用模組（逗號分隔；空白=全開；* = 全開）
+    "allowed_modules",
     "role",
     "status",
     "remark",
@@ -558,7 +558,7 @@ const ENUMS = {
   },
   user: {
     // 角色代碼（新：兩字母縮寫；舊代碼保留相容歷史資料）
-    role: ["CEO", "FN", "GA", "OP", "QA", "SL", "WH", "ADMIN", "FINANCE", "GENERAL_AFFAIRS", "SALES", "WAREHOUSE"],
+    role: ["CEO", "FN", "GA", "OP", "QA", "SL", "WH", "AS", "ADMIN", "FINANCE", "GENERAL_AFFAIRS", "SALES", "WAREHOUSE"],
     status: ["ACTIVE", "INACTIVE"]
   },
   lot_relation: {

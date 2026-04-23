@@ -16,6 +16,7 @@
       user_name: r.user_name,
       role: r.role,
       status: r.status,
+      allowed_modules: r.allowed_modules,
       remember: !!r.remember,
       session_token: r.session_token,
       session_expires_at: r.session_expires_at
@@ -32,15 +33,28 @@
     }
   }
 
+  function getAllowPasswordLogin_(){
+    try{
+      var cfg = window.__ERP_CONFIG__ || null;
+      return !!(cfg && cfg.ALLOW_PASSWORD_LOGIN === true);
+    }catch(_e){
+      return false;
+    }
+  }
+
   var overlay = null;
   var input = null;
   var pwInput = null;
   var pwToggleBtn = null;
   var rememberCk = null;
+  var adminToggle = null;
+  var adminToggleWrap = null;
   var errBox = null;
   var btnSubmit = null;
   var btnClear = null;
   var lastAuthedUserId = "";
+  var pwWrap = null;
+  var pwActions = null;
 
   function escHtml_(s){
     return String(s ?? "")
@@ -105,6 +119,10 @@
   }
 
   async function doLogin(){
+    if(!getAllowPasswordLogin_()){
+      showError("目前已關閉帳密登入（僅允許 Google 登入）。");
+      return;
+    }
     if(!input) return;
     var id = normalizeId(input.value);
     if(!id){
@@ -141,7 +159,8 @@
         var roleFromServer = String(u && u.role != null ? u.role : "").trim();
         var tok = String(u && u.session_token ? u.session_token : "").trim();
         if(tok && typeof setSessionToken === "function") setSessionToken(tok, remember);
-        if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember, role: roleFromServer });
+        var am = String(u && u.allowed_modules != null ? u.allowed_modules : "").trim();
+        if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember, role: roleFromServer, allowed_modules: am });
         syncTopbarUserLabel(uid);
         showError("");
         setOpen(false);
@@ -167,6 +186,10 @@
         }
         if(msg === "NO_PASSWORD"){
           showError("此帳號尚未設定密碼，請先到 Google Sheet 的 Users 主檔設定 password 欄位。");
+          return;
+        }
+        if(msg === "PASSWORD_LOGIN_DISABLED"){
+          showError("帳密登入僅限 ADMIN 救火使用；請改用 Google 登入。");
           return;
         }
         if(msg === "INACTIVE"){
@@ -209,7 +232,8 @@
       var roleFromServer = String(u && u.role != null ? u.role : "").trim();
       var tok = String(u && u.session_token ? u.session_token : "").trim();
       if(tok && typeof setSessionToken === "function") setSessionToken(tok, remember);
-      if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember, role: roleFromServer });
+      var am = String(u && u.allowed_modules != null ? u.allowed_modules : "").trim();
+      if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember, role: roleFromServer, allowed_modules: am });
       syncTopbarUserLabel(uid);
       showError("");
       setOpen(false);
@@ -236,11 +260,41 @@
     pwInput = document.getElementById("loginPassword");
     pwToggleBtn = document.getElementById("loginPwToggle");
     rememberCk = document.getElementById("loginRemember");
+    adminToggle = document.getElementById("loginAdminToggle");
+    adminToggleWrap = document.getElementById("loginAdminToggleWrap");
     errBox = document.getElementById("loginError");
     btnSubmit = document.getElementById("loginSubmitBtn");
     btnClear = document.getElementById("loginClearBtn");
+    pwWrap = document.getElementById("passwordLoginWrap");
+    pwActions = document.getElementById("passwordLoginActions");
     var loginForm = document.getElementById("loginForm");
     if(!overlay || !input || !pwInput || !btnSubmit || !btnClear) return;
+
+    // 預設：只允許 Google 登入；帳密登入（救火）需 config 開關手動打開
+    try{
+      var allowPwCfg = getAllowPasswordLogin_();
+      if(adminToggleWrap) adminToggleWrap.style.display = allowPwCfg ? "" : "none";
+      if(adminToggle && !adminToggle.dataset.bound){
+        adminToggle.dataset.bound = "1";
+        adminToggle.addEventListener("change", function(){
+          try{ ensurePasswordAreaVisibility_(); }catch(_e){}
+        });
+      }
+
+      function ensurePasswordAreaVisibility_(){
+        var allowPw = allowPwCfg && !!(adminToggle && adminToggle.checked);
+        if(pwWrap) pwWrap.style.display = allowPw ? "" : "none";
+        if(pwActions) pwActions.style.display = allowPw ? "" : "none";
+        // 避免瀏覽器原生 required 阻擋（帳密隱藏時仍會擋 submit）
+        try{ if(!allowPw) input.removeAttribute("required"); else input.setAttribute("required","required"); }catch(_eReq1){}
+        try{ if(!allowPw) pwInput.removeAttribute("required"); else pwInput.setAttribute("required","required"); }catch(_eReq2){}
+        if(!allowPw){
+          clearLoginForm_();
+        }
+      }
+
+      ensurePasswordAreaVisibility_();
+    }catch(_ePw){}
 
     if(loginForm && !loginForm.dataset.boundSubmit){
       loginForm.dataset.boundSubmit = "1";
@@ -320,7 +374,7 @@
             var roleSess = String(uu.role != null ? uu.role : "").trim();
             var remSess = !!uu.remember;
             if(typeof setCurrentUser === "function"){
-              setCurrentUser(lastAuthedUserId, { remember: remSess, role: roleSess });
+              setCurrentUser(lastAuthedUserId, { remember: remSess, role: roleSess, allowed_modules: String(uu && uu.allowed_modules != null ? uu.allowed_modules : "").trim() });
             }
             syncTopbarUserLabel(lastAuthedUserId);
             setOpen(false);

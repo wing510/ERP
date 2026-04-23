@@ -59,10 +59,38 @@ const SHEET_LINKS = {
     "https://docs.google.com/spreadsheets/d/17CFX0_mgvGaaOoxRub9mw33LuukzhwrEGK5se8LbwTw/edit?gid=475164289#gid=475164289"
 };
 
+function erpCanOpenSheet_(){
+  try{
+    const r = (typeof getCurrentUserRole === "function" ? String(getCurrentUserRole() || "") : "").trim().toUpperCase();
+    return r === "CEO" || r === "GA" || r === "ADMIN";
+  }catch(_e){
+    return false;
+  }
+}
+
+function erpApplySheetPermissions(){
+  try{
+    const ok = erpCanOpenSheet_();
+    document.querySelectorAll("button.btn-sheet").forEach(btn=>{
+      btn.style.display = ok ? "" : "none";
+      btn.setAttribute("aria-hidden", ok ? "false" : "true");
+    });
+  }catch(_e){}
+}
+try{ window.erpApplySheetPermissions = erpApplySheetPermissions; }catch(_e0){}
+
 /**
  * @param {keyof typeof SHEET_LINKS} key
  */
 function openSheetLink(key) {
+  // Sheet 連結視為「管理/維運」入口：預設僅 CEO/GA/ADMIN 可開
+  try{
+    const ok = erpCanOpenSheet_();
+    if(!ok){
+      if (typeof showToast === "function") showToast("僅 CEO/總務/ADMIN 可開啟 Sheet。", "error");
+      return;
+    }
+  }catch(_e0){}
   const url = SHEET_LINKS[key];
   if (!url) {
     if (typeof showToast === "function") {
@@ -109,7 +137,11 @@ function bindSheetButtons_(){
 }
 
 if(document.readyState === "loading"){
-  document.addEventListener("DOMContentLoaded", bindSheetButtons_);
+  document.addEventListener("DOMContentLoaded", function(){
+    bindSheetButtons_();
+    erpApplySheetPermissions();
+  });
 }else{
   bindSheetButtons_();
+  erpApplySheetPermissions();
 }

@@ -5,6 +5,80 @@
 // 避免「切換模組時，上一個模組的 async 還在跑」導致偶發 null 元素錯誤
 let __ERP_MODULE_LOAD_SEQ__ = 0;
 
+function erpAllowedModuleSet_(){
+  try{
+    var raw = "";
+    if(typeof getCurrentUserAllowedModules === "function"){
+      raw = String(getCurrentUserAllowedModules() || "");
+    }else{
+      raw = String(localStorage.getItem("erp_allowed_modules") || sessionStorage.getItem("erp_allowed_modules") || "");
+    }
+    raw = String(raw || "").trim();
+    // 預設：空白 = 全關（Dashboard/Trace/Logs 由 erpIsModuleAllowed_ 另行處理）
+    if(!raw) return {};
+    if(raw === "*" || raw.toUpperCase() === "ALL") return null; // null = 全開（相容舊資料）
+    var set = {};
+    raw.split(",").map(function(s){ return String(s||"").trim(); }).filter(Boolean).forEach(function(k){ set[k] = true; });
+    return set;
+  }catch(_e){
+    return null;
+  }
+}
+
+function erpIsModuleAllowed_(moduleKey){
+  var k = String(moduleKey || "").trim();
+  if(!k) return true;
+  // 預設所有人都能看
+  if(k === "dashboard" || k === "trace") return true;
+  // Users：預設只有 CEO/GA/ADMIN 可看
+  if(k === "users"){
+    try{
+      var r = (typeof getCurrentUserRole === "function" ? String(getCurrentUserRole() || "") : "").trim().toUpperCase();
+      return r === "CEO" || r === "GA" || r === "ADMIN";
+    }catch(_e){
+      return false;
+    }
+  }
+  // Logs：預設只有 CEO/GA/ADMIN 可看
+  if(k === "logs"){
+    try{
+      var r = (typeof getCurrentUserRole === "function" ? String(getCurrentUserRole() || "") : "").trim().toUpperCase();
+      return r === "CEO" || r === "GA" || r === "ADMIN";
+    }catch(_e){
+      return false;
+    }
+  }
+  var set = erpAllowedModuleSet_();
+  if(!set) return true; // 全開
+  return !!set[k];
+}
+
+function erpApplyModulePermissions(){
+  try{
+    document.querySelectorAll("[data-nav-module]").forEach(function(a){
+      var k = String(a.getAttribute("data-nav-module") || "").trim();
+      var ok = !k || erpIsModuleAllowed_(k);
+      a.style.display = ok ? "" : "none";
+      a.setAttribute("aria-hidden", ok ? "false" : "true");
+    });
+    // 若某段落底下沒有任何可見連結，就隱藏 section title
+    document.querySelectorAll(".section-title").forEach(function(t){
+      var el = t.nextElementSibling;
+      var has = false;
+      while(el){
+        if(el.classList && el.classList.contains("section-title")) break;
+        if(el.matches && el.matches("[data-nav-module]")){
+          if(el.style.display !== "none") { has = true; break; }
+        }
+        el = el.nextElementSibling;
+      }
+      t.style.display = has ? "" : "none";
+      t.setAttribute("aria-hidden", has ? "false" : "true");
+    });
+  }catch(_e){}
+}
+try{ window.erpApplyModulePermissions = erpApplyModulePermissions; }catch(_e0){}
+
 function escapeModuleLoadHtml_(s) {
   return String(s ?? "")
     .replace(/&/g, "&amp;")
@@ -115,6 +189,11 @@ function loadModule(path, moduleName = null) {
       if (typeof initHelpComponent === "function") {
         initHelpComponent();
       }
+      try{
+        if(typeof window.erpApplySheetPermissions === "function"){
+          window.erpApplySheetPermissions();
+        }
+      }catch(_eSheet){}
 
       // 有 init 的模組：先顯示「載入中…」，等列表載入完再移除，避免以為資料不見
       const initFn = moduleName && window[moduleName + "Init"];
@@ -174,6 +253,13 @@ function navigate(module) {
   if (typeof window.closeSidebarDrawer === "function") {
     window.closeSidebarDrawer();
   }
+  // 模組權限：若未允許，阻擋導頁（避免只靠隱藏選單被繞過）
+  try{
+    if(module && !erpIsModuleAllowed_(module)){
+      if(typeof showToast === "function") showToast("您沒有權限使用此模組。", "error");
+      return;
+    }
+  }catch(_ePerm){}
   switch (module) {
 
     case "dashboard":
@@ -258,6 +344,7 @@ function navigate(module) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
+  try{ erpApplyModulePermissions(); }catch(_e0){}
   // 尚未登入（無 session_token）時，不要自動載入任何模組，避免背景打 API 造成大量 session_token required 噪音。
   try{
     const tok = (typeof getSessionToken === "function") ? String(getSessionToken() || "").trim() : "";

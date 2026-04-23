@@ -260,6 +260,8 @@ function erpClearUserSessionStorage_(){
   try{ localStorage.removeItem("erp_current_user"); }catch(_e3){}
   try{ sessionStorage.removeItem("erp_current_role"); }catch(_e4){}
   try{ localStorage.removeItem("erp_current_role"); }catch(_e5){}
+  try{ sessionStorage.removeItem("erp_allowed_modules"); }catch(_e6){}
+  try{ localStorage.removeItem("erp_allowed_modules"); }catch(_e7){}
 }
 
 function getCurrentUser(){
@@ -279,9 +281,17 @@ function getCurrentUserRole(){
   }
 }
 
+function getCurrentUserAllowedModules(){
+  try{
+    return (sessionStorage.getItem("erp_allowed_modules") || localStorage.getItem("erp_allowed_modules") || "");
+  }catch(_e){
+    return "";
+  }
+}
+
 /**
  * @param {string} userId
- * @param {{ remember?: boolean, role?: string }} [options] role：後端 login 回傳之 role（如 ADMIN）
+ * @param {{ remember?: boolean, role?: string, allowed_modules?: string }} [options] role：後端 login 回傳之 role（如 ADMIN）
  */
 function setCurrentUser(userId, options){
   try{
@@ -292,19 +302,36 @@ function setCurrentUser(userId, options){
     const uid = String(userId).trim();
     const remember = options && options.remember === false ? false : true;
     const role = options && options.role != null ? String(options.role).trim() : "";
+    const allowedModules = options && options.allowed_modules != null ? String(options.allowed_modules).trim() : "";
     if(remember){
       try{ sessionStorage.removeItem("erp_current_user"); }catch(_e3){}
       localStorage.setItem("erp_current_user", uid);
       try{ sessionStorage.removeItem("erp_current_role"); }catch(_eR){}
       if(role) localStorage.setItem("erp_current_role", role);
       else try{ localStorage.removeItem("erp_current_role"); }catch(_eR2){}
+      try{ sessionStorage.removeItem("erp_allowed_modules"); }catch(_eAM0){}
+      if(allowedModules) localStorage.setItem("erp_allowed_modules", allowedModules);
+      else try{ localStorage.removeItem("erp_allowed_modules"); }catch(_eAM1){}
     }else{
       localStorage.removeItem("erp_current_user");
       try{ sessionStorage.setItem("erp_current_user", uid); }catch(_e4){}
       try{ localStorage.removeItem("erp_current_role"); }catch(_eR3){}
       if(role) try{ sessionStorage.setItem("erp_current_role", role); }catch(_eR4){}
       else try{ sessionStorage.removeItem("erp_current_role"); }catch(_eR5){}
+      try{ localStorage.removeItem("erp_allowed_modules"); }catch(_eAM2){}
+      if(allowedModules) try{ sessionStorage.setItem("erp_allowed_modules", allowedModules); }catch(_eAM3){}
+      else try{ sessionStorage.removeItem("erp_allowed_modules"); }catch(_eAM4){}
     }
+    try{
+      if(typeof window.erpApplyModulePermissions === "function"){
+        window.erpApplyModulePermissions();
+      }
+    }catch(_ePerm){}
+    try{
+      if(typeof window.erpApplySheetPermissions === "function"){
+        window.erpApplySheetPermissions();
+      }
+    }catch(_eSheet){}
   }catch(_e){}
 }
 

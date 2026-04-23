@@ -6,7 +6,7 @@
 (function () {
   var defaults = {
     API_BASE:
-      "https://script.google.com/macros/s/AKfycbzfiMlsQM8La5uQGu8nhvGBiJIVjj3rP2SWZTTXKOFkc8EXhJamBWTONbq_7GUlzZFd/exec"
+      "https://script.google.com/macros/s/AKfycbzi46e9WFl5C-OMY9fD5iCCBBFhX7ur6Pg1sFVwvGnEadOLjYRItkn2lMiEpI-ckoJh/exec"
     ,
     // Google Sign-In（GIS）Client ID（Web）
     // - PROD：GitHub Pages
@@ -15,6 +15,9 @@
       "165277125304-e3prg9l893f64nmne3pn6ki5agib8akm.apps.googleusercontent.com",
     GOOGLE_CLIENT_ID_LOCAL:
       "165277125304-mf5cfjntll4bt4queucub8oajrgkf1ts.apps.googleusercontent.com"
+    ,
+    // 安全：預設只允許 Google 登入；需要救火時才手動打開帳密登入
+    ALLOW_PASSWORD_LOGIN: true
   };
   var prev = typeof window.__ERP_CONFIG__ === "object" && window.__ERP_CONFIG__ !== null ? window.__ERP_CONFIG__ : {};
   var merged = Object.assign({}, defaults, prev);
