@@ -248,19 +248,31 @@ async function traceInit(){
 async function loadTraceCaches(){
   // 追溯畫面很容易被「全表 movements / relations / shipment_item」拖慢。
   // 這裡採分段載入：先載入主檔，等使用者輸入 lot 再按需抓明細（runTrace 補齊）。
+  function can_(k){
+    try{
+      return (typeof erpIsModuleAllowed_ === "function") ? !!erpIsModuleAllowed_(k) : true;
+    }catch(_e){
+      return true;
+    }
+  }
+
+  // 注意：Trace 預設開放，但部分帳號可能沒有庫存/進貨/加工/出貨模組權限。
+  // 這裡務必「不丟例外」，否則整個模組會被 router 視為載入失敗。
   const [lots, shipments, importDocs, goodsReceipts, processOrders] = await Promise.all([
-    getAll("lot"),
-    (async ()=>{
-      try{
-        const r = await callAPI({ action: "list_shipment_recent", days: 365, _ts: String(Date.now()) }, { method: "POST" });
-        return (r && r.data) ? r.data : [];
-      }catch(_e){
-        return await getAll("shipment").catch(() => []);
-      }
-    })(),
-    getAll("import_document").catch(() => []),
-    getAll("goods_receipt").catch(() => []),
-    getAll("process_order").catch(() => [])
+    (can_("lots") ? getAll("lot").catch(() => []) : Promise.resolve([])),
+    (can_("shipping")
+      ? (async ()=>{
+          try{
+            const r = await callAPI({ action: "list_shipment_recent", days: 365, _ts: String(Date.now()) }, { method: "POST" });
+            return (r && r.data) ? r.data : [];
+          }catch(_e){
+            return await getAll("shipment").catch(() => []);
+          }
+        })()
+      : Promise.resolve([])),
+    (can_("import") ? getAll("import_document").catch(() => []) : Promise.resolve([])),
+    (can_("receive") ? getAll("goods_receipt").catch(() => []) : Promise.resolve([])),
+    (can_("outsource") ? getAll("process_order").catch(() => []) : Promise.resolve([]))
   ]);
   traceLots = lots || [];
   traceShipments = shipments || [];
