@@ -50,6 +50,7 @@
   var adminToggle = null;
   var adminToggleWrap = null;
   var errBox = null;
+  var statusBox = null;
   var btnSubmit = null;
   var btnClear = null;
   var lastAuthedUserId = "";
@@ -68,6 +69,25 @@
     if(!errBox) return;
     errBox.innerHTML = escHtml_(msg || "");
     errBox.classList.toggle("show", !!msg);
+  }
+
+  function showStatus(msg){
+    if(!statusBox) return;
+    statusBox.innerHTML = escHtml_(msg || "");
+    statusBox.classList.toggle("show", !!msg);
+  }
+
+  function setLoginBusy_(busy, message){
+    var on = !!busy;
+    try{
+      if(btnSubmit) btnSubmit.disabled = on;
+      if(btnClear) btnClear.disabled = on;
+    }catch(_e){}
+    try{
+      var gBtn = document.getElementById("googleSignInBtn");
+      if(gBtn) gBtn.style.pointerEvents = on ? "none" : "";
+    }catch(_e2){}
+    showStatus(on ? (message || "登入中，等稍等...") : "");
   }
 
   function setOpen(open){
@@ -96,8 +116,51 @@
       var el = document.getElementById("topbarCurrentUser");
       if(!el) return;
       var uid = String(userId || "").trim();
-      el.textContent = uid || "—";
-      el.title = uid ? ("目前登入：" + uid) : "";
+      var role = "";
+      try{
+        role = (typeof getCurrentUserRole === "function") ? String(getCurrentUserRole() || "").trim() : "";
+      }catch(_eRole){ role = ""; }
+      var r = String(role || "").trim().toUpperCase();
+      var roleZh = (function(){
+        if(!r) return "";
+        // 與 Users 角色選單對齊（modules/users.html）
+        var map = {
+          "CEO": "CEO",
+          "FN": "財務",
+          "GA": "總務",
+          "OP": "作業",
+          "QA": "品保",
+          "SL": "業務",
+          "AS": "助理",
+          "WH": "倉管",
+          "ADMIN": "管理者"
+        };
+        return map[r] || r;
+      })();
+      var label = uid ? (roleZh ? (roleZh + " - " + uid) : uid) : "—";
+      el.textContent = label;
+      el.title = uid ? ("目前登入：" + (roleZh ? (roleZh + " - " + uid) : uid)) : "";
+    }catch(_e){}
+  }
+
+  function welcomeToast_(uid, role, uname){
+    try{
+      var r = String(role || "").trim().toUpperCase();
+      var map = {
+        "CEO": "CEO",
+        "FN": "財務",
+        "GA": "總務",
+        "OP": "作業",
+        "QA": "品保",
+        "SL": "業務",
+        "AS": "助理",
+        "WH": "倉管",
+        "ADMIN": "管理者"
+      };
+      var roleZh = map[r] || (r || "");
+      var main = roleZh ? (roleZh + "-" + String(uid || "").trim()) : String(uid || "").trim();
+      var msg = "歡迎登入 " + main + (uname ? (" " + String(uname || "").trim()) : "");
+      if(typeof showToast === "function") showToast(msg, "success");
     }catch(_e){}
   }
 
@@ -134,8 +197,7 @@
       showError("請輸入密碼");
       return;
     }
-    btnSubmit && (btnSubmit.disabled = true);
-    btnClear && (btnClear.disabled = true);
+    setLoginBusy_(true, "登入中，等稍等...");
     try{
       if(typeof callAPI !== "function"){
         showError("系統尚未初始化完成，請稍後再試。");
@@ -157,18 +219,20 @@
         }
         lastAuthedUserId = uid;
         var roleFromServer = String(u && u.role != null ? u.role : "").trim();
+        var nameFromServer = String(u && u.user_name != null ? u.user_name : "").trim();
         var tok = String(u && u.session_token ? u.session_token : "").trim();
         if(tok && typeof setSessionToken === "function") setSessionToken(tok, remember);
         var am = String(u && u.allowed_modules != null ? u.allowed_modules : "").trim();
-        if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember, role: roleFromServer, allowed_modules: am });
+        if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember, role: roleFromServer, user_name: nameFromServer, allowed_modules: am });
         syncTopbarUserLabel(uid);
         showError("");
+        showStatus("");
         setOpen(false);
         setLocked(false);
         try{
           if(typeof navigate === "function") navigate("dashboard");
         }catch(_eNav){}
-        try{ if(typeof showToast === "function") showToast("已登入：" + uid); }catch(_e2){}
+        welcomeToast_(uid, roleFromServer, nameFromServer);
       }catch(err){
         var msg = String(err && err.message != null ? err.message : err || "").trim();
         // 後端回傳的代碼（loginUser）：NOT_FOUND / BAD_PASSWORD / NO_PASSWORD / INACTIVE / Users sheet missing password column...
@@ -204,14 +268,14 @@
         return;
       }
     }finally{
-      btnSubmit && (btnSubmit.disabled = false);
-      btnClear && (btnClear.disabled = false);
+      setLoginBusy_(false);
     }
   }
 
   async function doGoogleLogin(idToken){
     var remember = true;
     try{ remember = rememberCk ? !!rememberCk.checked : true; }catch(_eRemember){ remember = true; }
+    setLoginBusy_(true, "登入中，等稍等...");
     try{
       if(typeof callAPI !== "function"){
         showError("系統尚未初始化完成，請稍後再試。");
@@ -230,16 +294,18 @@
       }
       lastAuthedUserId = uid;
       var roleFromServer = String(u && u.role != null ? u.role : "").trim();
+      var nameFromServer = String(u && u.user_name != null ? u.user_name : "").trim();
       var tok = String(u && u.session_token ? u.session_token : "").trim();
       if(tok && typeof setSessionToken === "function") setSessionToken(tok, remember);
       var am = String(u && u.allowed_modules != null ? u.allowed_modules : "").trim();
-      if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember, role: roleFromServer, allowed_modules: am });
+      if(typeof setCurrentUser === "function") setCurrentUser(uid, { remember: remember, role: roleFromServer, user_name: nameFromServer, allowed_modules: am });
       syncTopbarUserLabel(uid);
       showError("");
+      showStatus("");
       setOpen(false);
       setLocked(false);
       try{ if(typeof navigate === "function") navigate("dashboard"); }catch(_eNav){}
-      try{ if(typeof showToast === "function") showToast("已登入：" + uid); }catch(_e2){}
+      welcomeToast_(uid, roleFromServer, nameFromServer);
     }catch(err){
       var msg = String(err && err.message != null ? err.message : err || "").trim();
       if(msg === "NOT_ALLOWED"){
@@ -256,6 +322,9 @@
       }
       showError(msg || "Google 登入失敗，請稍後再試。");
     }
+    finally{
+      setLoginBusy_(false);
+    }
   }
 
   async function ensureLoggedIn(){
@@ -267,6 +336,7 @@
     adminToggle = document.getElementById("loginAdminToggle");
     adminToggleWrap = document.getElementById("loginAdminToggleWrap");
     errBox = document.getElementById("loginError");
+    statusBox = document.getElementById("loginStatus");
     btnSubmit = document.getElementById("loginSubmitBtn");
     btnClear = document.getElementById("loginClearBtn");
     pwWrap = document.getElementById("passwordLoginWrap");
@@ -370,6 +440,7 @@
     if(tokResume){
       try{
         if(typeof callAPI === "function"){
+          setLoginBusy_(true, "登入中，等稍等...");
           var rr = await callAPI(
             { action: "session_resume", session_token: tokResume },
             { method: "POST", timeout_ms: 60000 }
@@ -379,16 +450,19 @@
           if(uu && uu.user_id && st2 === "ACTIVE"){
             lastAuthedUserId = String(uu.user_id).trim();
             var roleSess = String(uu.role != null ? uu.role : "").trim();
+            var nameSess = String(uu.user_name != null ? uu.user_name : "").trim();
             var remSess = !!uu.remember;
             if(typeof setCurrentUser === "function"){
-              setCurrentUser(lastAuthedUserId, { remember: remSess, role: roleSess, allowed_modules: String(uu && uu.allowed_modules != null ? uu.allowed_modules : "").trim() });
+              setCurrentUser(lastAuthedUserId, { remember: remSess, role: roleSess, user_name: nameSess, allowed_modules: String(uu && uu.allowed_modules != null ? uu.allowed_modules : "").trim() });
             }
             syncTopbarUserLabel(lastAuthedUserId);
             setOpen(false);
             setLocked(false);
+            setLoginBusy_(false);
             try{
               if(typeof navigate === "function") navigate("dashboard");
             }catch(_eNav2){}
+            // 保持登入自動恢復：不強制彈 toast（避免每次開頁都跳），但仍同步顯示名稱
             return;
           }
         }
@@ -396,6 +470,7 @@
         try{ if(typeof clearSessionToken === "function") clearSessionToken(); }catch(_c){}
       }
       try{ if(typeof clearSessionToken === "function") clearSessionToken(); }catch(_c2){}
+      setLoginBusy_(false);
     }
 
     setOpen(true);

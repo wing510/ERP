@@ -1346,6 +1346,17 @@ body.erp-locked .sidebar-backdrop{
 }
 .login-error.show{ display:block; }
 
+.login-status{
+  margin-top:10px;
+  font-size:12px;
+  color:#2563eb;
+  display:none;
+  line-height:1.4;
+  text-align:center;
+  font-weight:600;
+}
+.login-status.show{ display:block; }
+
 /* Google Sign-In button：整行滿寬、按鈕靠左（不強迫 iframe 撐滿，避免內容看起來置中）
    - 但若放在標題列右側（.login-title-row），寬度由該列的規則控制（避免擠壓標題） */
 #googleSignInWrap{ width:100%; }
@@ -1616,6 +1627,7 @@ body.erp-locked .sidebar-backdrop{
         </label>
       </div>
       <div id="loginError" class="login-error"></div>
+      <div id="loginStatus" class="login-status" aria-live="polite"></div>
       <div id="passwordLoginWrap">
         <div class="login-row login-row--split" style="margin-top:10px;">
           <input type="text" class="login-field" id="loginUserId" name="username" placeholder="" autocomplete="username" required>
