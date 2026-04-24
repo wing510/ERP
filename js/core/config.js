@@ -6,7 +6,7 @@
 (function () {
   var defaults = {
     API_BASE:
-      "https://script.google.com/macros/s/AKfycbyLGwoHl6N0nsQX77bTTxvJXz-lCwHWVT7BfcfEktjEpDUvwGUdNn4e79aAEk1-DyMt/exec" // prev: AKfycby0l_M5Hn9xL5V6Jb2Cyx8_Gg-2iF_u9F3TYaLzwmTjiuqMPiGuoEdyil2UvKrFCSDd
+      "https://script.google.com/macros/s/AKfycbwLMBavqx9HhY8PMm_cgH40VbceLWCpxgG0pmKUyO7fkN35o66COjLVGvaLnNST4Ywj/exec" // prev: AKfycby0l_M5Hn9xL5V6Jb2Cyx8_Gg-2iF_u9F3TYaLzwmTjiuqMPiGuoEdyil2UvKrFCSDd
     ,
     // Google Sign-In（GIS）Client ID（Web）
     // - PROD：GitHub Pages
