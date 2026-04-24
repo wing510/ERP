@@ -17,6 +17,7 @@ async function customersInit(){
   bindUppercaseInput("c_id");
   bindAutoSearchToolbar_([
     ["search_customer_keyword", "input"],
+    ["search_customer_category", "change"],
     ["search_customer_status", "change"]
   ], () => searchCustomers());
   await renderCustomers();
@@ -41,15 +42,24 @@ function setCustomerButtons_(){
 /* ===== 建立 ===== */
 async function createCustomer(triggerEl){
 
-  const customer_id = c_id.value.trim().toUpperCase();
-  c_id.value = customer_id;
+  let customer_id = c_id.value.trim().toUpperCase();
+  // ID 預設自動產生：若被清空，直接補回，不用跳「缺少必填：ID」
+  if(!customer_id){
+    customer_id = (typeof generateShortId === "function" ? generateShortId("C") : "");
+    c_id.value = customer_id;
+  }else{
+    c_id.value = customer_id;
+  }
   const customer_name = c_name.value.trim();
   const category = (document.getElementById("c_category")?.value || "").trim();
   const country = c_country.value.trim();
   const remark = c_remark.value.trim();
 
-  if(!customer_id || !customer_name)
-    return showToast("ID / 名稱 必填","error");
+  // 主檔一致化：ID 多為自動產生，缺漏時仍提示；但一般必填以「名稱/分類」為主
+  if(!customer_name) return showToast("缺少必填：客戶名稱","error");
+  if(!category)
+    return showToast("缺少必填：分類","error");
+  if(!customer_id) return showToast("客戶ID 產生失敗，請重新整理後再試","error");
   if((category === "其他" || country === "其他") && !remark)
     return showToast("分類/國家 選「其他」時，請填寫備註/原因","error");
 
@@ -116,6 +126,8 @@ async function updateCustomer(triggerEl){
   const category = (document.getElementById("c_category")?.value || "").trim();
   const country = c_country.value.trim();
   const remark = c_remark.value.trim();
+  if(!category)
+    return showToast("缺少必填：分類","error");
   if((category === "其他" || country === "其他") && !remark)
     return showToast("分類/國家 選「其他」時，請填寫備註/原因","error");
 
@@ -150,6 +162,9 @@ async function updateCustomer(triggerEl){
     updated_by: getCurrentUser(),
     updated_at: nowIso16()
   };
+  // 主檔一致化：更新也做必填檢核（避免更新成空值）
+  if(!newData.customer_name)
+    return showToast("缺少必填：客戶名稱","error");
 
   await updateRecord("customer", "customer_id", customer_id, newData);
 
@@ -211,16 +226,19 @@ async function searchCustomers(){
   setTbodyLoading_("customerTableBody", 7);
 
   const kw = (document.getElementById("search_customer_keyword")?.value || "").trim().toLowerCase();
+  const cat = (document.getElementById("search_customer_category")?.value || "").trim();
   const status = document.getElementById("search_customer_status")?.value || "";
 
   const result = (await getAll("customer")).filter(c=>{
+    if(cat && String(c.category || "") !== cat) return false;
     const matchKw = !kw ||
       c.customer_id.toLowerCase().includes(kw) ||
       c.customer_name.toLowerCase().includes(kw) ||
       String(c.category || "").toLowerCase().includes(kw) ||
       String(c.contact_person || "").toLowerCase().includes(kw) ||
       String(c.phone || "").toLowerCase().includes(kw) ||
-      String(c.email || "").toLowerCase().includes(kw);
+      String(c.email || "").toLowerCase().includes(kw) ||
+      String(c.remark || "").toLowerCase().includes(kw);
     return matchKw && (!status || c.status === status);
   });
 
@@ -229,8 +247,10 @@ async function searchCustomers(){
 
 async function resetCustomerSearch(){
   const kwEl = document.getElementById("search_customer_keyword");
+  const catEl = document.getElementById("search_customer_category");
   const stEl = document.getElementById("search_customer_status");
   if(kwEl) kwEl.value = "";
+  if(catEl) catEl.value = "";
   if(stEl) stEl.value = "";
   await renderCustomers();
 }

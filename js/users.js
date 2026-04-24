@@ -3,6 +3,7 @@
  */
 
 let userEditing = false;
+let userLoadedStatus_ = "";
 
 function syncUserPasswordVisibility_(){
   // 密碼欄位已移除（Google 登入為主）；此函式保留避免舊呼叫造成錯誤
@@ -230,6 +231,7 @@ async function usersInit(){
   ], () => renderUsers());
   await renderUsers();
   if(typeof bindStatusSelectLamp_ === "function") bindStatusSelectLamp_("u_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("u_status");
 }
 
 function setUserButtons_(){
@@ -247,6 +249,7 @@ function setUserButtons_(){
 
 function resetUserForm(){
   userEditing = false;
+  userLoadedStatus_ = "";
   const id = document.getElementById("u_id");
   if(id){ id.value = ""; id.disabled = false; }
   const name = document.getElementById("u_name");
@@ -258,6 +261,7 @@ function resetUserForm(){
   const st = document.getElementById("u_status");
   if(st) st.value = "ACTIVE";
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("u_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("u_status");
   const rm = document.getElementById("u_remark");
   if(rm) rm.value = "";
   try{ setUserAllowedModules_(""); }catch(_e){}
@@ -283,10 +287,10 @@ async function createUser(triggerEl){
     ? getUserAllowedModules_()
     : null;
 
-  if(!user_id) return showToast("User ID 必填","error");
-  if(!user_name) return showToast("姓名必填","error");
-  if(!email) return showToast("Email 必填","error");
-  if(!role) return showToast("請選擇角色","error");
+  if(!user_id) return showToast("缺少必填：User ID","error");
+  if(!user_name) return showToast("缺少必填：姓名","error");
+  if(!email) return showToast("缺少必填：Email","error");
+  if(!role) return showToast("缺少必填：角色","error");
   if(String(role || "").trim().toUpperCase() === "ADMIN") return showToast("不可建立 ADMIN（請改由後端/主檔維護）","error");
 
   showSaveHint(triggerEl);
@@ -319,6 +323,7 @@ async function loadUser(userId){
   const u = await getOne("user","user_id",userId);
   if(!u) return;
   userEditing = true;
+  userLoadedStatus_ = String(u.status || "ACTIVE");
   const id = document.getElementById("u_id");
   id.value = u.user_id;
   id.disabled = true;
@@ -334,6 +339,7 @@ async function loadUser(userId){
   syncUserPasswordVisibility_();
   document.getElementById("u_status").value = u.status || "ACTIVE";
   if(typeof syncStatusSelectLamp_ === "function") syncStatusSelectLamp_("u_status");
+  if(typeof erpLockStatusSelect_ === "function") erpLockStatusSelect_("u_status");
   document.getElementById("u_remark").value = u.remark || "";
   if(typeof scrollToEditorTop === "function") scrollToEditorTop();
   setUserButtons_();
@@ -352,10 +358,32 @@ async function updateUser(triggerEl){
     ? getUserAllowedModules_()
     : null;
 
-  if(!user_name) return showToast("姓名必填","error");
-  if(!email) return showToast("Email 必填","error");
-  if(!role) return showToast("請選擇角色","error");
+  if(!user_id) return showToast("缺少必填：User ID","error");
+  if(!user_name) return showToast("缺少必填：姓名","error");
+  if(!email) return showToast("缺少必填：Email","error");
+  if(!role) return showToast("缺少必填：角色","error");
   if(String(role || "").trim().toUpperCase() === "ADMIN") return showToast("不可改成 ADMIN（請改由後端/主檔維護）","error");
+
+  // 狀態（ACTIVE/INACTIVE）僅 CEO/GA/ADMIN 可改（主檔）
+  if(String(userLoadedStatus_||"") !== String(status||"")){
+    if(typeof erpCanChangeMasterStatus_ === "function" && !erpCanChangeMasterStatus_()){
+      return showToast("僅 CEO／GA／ADMIN 可修改使用者狀態（ACTIVE/INACTIVE）。", "error");
+    }
+  }
+
+  // 停用策略：停用前至少二次確認（停用後不得再登入；歷史紀錄保留）
+  if(String(userLoadedStatus_||"") === "ACTIVE" && String(status||"") === "INACTIVE"){
+    const isUsed = await isIdUsedInAny(user_id, [
+      { type:"logs", field:"created_by" },
+      { type:"inventory_movement", field:"created_by" }
+    ]);
+    const ok = confirm(
+      (isUsed
+        ? "此使用者可能已有歷史操作紀錄。\n\n仍要停用嗎？停用後不得再登入，但歷史紀錄會保留。"
+        : "確定要將此使用者停用（INACTIVE）嗎？停用後不得再登入，但歷史紀錄會保留。")
+    );
+    if(!ok) return;
+  }
 
   showSaveHint(triggerEl);
   try {
@@ -372,6 +400,7 @@ async function updateUser(triggerEl){
 
   showToast("使用者更新成功");
   await renderUsers();
+  userLoadedStatus_ = String(status || "");
   } finally { hideSaveHint(); }
   setUserButtons_();
 }

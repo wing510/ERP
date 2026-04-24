@@ -219,6 +219,7 @@ async function createProduct(triggerEl){
   const spec = p_spec.value.trim();
   const remark = p_remark.value.trim();
   const type = p_type.value;
+  const unit = String(p_unit.value || "").trim().toUpperCase();
   const baseUnit = normalizeUnit(document.getElementById("p_base_unit")?.value || p_unit.value || "");
   syncProductUnitRatioJson_();
   const ratioRaw = (document.getElementById("p_unit_ratio_to_base_json")?.value || "").trim();
@@ -230,8 +231,10 @@ async function createProduct(triggerEl){
       ? JSON.stringify({ base_unit: baseUnit, map: ratioMap || {} })
       : "";
 
-  if(!id || !name)
-    return showToast("ID / 名稱 必填","error");
+  // 主檔一致化：ID 多為自動產生，缺漏時仍提示；但一般必填以「名稱/單位/類型」為主
+  if(!name) return showToast("缺少必填：產品名稱","error");
+  if(!unit) return showToast("缺少必填：單位","error");
+  if(!id) return showToast("缺少必填：產品ID","error");
 
   if(id.length > PRODUCT_RULES.idMax)
     return showToast("ID 長度過長","error");
@@ -250,7 +253,7 @@ async function createProduct(triggerEl){
 
   // 產品類型必填，且僅限 RM / WIP / FG
   if(!type)
-    return showToast("請選擇產品類型（RM 原料／WIP 半成品／FG 成品）","error");
+    return showToast("缺少必填：產品類型（RM／WIP／FG）","error");
 
   if(!["RM","WIP","FG"].includes(type))
     return showToast("產品類型只能是 RM（原料）／WIP（半成品）／FG（成品）","error");
@@ -270,7 +273,7 @@ async function createProduct(triggerEl){
     product_name: name,
     type,
     spec,
-    unit: p_unit.value,
+    unit,
     uom_config,
     remark: saveRemark,
     status: p_status.value,
@@ -339,13 +342,24 @@ async function updateProduct(triggerEl){
     product_name: p_name.value.trim(),
     type: p_type.value,
     spec: p_spec.value.trim(),
-    unit: p_unit.value,
+    unit: String(p_unit.value || "").trim().toUpperCase(),
     remark: "",
     uom_config: "",
     status: newStatus,
     updated_by: getCurrentUser(),
     updated_at: nowIso16()
   };
+  // 主檔一致化：更新也做必填/長度檢核（避免更新成空值或超長）
+  if(!newData.product_name)
+    return showToast("缺少必填：產品名稱","error");
+  if(!newData.unit)
+    return showToast("缺少必填：單位","error");
+  if(!newData.type)
+    return showToast("缺少必填：產品類型（RM／WIP／FG）","error");
+  if(newData.product_name.length > PRODUCT_RULES.nameMax)
+    return showToast("名稱長度過長","error");
+  if(newData.spec.length > PRODUCT_RULES.specMax)
+    return showToast("規格過長","error");
   syncProductUnitRatioJson_();
   const ratioRaw = (document.getElementById("p_unit_ratio_to_base_json")?.value || "").trim();
   const ratioMap = parseUnitRatioToBaseMap(ratioRaw || "{}");
@@ -440,8 +454,7 @@ async function searchProducts(){
       p.product_id.toLowerCase().includes(kw) ||
       p.product_name.toLowerCase().includes(kw) ||
       String(p.spec || "").toLowerCase().includes(kw) ||
-      String(p.remark || "").toLowerCase().includes(kw) ||
-      String(p.uom_config || "").toLowerCase().includes(kw);
+      String(p.remark || "").toLowerCase().includes(kw);
     return matchKw && (!type || p.type === type) && (!status || p.status === status);
   });
 

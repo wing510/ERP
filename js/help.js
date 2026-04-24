@@ -17,10 +17,12 @@ const HelpConfig = {
     • 產品 ID（product_id）可由系統自動產生，建立並儲存後不可修改<br>
     • ID 最長 30 字元，只能用 A–Z／0–9／_／-<br>
     • 產品類型僅允許：RM（原料）/ WIP（半成品）/ FG（成品）<br>
+    • 單位必填（收貨/加工/出貨/庫存異動都會使用到）<br>
     • 委外若投料（原料）單位與回收（成品／半成品）單位不同：在<strong>產出產品</strong>設定多單位換算<br>
     • 停用（INACTIVE 停用）前若已有被使用，系統會提醒你確認（保留歷史、不破壞追溯）<br>
+    • 狀態（ACTIVE/INACTIVE）屬高風險：僅 CEO／GA／ADMIN 可修改<br>
     <strong>常見提示：</strong><br>
-    • ID / 名稱 必填<br>
+    • 缺少必填：產品名稱／單位／類型<br>
     • ID 長度/格式不合法（最多 30；僅 A–Z 0–9 _ -）<br>
     • 名稱過長（最多 100）／規格過長（最多 200）／備註過長（最多 500）<br>
     • 產品 ID 已存在／找不到產品<br>
@@ -32,10 +34,12 @@ const HelpConfig = {
     <strong>流程：</strong><br>
     • 點欄位標題可排序；點「Load」會帶到上方編輯區<br>
     <strong>規則：</strong><br>
-    • 關鍵字比對：產品ID／名稱／規格／備註／uom_config（JSON 字串）<br>
+    • 篩選條件：關鍵字／類型／狀態<br>
+    • 關鍵字比對：產品ID／名稱／規格／備註<br>
     • 狀態：ACTIVE（使用中）/ INACTIVE（停用保留歷史）<br>
     <strong>常見提示：</strong><br>
-    • 若找不到資料：請確認關鍵字/類型/狀態條件
+    • 若找不到資料：請確認關鍵字／類型／狀態條件<br>
+    • 建立/修改資訊請到 Logs 查
   `,
   supplierEdit: `
     <strong>流程：</strong><br>
@@ -46,9 +50,13 @@ const HelpConfig = {
     • 供應商 ID（supplier_id）可由系統自動產生，建立並儲存後不可修改<br>
     • ID 最長 30 字元，只能用 A–Z／0–9／_／-<br>
     • 名稱必填（supplier_name）<br>
+    • 供應商類型與可用流程為必填（用於下游模組下拉篩選/限制）<br>
+    • 「國家」選「其他」或「供應商類型」勾選「其他」時：備註/原因必填<br>
     • 停用（INACTIVE 停用）前若已有被使用，系統會提醒你確認<br>
+    • 狀態（ACTIVE/INACTIVE）屬高風險：僅 CEO／GA／ADMIN 可修改<br>
     <strong>常見提示：</strong><br>
-    • ID / 名稱 必填<br>
+    • 缺少必填：供應商ID／供應商名稱／供應商類型／可用流程<br>
+    • 國家/供應商類型 選「其他」時，請填寫備註/原因<br>
     • ID 長度/格式不合法<br>
     • 供應商 ID 已存在／找不到供應商<br>
     • 建立成功／更新成功
@@ -56,11 +64,13 @@ const HelpConfig = {
 
   supplierList: `
     <strong>流程：</strong><br>
-    • 點欄位可排序；點「Load」帶到上方編輯區<br>
+    • 點欄位標題可排序；點「Load」會帶到上方編輯區<br>
     <strong>規則：</strong><br>
-    • 關鍵字比對：供應商ID／名稱／聯絡人／電話／Email<br>
+    • 篩選條件：關鍵字／狀態<br>
+    • 關鍵字比對：供應商ID／名稱／聯絡人／電話／Email／備註<br>
     • 狀態：ACTIVE（使用中）/ INACTIVE（停用保留歷史）<br>
     <strong>常見提示：</strong><br>
+    • 若找不到資料：請確認關鍵字／狀態條件<br>
     • 建立/修改資訊請到 Logs 查
   `,
 
@@ -73,9 +83,13 @@ const HelpConfig = {
     • 客戶 ID（customer_id）可由系統自動產生，建立並儲存後不可修改<br>
     • ID 最長 30 字元，只能用 A–Z／0–9／_／-<br>
     • 名稱必填（customer_name）<br>
+    • 分類必填（用於標記客群與後續查詢/報表）<br>
+    • 「分類」或「國家」選「其他」時：備註/原因必填<br>
     • 停用（INACTIVE 停用）前若已有被使用，系統會提醒你確認<br>
+    • 狀態（ACTIVE/INACTIVE）屬高風險：僅 CEO／GA／ADMIN 可修改<br>
     <strong>常見提示：</strong><br>
-    • ID / 名稱 必填<br>
+    • 缺少必填：客戶ID／客戶名稱／分類<br>
+    • 分類/國家 選「其他」時，請填寫備註/原因<br>
     • ID 長度/格式不合法<br>
     • 客戶 ID 已存在／找不到客戶<br>
     • 建立成功／更新成功
@@ -83,24 +97,27 @@ const HelpConfig = {
 
   customerList: `
     <strong>流程：</strong><br>
-    • 點欄位可排序；點「Load」帶到上方編輯區<br>
+    • 點欄位標題可排序；點「Load」會帶到上方編輯區<br>
     <strong>規則：</strong><br>
-    • 關鍵字比對：客戶ID／名稱／聯絡人／電話／Email<br>
+    • 篩選條件：關鍵字／分類／狀態<br>
+    • 關鍵字比對：客戶ID／名稱／分類／聯絡人／電話／Email／備註<br>
     • 狀態：ACTIVE（使用中）/ INACTIVE（停用保留歷史）<br>
     <strong>常見提示：</strong><br>
+    • 若找不到資料：請確認關鍵字／分類／狀態條件<br>
     • 建立/修改資訊請到 Logs 查
   `,
 
   usersMain: `
     <strong>流程：</strong><br>
-    • 建立使用者後，上方 User 下拉即可切換目前操作者（created_by/updated_by）<br>
+    • 使用者建立/更新後，系統會記錄操作者（created_by/updated_by）為「目前登入的帳號」<br>
     • 需要調整姓名/角色/狀態/可用模組時：先載入再更新<br>
     <strong>規則：</strong><br>
-    • User 下拉只顯示 ACTIVE（使用中）使用者<br>
     • 可用模組：未勾選任何模組＝預設只能使用「Dashboard 儀表板、Lot Traceability 批次追溯」<br>
     • 建議用 INACTIVE（停用）保留歷史帳號，不建議刪除（避免稽核斷裂）<br>
+    • 停用後不得再登入；歷史操作紀錄仍保留可查<br>
+    • 狀態（ACTIVE/INACTIVE）屬高風險：僅 CEO／GA／ADMIN 可修改<br>
     <strong>常見提示：</strong><br>
-    • User ID 必填／姓名必填<br>
+    • 缺少必填：User ID／姓名／Email／角色<br>
     • User ID 已存在<br>
     • 建立成功／更新成功（更新前需先載入）
   `,
@@ -345,11 +362,15 @@ const HelpConfig = {
 
   usersList: `
     <strong>流程：</strong><br>
-    • 點「Load」帶回上方後再更新；需要修改時請先載入<br>
+    • 點欄位標題可排序；點「Load」會帶到上方編輯區<br>
     <strong>規則：</strong><br>
+    • 篩選條件：關鍵字／角色／狀態<br>
+    • 關鍵字比對：User ID／姓名／Email／角色／備註<br>
+    • 狀態：ACTIVE（使用中）/ INACTIVE（停用保留歷史）<br>
     • 建議用 INACTIVE（停用）保留歷史使用者，不建議刪除（避免稽核斷裂）<br>
     <strong>常見提示：</strong><br>
-    • 若找不到資料：請確認狀態/關鍵字條件
+    • 若找不到資料：請確認關鍵字／角色／狀態條件<br>
+    • 建立/修改資訊請到 Logs 查
   `,
 
   outsourceHeader: `
@@ -470,20 +491,25 @@ const HelpConfig = {
     • 倉庫 ID 可由系統自動產生，建立前仍可手動調整；儲存後作為全站收貨、出貨、庫存異動、挑 Lot 之下拉依據<br>
     <strong>規則：</strong><br>
     • 收貨、出貨、加工、拆併、手動異動等倉別皆連倉庫主檔；下拉顯示「名稱＋溫層」，避免手打錯倉<br>
+    • 類別（溫層）必填（用於下游流程顯示與判斷）<br>
     • 停用（INACTIVE）前若已有被使用，系統會提醒確認（保留歷史）<br>
+    • 狀態（ACTIVE/INACTIVE）屬高風險：僅 CEO／GA／ADMIN 可修改<br>
     <strong>常見提示：</strong><br>
-    • 倉庫 ID／名稱 必填<br>
+    • 缺少必填：倉庫ID／倉庫名稱／類別（常溫/冷藏/冷凍）<br>
     • 倉庫 ID 已存在／找不到倉庫／建立或更新成功<br>
     • 變更紀錄可到 Logs 查
   `,
 
   warehouseList: `
     <strong>流程：</strong><br>
-    • 依關鍵字與狀態篩選倉庫；需要修改時先載入再更新<br>
+    • 點欄位標題可排序；點「Load」會帶到上方編輯區<br>
     <strong>規則：</strong><br>
-    • 關鍵字比對：倉庫 ID／名稱<br>
+    • 篩選條件：關鍵字／類別／狀態<br>
+    • 關鍵字比對：倉庫 ID／名稱／備註<br>
+    • 狀態：ACTIVE（使用中）/ INACTIVE（停用保留歷史）<br>
     <strong>常見提示：</strong><br>
-    • 若找不到資料：請確認關鍵字／狀態條件
+    • 若找不到資料：請確認關鍵字／類別／狀態條件<br>
+    • 建立/修改資訊請到 Logs 查
   `,
 
   warehouseStockHeader: `

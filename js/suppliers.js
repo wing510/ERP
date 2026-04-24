@@ -164,15 +164,27 @@ function setSupplierButtons_(){
 /* ===== 建立 ===== */
 async function createSupplier(triggerEl){
 
-  const supplier_id = s_id.value.trim().toUpperCase();
-  s_id.value = supplier_id;
+  let supplier_id = s_id.value.trim().toUpperCase();
+  // ID 預設自動產生：若被清空，直接補回，不用跳「缺少必填：ID」
+  if(!supplier_id){
+    supplier_id = (typeof generateShortId === "function" ? generateShortId("S") : "");
+    s_id.value = supplier_id;
+  }else{
+    s_id.value = supplier_id;
+  }
   const supplier_name = s_name.value.trim();
   const country = s_country.value.trim();
   const supplier_type = supplierCsvFromGroup_("s_type_group");
+  const supplier_flow = supplierCsvFromGroup_("s_flow_group");
   const remark = s_remark.value.trim();
 
-  if(!supplier_id || !supplier_name)
-    return showToast("ID / 名稱 必填","error");
+  // 主檔一致化：ID 多為自動產生，缺漏時仍提示；但一般必填以「名稱/類型/流程」為主
+  if(!supplier_name) return showToast("缺少必填：供應商名稱","error");
+  if(!supplier_type)
+    return showToast("缺少必填：供應商類型","error");
+  if(!supplier_flow)
+    return showToast("缺少必填：可用流程","error");
+  if(!supplier_id) return showToast("供應商ID 產生失敗，請重新整理後再試","error");
   if((country === "其他" || String(supplier_type || "").split(",").map(x=>x.trim().toUpperCase()).includes("OTHER")) && !remark)
     return showToast("國家/供應商類型 選「其他」時，請填寫備註/原因","error");
 
@@ -197,7 +209,7 @@ async function createSupplier(triggerEl){
     address: s_address.value.trim(),
     country,
     supplier_type,
-    supplier_flow: supplierCsvFromGroup_("s_flow_group"),
+    supplier_flow,
     status: s_status.value,
     remark,
     created_by: getCurrentUser(),
@@ -239,7 +251,12 @@ async function updateSupplier(triggerEl){
   }
   const country = s_country.value.trim();
   const supplier_type = supplierCsvFromGroup_("s_type_group");
+  const supplier_flow = supplierCsvFromGroup_("s_flow_group");
   const remark = s_remark.value.trim();
+  if(!supplier_type)
+    return showToast("缺少必填：供應商類型","error");
+  if(!supplier_flow)
+    return showToast("缺少必填：可用流程","error");
   if((country === "其他" || String(supplier_type || "").split(",").map(x=>x.trim().toUpperCase()).includes("OTHER")) && !remark)
     return showToast("國家/供應商類型 選「其他」時，請填寫備註/原因","error");
 
@@ -271,12 +288,15 @@ async function updateSupplier(triggerEl){
     address: s_address.value.trim(),
     country,
     supplier_type,
-    supplier_flow: supplierCsvFromGroup_("s_flow_group"),
+    supplier_flow,
     status: newStatus,
     remark,
     updated_by: getCurrentUser(),
     updated_at: nowIso16()
   };
+  // 主檔一致化：更新也做必填檢核（避免更新成空值）
+  if(!newData.supplier_name)
+    return showToast("缺少必填：供應商名稱","error");
 
   await updateRecord("supplier", "supplier_id", supplier_id, newData);
 
@@ -426,7 +446,8 @@ async function searchSuppliers(){
       String(s.phone || "").toLowerCase().includes(kw) ||
       String(s.email || "").toLowerCase().includes(kw) ||
       String(s.supplier_type || "").toLowerCase().includes(kw) ||
-      String(s.supplier_flow || "").toLowerCase().includes(kw);
+      String(s.supplier_flow || "").toLowerCase().includes(kw) ||
+      String(s.remark || "").toLowerCase().includes(kw);
     return matchKw && (!status || s.status === status);
   });
 

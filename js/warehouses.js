@@ -15,6 +15,7 @@ async function warehousesInit(){
   clearWarehouseForm();
   bindAutoSearchToolbar_([
     ["search_wh_keyword", "input"],
+    ["search_wh_category", "change"],
     ["search_wh_status", "change"]
   ], () => searchWarehouses());
   await renderWarehouses();
@@ -56,15 +57,25 @@ function clearWarehouseForm(){
 }
 
 async function createWarehouse(triggerEl){
-  const warehouse_id = (document.getElementById("wh_id")?.value || "").trim().toUpperCase();
+  const idEl = document.getElementById("wh_id");
+  let warehouse_id = (idEl?.value || "").trim().toUpperCase();
+  // ID 預設自動產生：若被清空，直接補回，不用跳「缺少必填：ID」
+  if(!warehouse_id){
+    warehouse_id = (typeof generateShortId === "function" ? generateShortId("WH") : "");
+    if(idEl) idEl.value = warehouse_id;
+  }else{
+    if(idEl) idEl.value = warehouse_id;
+  }
   const warehouse_name = (document.getElementById("wh_name")?.value || "").trim();
   const category = (document.getElementById("wh_category")?.value || "").trim().toUpperCase();
   const address = (document.getElementById("wh_address")?.value || "").trim();
   const status = document.getElementById("wh_status")?.value || "ACTIVE";
   const remark = (document.getElementById("wh_remark")?.value || "").trim();
 
-  if(!warehouse_id || !warehouse_name) return showToast("倉庫ID / 名稱 必填", "error");
+  // 主檔一致化：ID 多為自動產生，缺漏時仍提示；但一般必填以「名稱/類別」為主
+  if(!warehouse_name) return showToast("缺少必填：倉庫名稱", "error");
   if(!category) return showToast("請選擇類別", "error");
+  if(!warehouse_id) return showToast("倉庫ID 產生失敗，請重新整理後再試", "error");
   if(warehouse_id.length > WAREHOUSE_RULES.idMax) return showToast("倉庫ID 長度過長", "error");
   if(!WAREHOUSE_RULES.idRegex.test(warehouse_id)) return showToast("倉庫ID 只能使用 A-Z 0-9 _ -", "error");
 
@@ -130,13 +141,32 @@ async function updateWarehouse(triggerEl){
   const address = (document.getElementById("wh_address")?.value || "").trim();
   const status = document.getElementById("wh_status")?.value || "ACTIVE";
   const remark = (document.getElementById("wh_remark")?.value || "").trim();
-  if(!warehouse_name) return showToast("倉庫名稱必填", "error");
+  if(!warehouse_id) return showToast("缺少必填：倉庫ID", "error");
+  if(!warehouse_name) return showToast("缺少必填：倉庫名稱", "error");
   if(!category) return showToast("請選擇類別", "error");
+  if(warehouse_id.length > WAREHOUSE_RULES.idMax) return showToast("倉庫ID 長度過長", "error");
+  if(!WAREHOUSE_RULES.idRegex.test(warehouse_id)) return showToast("倉庫ID 只能使用 A-Z 0-9 _ -", "error");
 
   // 狀態（ACTIVE/INACTIVE）僅 CEO/GA/ADMIN 可改（主檔）
   if(String(whLoadedStatus_||"") !== String(status||"")){
     if(typeof erpCanChangeMasterStatus_ === "function" && !erpCanChangeMasterStatus_()){
       return showToast("僅 CEO／GA／ADMIN 可修改倉庫狀態（ACTIVE/INACTIVE）。", "error");
+    }
+  }
+
+  // 停用策略：允許停用，但若已被使用則提醒確認（不再硬性阻擋）
+  if(String(whLoadedStatus_||"") === "ACTIVE" && String(status||"") === "INACTIVE"){
+    const isUsed = await isIdUsedInAny(warehouse_id, [
+      { type:"lot", field:"warehouse_id" },
+      { type:"inventory_movement", field:"warehouse_id" },
+      { type:"goods_receipt", field:"warehouse" },
+      { type:"import_receipt", field:"warehouse" }
+    ]);
+    if(isUsed){
+      const ok = confirm(
+        "此倉庫已被使用（可能已有批次/異動/收貨紀錄）。\n\n仍要停用嗎？停用後將不能在新單據被選用，但歷史紀錄會保留。"
+      );
+      if(!ok) return;
     }
   }
 
@@ -176,7 +206,7 @@ async function renderWarehouses(list=null){
   const sorted = [...(rows || [])].sort((a,b)=>String(b.updated_at||"").localeCompare(String(a.updated_at||"")));
   tbody.innerHTML = "";
   if(sorted.length === 0){
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#64748b;padding:24px;">尚無倉庫。請先在上方建立倉庫（例如 MAIN）。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#64748b;padding:24px;">尚無倉庫。請先在上方建立倉庫（例如 MAIN）。</td></tr>';
     return;
   }
   sorted.forEach(w=>{
@@ -185,7 +215,8 @@ async function renderWarehouses(list=null){
     tbody.innerHTML += `
       <tr>
         <td>${w.warehouse_id || ""}</td>
-        <td>${w.warehouse_name || ""}${catLabel ? ` <span style="color:#64748b;font-size:12px;">(${catLabel})</span>` : ""}</td>
+        <td>${w.warehouse_name || ""}</td>
+        <td>${catLabel || (w.category || "")}</td>
         <td class="col-status">${badge}</td>
         <td><button class="btn-edit" onclick="loadWarehouse('${String(w.warehouse_id||"").replace(/\\/g,"\\\\").replace(/'/g,"\\'")}')">Load</button></td>
       </tr>
@@ -196,21 +227,27 @@ async function renderWarehouses(list=null){
 async function searchWarehouses(){
   setTbodyLoading_("whTableBody", 4);
   const kw = (document.getElementById("search_wh_keyword")?.value || "").trim().toLowerCase();
+  const cat = (document.getElementById("search_wh_category")?.value || "").trim().toUpperCase();
   const status = (document.getElementById("search_wh_status")?.value || "").trim().toUpperCase();
   const list = await getAll("warehouse").catch(()=>[]);
   const result = (list || []).filter(w=>{
+    if(cat && String(w.category||"").trim().toUpperCase() !== cat) return false;
     const stOk = !status || String(w.status||"").toUpperCase() === status;
     if(!stOk) return false;
     if(!kw) return true;
-    return String(w.warehouse_id||"").toLowerCase().includes(kw) || String(w.warehouse_name||"").toLowerCase().includes(kw);
+    return String(w.warehouse_id||"").toLowerCase().includes(kw) ||
+      String(w.warehouse_name||"").toLowerCase().includes(kw) ||
+      String(w.remark||"").toLowerCase().includes(kw);
   });
   renderWarehouses(result);
 }
 
 async function resetWarehouseSearch(){
   const a = document.getElementById("search_wh_keyword");
+  const c = document.getElementById("search_wh_category");
   const b = document.getElementById("search_wh_status");
   if(a) a.value = "";
+  if(c) c.value = "";
   if(b) b.value = "";
   await renderWarehouses();
 }
