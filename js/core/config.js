@@ -5,8 +5,15 @@
  */
 (function () {
   var defaults = {
-    API_BASE:
-      "https://script.google.com/macros/s/AKfycbzfDnrcDwMtA7q8AzLWB731wmHCG7BcA8M5OMXZH7hv8aHZ1mc7eWFwmR6T4n1M3SHo/exec" // prev: AKfycbyLGwoHl6N0nsQX77bTTxvJXz-lCwHWVT7BfcfEktjEpDUvwGUdNn4e79aAEk1-DyMt
+    // 方案 B（建議）：同時記錄 DEV/PROD 兩個後端
+    // - 你只要填好 API_BASE_PROD / API_BASE_DEV
+    // - 前端會依網址自動選擇（或用 ?env=DEV|PROD 強制）
+    API_BASE_PROD:
+      "https://script.google.com/macros/s/AKfycbz7Y0iwMN6wbgivvnvY5RrAlE_akGDAKa3thWMQDjacmhKbqDwGphvQQ9W_SUPS75oW/exec",
+    API_BASE_DEV:
+      "https://script.google.com/macros/s/AKfycbzqOIZLKiHc52y_SBlDZei3UYmYBWndJw1JjPAV504DTju6t6YyVcGg5V0Pgi8D61iN/exec",
+    // 相容舊版：若你仍想手動指定單一 API_BASE，可在 window.__ERP_CONFIG__ 直接覆寫 API_BASE
+    API_BASE: ""
     ,
     // Google Sign-In（GIS）Client ID（Web）
     // - PROD：GitHub Pages
@@ -21,6 +28,44 @@
   };
   var prev = typeof window.__ERP_CONFIG__ === "object" && window.__ERP_CONFIG__ !== null ? window.__ERP_CONFIG__ : {};
   var merged = Object.assign({}, defaults, prev);
+
+  // 自動選用 API_BASE（DEV/PROD）
+  try{
+    // 1) 明確指定：window.__ERP_CONFIG__.API_BASE
+    var explicit = typeof merged.API_BASE === "string" ? String(merged.API_BASE || "").trim() : "";
+    if(explicit){
+      merged.API_BASE = explicit;
+    }else{
+      // 2) URL 強制：?env=DEV 或 ?env=PROD
+      var envQ = "";
+      try{
+        var qs = new URLSearchParams(String(location && location.search || ""));
+        envQ = String(qs.get("env") || "").trim().toUpperCase();
+      }catch(_eQ){ envQ = ""; }
+
+      // 3) 自動偵測：網址包含 dev/test/staging 或路徑包含 /dev/
+      var origin2 = "";
+      var host2 = "";
+      var path2 = "";
+      try{
+        origin2 = String(location && location.origin || "");
+        host2 = String(location && location.hostname || "");
+        path2 = String(location && location.pathname || "");
+      }catch(_eL){}
+      var looksDev = /(^|\.)dev(\.|$)|test|staging/i.test(host2) || /\/dev(\/|$)/i.test(path2) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin2);
+
+      var pickEnv = envQ === "DEV" || envQ === "PROD" ? envQ : (looksDev ? "DEV" : "PROD");
+      var prod = String(merged.API_BASE_PROD || "").trim();
+      var dev = String(merged.API_BASE_DEV || "").trim();
+      merged.API_BASE = (pickEnv === "DEV" ? dev : prod) || dev || prod || "";
+    }
+  }catch(_ePick){
+    // 退回：至少不要變成空字串（優先 DEV）
+    try{
+      merged.API_BASE = String(merged.API_BASE_DEV || merged.API_BASE_PROD || merged.API_BASE || "").trim();
+    }catch(_ePick2){}
+  }
+
   // 依來源自動選用 client id（避免本機/線上來回手動切換）
   try{
     var origin = "";
